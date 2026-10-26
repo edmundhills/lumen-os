@@ -14,10 +14,12 @@ Claude reads CLAUDE.md automatically, does that one step, commits, updates this 
 
 ## Current step
 
-**A2**
+**A3**
 
 ## Notes for the next session
 
+- A2 was committed on branch `docs/spec-markdown`, not yet merged into `main`. Merge it (with the owner's OK) before the first push in A3.
+- `docs/spec.md` was generated from the .docx by a converter script; the architecture diagram is `docs/images/architecture.png`. If the .docx changes, regenerate it with a converter (e.g. pandoc) rather than hand-editing.
 - Project folder: `C:\Users\edmun\Downloads\Lumen OS`. Git for Windows is installed at `C:\Program Files\Git\cmd\git.exe` (open a new terminal if `git` isn't on PATH yet).
 - Spec source: `C:\Users\edmun\Downloads\Perfect Linux Distro — Spec & Build Prompt.docx`.
 - Spec issue to raise at step 1.3: the spec puts image defaults in `/usr/etc`, but `bootc container lint` rejects images that contain `/usr/etc`. The likely fix is to write defaults to `/etc` in the Containerfile (bootc 3-way merges it) or to `/usr/lib` / `/usr/share`. Verify, ask the owner, record an ADR.
@@ -27,7 +29,7 @@ Claude reads CLAUDE.md automatically, does that one step, commits, updates this 
 ## Stage A — Setup (once)
 
 - [x] **A1** 👤 Move the project to a permanent folder (e.g. `Documents\lumen-os`) and `git init`. *Done when:* CLAUDE.md and PROGRESS.md are in a git repo.
-- [ ] **A2** Convert the .docx to `docs/spec.md` with a tool (pandoc or python-docx), not by retyping. Keep tables as Markdown tables; note the missing architecture diagram. *Done when:* every spec section and table is present.
+- [x] **A2** Convert the .docx to `docs/spec.md` with a tool (pandoc or python-docx), not by retyping. Keep tables as Markdown tables; note the missing architecture diagram. *Done when:* every spec section and table is present.
 - [ ] **A3** 👤 Create an empty GitHub repo `lumen-os` (public = free Actions minutes), add the remote, push. Create a COPR account (needed from Phase 1). *Done when:* `git push` works.
 - [ ] **A4** 👤 Dev setup on Windows 11 Home: WSL2 + Fedora, Podman, `just`, git, gh. Claude writes `docs/dev-setup-windows.md` and a check script. Check 100 GB free disk and whether nested virtualization works. *Done when:* the check script passes in WSL.
 
