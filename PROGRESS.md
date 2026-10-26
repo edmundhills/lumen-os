@@ -18,7 +18,6 @@ Claude reads CLAUDE.md automatically, does that one step, commits, updates this 
 
 ## Notes for the next session
 
-- A2 was committed on branch `docs/spec-markdown`, not yet merged into `main`. Merge it (with the owner's OK) before the first push in A3.
 - `docs/spec.md` was generated from the .docx by a converter script; the architecture diagram is `docs/images/architecture.png`. If the .docx changes, regenerate it with a converter (e.g. pandoc) rather than hand-editing.
 - Project folder: `C:\Users\edmun\Downloads\Lumen OS`. Git for Windows is installed at `C:\Program Files\Git\cmd\git.exe` (open a new terminal if `git` isn't on PATH yet).
 - Spec source: `C:\Users\edmun\Downloads\Perfect Linux Distro — Spec & Build Prompt.docx`.
