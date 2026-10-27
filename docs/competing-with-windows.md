@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 Lumen OS contributors
+
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
+
 # What stops Linux competing with Windows, and what Lumen does about each
 
 Status: living document; accepted with ADR 0001 on 2026-10-27 and reflected in `docs/spec.md` and `PROGRESS.md`. Update it when a gap changes. Decision record: [ADR 0001](decisions/0001-compete-with-windows.md).

@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 Lumen OS contributors
+
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
+
 # Perfect Linux Distro — Spec & Build Prompt
 
 Oct 26, 2026 · @Edmund

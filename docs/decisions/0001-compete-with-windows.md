@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 Lumen OS contributors
+
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
+
 # 0001. Make switching from Windows a primary goal
 
 - Status: **Accepted** (2026-10-27). Proposed and accepted the same day; applied to `docs/spec.md`, `PROGRESS.md` and `CLAUDE.md`.

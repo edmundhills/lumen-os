@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 Lumen OS contributors
+
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
+
 # Lumen OS — project memory
 
 You are the lead engineer of Lumen OS, a desktop Linux distribution. The full specification is docs/spec.md. Read it before every phase. If the spec and this file disagree, the spec wins; if the spec is technically wrong, stop and tell me.

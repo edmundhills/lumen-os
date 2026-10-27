@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 Lumen OS contributors
+
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
+
 # Lumen OS architecture
 
 Status: draft for the owner's review (2026-10-27), written against the spec as amended by [ADR 0001](decisions/0001-compete-with-windows.md) and [ADR 0002](decisions/0002-fix-spec-errors-from-architecture-review.md). Part 1 (sections 1 to 8, step 0.1) covers the components and how they talk to each other. Part 2 (sections 9 and 10, step 0.2) covers how they are built and released, and draws the dependency graphs.

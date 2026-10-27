@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Lumen OS contributors
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
 # Check that a WSL 2 + Fedora machine is ready for Lumen OS development.
 #
 # Usage: bash tests/dev-env/check-wsl.sh [--offline]
@@ -18,7 +22,7 @@ for arg in "$@"; do
   case $arg in
     --offline) offline=1 ;;
     -h | --help)
-      sed -n '2,8s/^# \{0,1\}//p' "$0"
+      sed -n '6,12s/^# \{0,1\}//p' "$0"
       exit 0
       ;;
     *)

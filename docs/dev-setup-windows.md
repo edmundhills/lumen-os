@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 Lumen OS contributors
+
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
+
 # Developer setup on Windows 11 Home
 
 Lumen OS is built with Linux tools. On Windows 11 Home they run in **WSL 2** (Windows Subsystem for Linux) with **Fedora**. Heavy work, like building the full OS image and the ISO, runs in GitHub Actions. The local machine is for editing, linting, small builds and, if nested virtualization works, test VMs.

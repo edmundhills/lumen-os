@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 Lumen OS contributors
+
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
+
 # Lumen OS technical risks
 
 Status: draft for the owner's review at step 0.8 (2026-10-27). Written at step 0.3 against [docs/spec.md](spec.md) as amended by [ADR 0001](decisions/0001-compete-with-windows.md) and [ADR 0002](decisions/0002-fix-spec-errors-from-architecture-review.md), and against [docs/architecture.md](architecture.md).

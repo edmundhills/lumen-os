@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 Lumen OS contributors
+
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
+
 # 0002. Fix the spec errors found while writing the architecture
 
 - Status: **Accepted** (2026-10-27). The owner asked for the issues to be fixed; applied to `docs/spec.md`, `PROGRESS.md` and `docs/architecture.md`.

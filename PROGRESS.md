@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 Lumen OS contributors
+
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
+
 # Lumen OS — step-by-step build plan
 
 The spec's 10 phases (0–9), cut into session-sized steps. Do **one step per session**.
