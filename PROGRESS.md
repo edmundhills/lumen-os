@@ -14,7 +14,7 @@ Claude reads CLAUDE.md automatically, does that step (plus any ➕ steps right a
 
 ## Current step
 
-**0.3**
+**0.4** (with ➕ 0.5)
 
 ## Notes for the next session
 
