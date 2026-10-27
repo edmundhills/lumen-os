@@ -168,7 +168,7 @@ Reduce Motion turns off morphing and spring animations whatever the tier.
 
 Accent and light/dark are user choices, so they are applied at run time by lumen-settingsd ([flow 5.1](#51-changing-a-setting)).
 
-Flatpak apps can't see host theme files. They get light/dark, accent and contrast from the Settings portal (`org.freedesktop.appearance`, served by xdg-desktop-portal-kde from `kdeglobals`). Full theming inside Flatpaks needs more: GTK 3 Flatpaks need the theme as a Flatpak extension (`org.gtk.Gtk3theme.Lumen`), and GTK 4 Flatpaks only see `~/.config/gtk-4.0` with a filesystem override. This goes in the risk register (step 0.3); Phase 2 decides how far to go.
+Flatpak apps can't see host theme files. They get light/dark, accent and contrast from the Settings portal (`org.freedesktop.appearance`, served by xdg-desktop-portal-kde from `kdeglobals`). Full theming inside Flatpaks needs more: GTK 3 Flatpaks need the theme as a Flatpak extension (`org.gtk.Gtk3theme.Lumen`), and GTK 4 Flatpaks only see `~/.config/gtk-4.0` with a filesystem override. This is [risk 15](risks.md#15-flatpak-apps-dont-match-the-lumen-look) in the risk register; Phase 2 decides how far to go.
 
 ### 4.4 lumen-shell
 
@@ -177,7 +177,7 @@ Flatpak apps can't see host theme files. They get light/dark, accent and contras
 | Part | Talks to |
 | --- | --- |
 | Top bar | Tray (StatusNotifierItem, `org.kde.StatusNotifierWatcher`), NetworkManager, PipeWire (through plasma-pa), UPower, MPRIS (`org.mpris.MediaPlayer2.*`), AccountsService |
-| Camera, mic and location indicators | PipeWire streams; GeoClue2 (`org.freedesktop.GeoClue2`, `InUse`). A program that opens `/dev/video*` directly, bypassing PipeWire, isn't seen: goes in the risk register |
+| Camera, mic and location indicators | PipeWire streams; GeoClue2 (`org.freedesktop.GeoClue2`, `InUse`). A program that opens `/dev/video*` directly, bypassing PipeWire, isn't seen: on the risk register's [watch list](risks.md#watch-list) |
 | Dock | TaskManager library (Wayland `org_kde_plasma_window_management`), KService for pins, KActivities for recent files, launcher API (`com.canonical.Unity.LauncherEntry`) for progress and badges |
 | Command palette | KRunner library in-process, plus D-Bus runners (`org.kde.krunner1`); Baloo for files; a Lumen runner for Settings pages (deep links) |
 | Quick settings | NetworkManager, BlueZ (BluezQt), power profiles, KWin Night Light (`org.kde.KWin.NightLight`), PowerDevil for brightness (`org.kde.Solid.PowerManagement`), plasma-pa, lumen-settingsd (dark mode) |
@@ -479,6 +479,8 @@ ADR 0001 fixed suspend-then-hibernate and BitLocker resizing.
 | Q14 | The variants table calls `lumen:beta` the "Next Fedora release", but the release train makes beta the build that becomes stable every 2 weeks. Both can't be true all the time | Beta is the weekly promotion of a green `dev` build, on the same Fedora as stable. During a Fedora rebase, `main` moves to the new release and beta carries it for the 4 weeks the spec asks for, while a maintenance branch keeps building and promoting stable on the old release | Step 9.1 |
 | Q15 | GitHub release files are limited to 2 GiB each and the ISO will be bigger ([section 9.6](#96-disk-images-and-install-media)). Where do people download it? | Choose a host as v0.1 nears; the options and their costs come to you at step 9.5. Until then CI keeps test ISOs as short-lived workflow artifacts | Step 9.5 |
 
+Q16 (what "match" means for Flatpak theming) and Q17 (TPM unlock bound to PCR 7 without a PIN) came out of the risk register and are listed in [docs/risks.md](risks.md#questions-for-the-owner).
+
 ## 9. Build flow
 
 Everything Lumen ships is built from this repository by CI. The OS is one Containerfile, `image/Containerfile`, with several stages. CI builds it with Podman, tests it, signs what it pushes to `ghcr.io`, and makes a qcow2 for tests and a live ISO for installing. Lumen Setup for Windows is built separately, on a Windows runner. [Section 10.1](#101-build-time) draws the whole flow.
@@ -549,7 +551,7 @@ The base image is pinned by digest, but Fedora's mirrors carry only the release-
 - A guard check at the end of `devel` compares its package list with `base`'s. Adding packages is fine; changing or removing one fails the build. The `lumen` stage can't drift: it derives from `base` and installs with the repositories turned off.
 - `base` may itself update a few Kinoite packages when something in `packages.toml` needs a newer version. That is safe, because `devel` and `lumen` both derive from `base`, not from the bare digest. This is why rule 2 says "the stage it ships in", which is stricter than CLAUDE.md's "the same base image digest".
 - Renovate opens a pull request for each new Kinoite digest (step 8.2). That keeps the gap to the mirrors small, so Koji is the exception. CI rebuilds lumen-glass and lumen-shell against the new KWin and Plasma and runs every test. If the new KWin breaks lumen-glass, the pull request stays red and users stay on the previous base, so an upstream change can't reach users untested.
-- Plasma has three feature releases a year, and Fedora ships each one as an update to its current release, so each arrives through an ordinary digest bump. A feature release usually changes KWin's blur effect, so rebasing lumen-glass onto it is planned work every time (risk register, step 0.3).
+- Plasma has three feature releases a year, and Fedora ships each one as an update to its current release, so each arrives through an ordinary digest bump. A feature release usually changes KWin's blur effect, so rebasing lumen-glass onto it is planned work every time ([risk 1](risks.md#1-kwin-and-plasma-change-their-internals-every-release)).
 
 ### 9.5 Variants
 
