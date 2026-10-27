@@ -25,8 +25,8 @@ Claude reads CLAUDE.md automatically, does that one step, commits, updates this 
 - A4 done 2026-10-27: Fedora 44 in WSL as `FedoraLinux-44` (on D:, user `User`), default distro. Check passes (18 pass). Nested virtualization does NOT work (`/dev/kvm` missing; maybe SVM off in BIOS), so no local VMs: run boot tests in CI. WSL has 7.7 GiB RAM. Fedora WSL has no awk; scripts must not assume it.
 - ADR 0001 accepted 2026-10-27: Lumen is built to compete with Windows. Applied to the spec, this file and CLAUDE.md (new Phase 7 "Switching from Windows"; old Phases 7–8 are now 8–9). The gap list `docs/competing-with-windows.md` is a living document: update it when a gap changes. The owner deferred a Windows-style "Familiar" layout and a built-in AI assistant; don't add either without asking.
 - Machine facts (2026-10-27): Ryzen 7 5800X, 16 GB RAM, virtualization on in firmware, Windows 11 Home build 26200, gh not installed on Windows. Claude reaches WSL from Windows with `wsl -d <distro> --cd "<repo>" -- <cmd>`; set `WSL_UTF8=1` (else UTF-16 output), and from Git Bash prefix `MSYS_NO_PATHCONV=1`.
-- 0.1 done 2026-10-27: `docs/architecture.md` part 1. Written against the spec as amended by ADR 0001. Its section 8 lists five ⚠️ spec errors. Raise each one with the owner before the step it affects, and don't build on the spec's version: Q1 GTK module can't load into GTK 4 or Flatpak apps (3.14); Q2 `power-profiles-daemon` and `tuned-ppd` conflict, so keep tuned-ppd (1.1, 1.3); Q3 the post-update "shell started" check fails whenever nobody logs in (5.6); Q4 `anaconda-iso` has no live session for the hardware report and is unattended by default (1.8, 6.10, 6.12); Q5 KRdp has no relay, so "help from a friend" only works on the same network (5.22a). Q6–Q11 are proposals waiting for the owner's review at 0.8. Step 0.2 fills the "Part 2" heading at the end of the same file; section 6.1 already gives the service call direction for the graph.
-- Spec issue to raise at step 1.3: the spec puts image defaults in `/usr/etc`, but `bootc container lint` rejects images that contain `/usr/etc`. The likely fix is to write defaults to `/etc` in the Containerfile (bootc 3-way merges it) or to `/usr/lib` / `/usr/share`. Verify, ask the owner, record an ADR.
+- 0.1 done 2026-10-27: `docs/architecture.md` part 1. Written against the spec as amended by ADR 0001. Its section 8 listed five spec errors (Q1–Q5); with the `/usr/etc` issue they were fixed in the spec, PROGRESS.md and the architecture on the owner's instruction (ADR 0002, 2026-10-27). Q6–Q11 are proposals waiting for the owner's review at 0.8. Step 0.2 fills the "Part 2" heading at the end of the same file; section 6.1 already gives the service call direction for the graph.
+- ADR 0002 (2026-10-27) is a product choice the owner can still reverse: remote help is same-network in v0.1, with RustDesk offered for the internet. Building a live ISO from a bootc image (step 1.8) is the riskiest fix; the fallback is in the ADR.
 
 ---
 
@@ -52,12 +52,12 @@ Claude reads CLAUDE.md automatically, does that one step, commits, updates this 
 
 - [ ] **1.1** `image/packages.toml` from the package manifest table (install and remove lists).
 - [ ] **1.2** `image/Containerfile`: FROM Kinoite pinned by digest; install/remove packages; `bootc container lint`.
-- [ ] **1.3** Overlay: enable firewalld, fwupd-refresh.timer, snapper timers, power-profiles-daemon; SELinux enforcing; remove the stock Plasma layout and Discover. Raise the `/usr/etc` issue first.
+- [ ] **1.3** Overlay: enable firewalld, fwupd-refresh.timer, snapper timers, tuned-ppd; SELinux enforcing; remove the stock Plasma layout and Discover. Defaults go in `/usr/lib` and `/usr/share`, or the image's `/etc` where they can only live there; never `/usr/etc` (ADR 0002).
 - [ ] **1.4** Btrfs zstd defaults and snapper config for /home (24 hourly, 7 daily, 4 weekly).
 - [ ] **1.5** CI: build the default image and push to ghcr.io (free runner disk space first; Kinoite images are large).
 - [ ] **1.6** 👤 cosign signing (you add the key as a repo secret) and SBOM with syft.
 - [ ] **1.7** `/etc/containers/policy.json` and sigstore config so the system accepts only our signed images.
-- [ ] **1.8** CI: bootc-image-builder builds qcow2 and anaconda-iso artifacts.
+- [ ] **1.8** ⚠️ CI: bootc-image-builder builds the qcow2; build the install ISO as a live ISO from our image (try Titanoboa first) that runs a live session and starts Anaconda WebUI (ADR 0002). Record the tool in an ADR. If no live ISO works, fall back to `anaconda-iso` with a partial kickstart and tell the owner.
 - [ ] **1.9** `tests/boot`: QEMU/KVM boot test in CI; SDDM within 60 s; `systemctl --failed` empty. Also boot once with Secure Boot (OVMF) and record whether kernel lockdown is on and hibernation is offered (`/sys/kernel/security/lockdown`, `/sys/power/state`) in ADR 0001's follow-up.
 - [ ] **1.10** Variant `lumen-gaming`: Steam, Gamescope session, MangoHud, controller udev rules.
 - [ ] **1.11** ⚠️ Variant `lumen-nvidia`: akmods-built, signed kmods in CI.
@@ -100,7 +100,7 @@ Claude reads CLAUDE.md automatically, does that one step, commits, updates this 
 - [ ] **3.11** First-boot benchmark oneshot → `/var/lib/lumen/glass-tier`; battery saver drops a tier; Reduce Transparency and Reduce Motion.
 - [ ] **3.12** Spring open/close/morph animations (stiffness 380, damping 30).
 - [ ] **3.13** Smooth-min SDF merging for dock shapes within 12 px.
-- [ ] **3.14** GTK module that requests the blur region for GTK 4/3 windows that declare glass.
+- [ ] **3.14** GTK glass without a GTK module (ADR 0002): opt-in list of GTK app IDs with the tokens; lumen-glass draws whole-window glass for them; check that it shows only where the GTK themes (2.6, 2.7) left header bars and sidebars translucent.
 - [ ] **3.15** ⚠️ Test harness: `kwin_wayland --virtual` in CI rendering the 12 reference scenes.
 - [ ] **3.16** Golden-image compare, contrast computation, frame-time benchmark.
 - [ ] **3.17** 👤 Phase 3 acceptance: contrast ≥ 4.5:1 everywhere; 60 fps with 8 surfaces on Iris Xe-class graphics (real hardware); idle GPU near zero; Solid tier samples no backdrop.
@@ -135,7 +135,7 @@ Claude reads CLAUDE.md automatically, does that one step, commits, updates this 
 - [ ] **5.3** `lumen` CLI skeleton (clap): `--json`, completions, `lumen settings`.
 - [ ] **5.4** `lumen-updated` part 1: timer, check order (bootc, Flatpak, fwupd), D-Bus API.
 - [ ] **5.5** `lumen-updated` part 2: low-priority downloads, metered/battery rules, staging, one notification.
-- [ ] **5.6** `lumen-updated` part 3: post-boot health check with boot-counting fallback.
+- [ ] **5.6** `lumen-updated` part 3: boot health check that needs no login (SDDM up, NetworkManager running, no failed critical units) with boot-counting fallback (try greenboot first); first-login shell check that offers to go back (ADR 0002).
 - [ ] **5.7** `lumen-updated` part 4: history, rollback to signed tags; `lumen update`, `lumen rollback`.
 - [ ] **5.8** `lumen-health`: first 5 checks with fixes.
 - [ ] **5.9** `lumen-health`: last 5 checks with fixes; `lumen health [--fix]`.
@@ -152,7 +152,7 @@ Claude reads CLAUDE.md automatically, does that one step, commits, updates this 
 - [ ] **5.20** Settings pages: Backup, Drivers & Hardware.
 - [ ] **5.21** Settings pages: Keyboard & Input, Accessibility.
 - [ ] **5.22** Settings pages: Developer, About & Health (including "Reset Lumen": keep files or erase everything).
-- [ ] **5.22a** "Get help from a friend": Plasma remote desktop behind a one-time code and a visible indicator.
+- [ ] **5.22a** "Get help from a friend": Plasma remote desktop (KRdp) on the same network, behind a one-time code and a visible indicator, saying plainly that it is same-network only; for help over the internet, offer RustDesk from the Store with a note that its servers carry the connection (ADR 0002). Confirm RustDesk is on Flathub and works on Plasma Wayland.
 - [ ] **5.23** Tests: GUI and CLI give identical results; update + rollback in the VM; each Health check triggered and fixed.
 - [ ] **5.24** 👤 Phase 5 acceptance.
 
@@ -167,9 +167,9 @@ Claude reads CLAUDE.md automatically, does that one step, commits, updates this 
 - [ ] **6.7** Welcome steps 5–9: privacy, look, import, apps, gesture tour.
 - [ ] **6.8** Backup app UI: external drive, SMB, S3.
 - [ ] **6.9** "Previous versions" in Files via snapper.
-- [ ] **6.10** Installer theme and the three install modes; "Install alongside Windows" detects BitLocker and Fast Startup and never resizes a BitLocker volume.
+- [ ] **6.10** Installer theme (Anaconda WebUI in the live session from 1.8) and the three install modes; "Install alongside Windows" detects BitLocker and Fast Startup and never resizes a BitLocker volume.
 - [ ] **6.11** `hardware/hardware.json` and the `lumen-hwd` compare logic, including the Microsoft UEFI CA 2023 check.
-- [ ] **6.12** Live-session hardware report app (green / amber / red).
+- [ ] **6.12** Hardware report app (green / amber / red) in the install USB's live session. If 1.8 had to fall back to `anaconda-iso`, ask the owner before dropping it (ADR 0002).
 - [ ] **6.13** 👤 Phase 6 acceptance: install to usable desktop in < 15 min; a non-technical tester sets up, installs an app, restores a file and runs a backup unaided.
 
 ## Phase 7 — Switching from Windows (spec: "Spec: Windows apps and switching", Phase 7)

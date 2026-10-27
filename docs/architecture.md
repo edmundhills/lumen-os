@@ -1,8 +1,8 @@
 # Lumen OS architecture
 
-Status: part 1 of 2, draft for the owner's review (2026-10-27), written against the spec as amended by [ADR 0001](decisions/0001-compete-with-windows.md). Part 1 covers the components and how they talk to each other. Part 2 (build flow and dependency graph) is step 0.2.
+Status: part 1 of 2, draft for the owner's review (2026-10-27), written against the spec as amended by [ADR 0001](decisions/0001-compete-with-windows.md) and [ADR 0002](decisions/0002-fix-spec-errors-from-architecture-review.md). Part 1 covers the components and how they talk to each other. Part 2 (build flow and dependency graph) is step 0.2.
 
-[docs/spec.md](spec.md) is the source of truth. This document turns it into concrete names, paths and interfaces. Where the spec leaves something open, this document proposes an answer and marks it **Proposed**. Each proposal gets an ADR in `docs/decisions/` when the step that builds it starts. Where the spec looks technically wrong, it is marked ⚠️ and listed in [section 8](#8-spec-problems-and-open-questions).
+[docs/spec.md](spec.md) is the source of truth. This document turns it into concrete names, paths and interfaces. Where the spec leaves something open, this document proposes an answer and marks it **Proposed**. Each proposal gets an ADR in `docs/decisions/` when the step that builds it starts. The spec errors found while writing it are listed in [section 8](#8-spec-problems-and-open-questions) and fixed by [ADR 0002](decisions/0002-fix-spec-errors-from-architecture-review.md).
 
 The interface sketches below (methods, properties, signals) show intent, not the final API. The step that builds each part fixes its exact shape.
 
@@ -52,7 +52,7 @@ Three rules shape every interface in this document:
 | `/usr/bin/lumen` | No | image | The CLI |
 | `/usr/libexec/lumen-*` | No | image | Service binaries |
 | `/usr/share/lumen/` | No | image | Data that ships with the image: `tokens/tokens.json`, `settings/schema.toml`, `hardware.json`, `app-aliases.json`, `compat/windows-apps.json` |
-| Image defaults for `/etc` | No | image | ⚠️ The spec says `/usr/etc`, which `bootc container lint` rejects. Decided at step 1.3 |
+| Image `/etc` | No (merged into the writable `/etc`) | image | Config defaults that can only live in `/etc`; bootc 3-way merges them with local changes on update. Everything else goes in `/usr/lib` or `/usr/share`. Never `/usr/etc` (ADR 0002) |
 | `/etc/lumen/` | Yes | system services | **Proposed:** machine-wide Lumen settings (see [Q7](#8-spec-problems-and-open-questions)) |
 | `/var/lib/lumen/` | Yes | system services | `glass-tier`, `updates/` (history, held versions), `health/` (logs), `compat/` (newer signed compatibility database) |
 | `~/.config/lumen/*.toml` | Yes | lumen-settingsd | The user's Lumen settings |
@@ -137,8 +137,9 @@ A KWin effect plugin loaded by `kwin_wayland` in the user's session. Built again
 
 1. The role the client set through `lumen_glass_manager_v1`. Lumen's shell and apps always set one.
 2. Otherwise, from the window type KWin already knows: menus get `menu`, applet popups and OSDs get `popover`, notifications get `notification`, anything else that asked for blur gets `sidebar`.
-3. The title bar area gets `titlebar` directly, because the window decoration also runs inside KWin.
-4. A window that asks for nothing gets rounded corners and a soft shadow only (spec).
+3. GTK apps can't ask, because there is no GTK module (ADR 0002). Those on the opt-in list of app IDs, shipped with the tokens, get glass behind the whole window with the `sidebar` preset. It shows only where the GTK theme made the window translucent: header bars and sidebars.
+4. The title bar area gets `titlebar` directly, because the window decoration also runs inside KWin.
+5. A window that asks for nothing gets rounded corners and a soft shadow only (spec).
 
 **How the tier is chosen.** The effective tier is the lowest of:
 
@@ -216,7 +217,8 @@ Owns OS image updates (bootc), Flatpaks in the system installation, firmware, co
 - **Proposed: compatibility database refresh.** lumen-updated downloads the newer database, checks its signature, and only then replaces `/var/lib/lumen/compat/windows-apps.json`. Readers trust that file because only lumen-updated (root) can write it, so they never verify, download or look anything up online. Where the file is published is decided at step 7.3.
 - **Proposed: going back to an older version** needs CI to keep immutable dated tags (for example `stable-20261027`) next to the moving `stable` tag (release train, step 9.1). After a user goes back, the version they left is "held" so the next check doesn't offer it straight away; the hold lifts when a newer version appears.
 - **Low priority:** downloads run in a transient unit with idle CPU and I/O scheduling.
-- **Post-boot health check:** ⚠️ see [Q3](#8-spec-problems-and-open-questions).
+- **Post-boot health check** (ADR 0002): within 2 minutes of boot and without waiting for a login, it checks that SDDM is up, NetworkManager is running and no critical units failed. Two failed boots in a row fall back to the previous deployment; try greenboot for this before writing our own.
+- **Proposed: first-login check.** A user unit started at login waits for the shell. If the shell hasn't started, the unit opens a small standalone dialog ("The desktop didn't start after the update. Go back to the previous version?") that calls `Rollback()`. It can't use a notification, because Plasma's notification server runs inside the shell that failed.
 
 #### lumen-health: `org.lumen.Health1`
 
@@ -247,7 +249,7 @@ The last four are the dual-boot checks (step 7.10); they only run when a Windows
 - **Uses:** sysfs and the hwdata ID lists (what `lspci` and `lsusb` read), fwupd, EFI variables (Secure Boot state, and the `db` certificate list for the Microsoft UEFI CA 2023 check), the TPM (`/sys/class/tpm`), fprintd (`net.reactivated.Fprint`), NetworkManager (Wi-Fi), V4L2 (webcam), ALSA (audio devices), `/sys/power` (sleep support), UPower.
 - **Compares with** `/usr/share/lumen/hardware.json`: known good, known issues with workarounds, known broken.
 - **Sketch:** `Report()` returns JSON with the same schema as `lumen hw report --json`; `DriverStatus()`; `SwitchToNvidiaImage()` explains MOK enrolment, then calls `org.lumen.Updates1.SwitchVariant("nvidia")`, because only lumen-updated runs bootc. Signal: `DevicesChanged`.
-- Also runs in the live session for the hardware report. ⚠️ See [Q4](#8-spec-problems-and-open-questions).
+- Also runs in the install USB's live session, for the hardware report (ADR 0002).
 
 #### lumen-settingsd: `org.lumen.Settings1`
 
@@ -301,7 +303,7 @@ Settings that already have an upstream owner (Wi-Fi networks, displays, Bluetoot
 
 | App | Talks to |
 | --- | --- |
-| Settings | lumen-settingsd, all system services, `org.lumen.Glass1`, KDE settings backends (KScreen, plasma-nm, BlueZ, plasma-pa, PowerDevil), AccountsService, firewalld, the Flatpak permission store, Bottles (Apps → Windows apps), Plasma's remote desktop server KRdp ("Get help from a friend", ⚠️ [Q5](#8-spec-problems-and-open-questions)). Opens on deep links `lumen-settings://<page>[/<section>]` (a URL scheme handler in its desktop file); the palette and Health fixes use them |
+| Settings | lumen-settingsd, all system services, `org.lumen.Glass1`, KDE settings backends (KScreen, plasma-nm, BlueZ, plasma-pa, PowerDevil), AccountsService, firewalld, the Flatpak permission store, Bottles (Apps → Windows apps), Plasma's remote desktop server KRdp ("Get help from a friend" on the same network; for help over the internet the page offers RustDesk from the Store, ADR 0002). Opens on deep links `lumen-settings://<page>[/<section>]` (a URL scheme handler in its desktop file); the palette and Health fixes use them |
 | Store | libflatpak (system installation; Flatpak's own system helper does the privileged part under polkit), AppStream metadata, Flathub, `app-aliases.json`, lumen-compat (ratings next to Windows-name searches, the Windows alternatives collection, anti-cheat status). Installs websites as apps ([Q11](#8-spec-problems-and-open-questions)) |
 | Welcome | First-boot part: localed (`org.freedesktop.locale1`), NetworkManager, AccountsService, TPM2 enrolment (see [Q8](#8-spec-problems-and-open-questions)). User part: lumen-settingsd, the Store backend, UDisks2 (import drive; unlocks a BitLocker drive with its recovery key), lumen-compat ("Your Windows apps"), lumen-backupd (offer backup when a second drive exists) |
 | Backup | lumen-backupd |
@@ -312,7 +314,12 @@ There is no Lumen app daemon. Flatpak's system helper already is the service, so
 
 ### 4.8 Installer
 
-Anaconda from bootc-image-builder's `anaconda-iso`, with Lumen's kickstart and theme from `installer/`. bootc-image-builder adds the `ostreecontainer` kickstart command that writes the image to disk. After install, the system must track `ghcr.io/<org>/lumen:<channel>` and enforce the signature policy from its first update. "Install alongside Windows" uses free space made from inside Windows and never resizes a BitLocker volume (spec). ⚠️ See [Q4](#8-spec-problems-and-open-questions) for what this ISO can't do.
+The install media is a live ISO built from the Lumen image (ADR 0002; try Universal Blue's Titanoboa first, at step 1.8). It boots into a Lumen live session, which runs the hardware report through lumen-hwd and then starts Anaconda WebUI with Lumen's kickstart and theme from `installer/`. How the live ISO hands the image to Anaconda is worked out at step 1.8.
+
+- After install, the system must track `ghcr.io/<org>/lumen:<channel>` and enforce the signature policy from its first update.
+- "Install alongside Windows" uses free space made from inside Windows and never resizes a BitLocker volume (spec).
+- The live session must not run Welcome; that belongs to the installed system's first boot.
+- Fallback, if no live ISO works by Phase 6: bootc-image-builder's `anaconda-iso` with a partial kickstart, so the user picks the disk and mode. bootc-image-builder adds the `ostreecontainer` kickstart command that writes the image. This drops the live hardware report, so it needs the owner's approval first.
 
 ### 4.9 Windows apps and switching
 
@@ -351,7 +358,7 @@ Anaconda from bootc-image-builder's `anaconda-iso`, with Lumen's kickstart and t
 3. On a metered network, or on battery below 20%, it waits.
 4. It downloads at idle priority. bootc checks the image signature against `/etc/containers/policy.json` and stages it. Flatpaks of apps that aren't running are applied; firmware waits for consent.
 5. It emits `UpdateReady`. The shell shows one notification: Restart Now, Tonight, Later.
-6. After the restart, the post-boot health check runs. If it fails twice, the boot loader falls back to the previous deployment and Settings explains what happened. ⚠️ [Q3](#8-spec-problems-and-open-questions).
+6. After the restart, the boot check runs without waiting for a login. If it fails on two boots in a row, the boot loader falls back to the previous deployment and Settings explains what happened. At the first login, the session check confirms the shell started, or offers to go back.
 7. Later, Settings > Updates > History calls `ListHistory()`; "Go back to this version" calls `Rollback()` or `SwitchTo(version)`, and the version left behind is held.
 
 ### 5.3 Installing an app
@@ -427,7 +434,7 @@ Lumen services call each other in one direction only: lumen-health and lumen-hwd
 | Compatibility database | HTTPS, signed file | lumen-updated | The same file for everyone. Lookups stay on the machine, so nothing reveals which app a user installs |
 | Lumen release files | HTTPS, checksums and signatures | Lumen Setup for Windows | Verified before writing the USB drive |
 | Backup destinations | Local disk, SMB, NFS, S3 over HTTPS | restic, through lumen-backupd | Encrypted before it leaves the machine |
-| Remote help | RDP | KRdp | Off until the user starts a session; ⚠️ [Q5](#8-spec-problems-and-open-questions) |
+| Remote help | RDP on the local network | KRdp | Off until the user starts a session; same network only. RustDesk, if the user installs it, connects through RustDesk's servers |
 | NetworkManager connectivity check | HTTP to Fedora's check URL | NetworkManager | Needed for captive portals. Keep Fedora's or host our own: step 8.2 |
 | Crash reports | HTTPS to KDE's crash tracker | DrKonqi | Off unless the user opts in at Welcome |
 | Telemetry | None | n/a | `rpm-ostree-countme` masked; KDE's user feedback stays off |
@@ -442,17 +449,20 @@ Lumen services call each other in one direction only: lumen-health and lumen-hwd
 
 ## 8. Spec problems and open questions
 
-### ⚠️ Spec is technically wrong
+### Spec errors, fixed by ADR 0002
 
-| # | Spec says | Problem | Proposal | Affects |
+These were technically wrong in the spec. [ADR 0002](decisions/0002-fix-spec-errors-from-architecture-review.md) explains each one; the spec and PROGRESS.md now carry the fixes.
+
+| # | The spec said | Why it was wrong | Now | Steps |
 | --- | --- | --- | --- | --- |
-| Q1 | GTK apps get glass "via our small GTK module" (lumen-glass spec; step 3.14) | GTK 4 dropped general-purpose loadable modules, so a module can't load into GTK 4 apps at all. Flatpak apps can't load modules from the host either, and the spec makes Flatpak the only way to install apps. In practice the module would only reach GTK 3 apps that ship in the image | Our GTK CSS makes headerbars and sidebars translucent, and lumen-glass puts glass behind the whole window for opted-in GTK app IDs (only the translucent parts show it). A GTK 3 module stays optional for host apps | Step 3.14, Phase 2 visual test |
-| Q2 | The package manifest includes both `power-profiles-daemon` and `tuned-ppd` | They can't be installed together. Both provide `ppd-service` and conflict on it (checked in the Fedora 44 repos). Fedora has been moving its desktops to tuned-ppd since Fedora 41 | Keep `tuned-ppd`, drop `power-profiles-daemon`. Both serve the same D-Bus API, so nothing else changes. Confirm which one Kinoite ships at step 1.1 | Steps 1.1, 1.3 |
-| Q3 | After an update, the health check must see "shell started" within 2 minutes, and two failures roll back | The shell only starts when someone logs in. After a "Tonight" restart nobody does, so every good update would fail the check and roll back | Mark the boot good on system checks only: SDDM up, network up, no failed critical units. Check the shell at the first login after an update; if it fails, offer to go back instead of doing it automatically. Look at greenboot (Fedora's boot health checks with GRUB fallback) before writing our own | Step 5.6 |
-| Q4 | The hardware report runs on the live USB, and the installer is Anaconda WebUI from `anaconda-iso` | bootc-image-builder's `anaconda-iso` boots straight into Anaconda, with no live desktop, so there's nowhere to run the hardware report app. By default it is also an unattended installer that wipes the first disk; interactive choices need a partial kickstart. Which Anaconda UI it uses must be checked | Check at step 1.8. Lumen Setup for Windows already runs the hardware check from Windows (step 7.9), which covers people coming from Windows. For everyone else: a live ISO built from our image (for example Universal Blue's Titanoboa), or drop the live report | Steps 1.8, 6.10, 6.12 |
-| Q5 | "Get help from a friend": Plasma remote desktop behind a one-time code (step 5.22a) | KRdp is a plain RDP server with no relay. A friend on another network can't reach it unless the user forwards a port on their router. Windows' Quick Assist works because Microsoft runs a relay | For v0.1, say plainly that it works on the same network. For help across the internet, either Lumen runs a relay (a server to pay for and keep private), or the Store offers RustDesk, which has its own relay network. Your decision | Step 5.22a |
+| Q1 | GTK apps get glass "via our small GTK module" | GTK 4 has no loadable modules, and Flatpak apps can't load modules from the host | The GTK themes make header bars and sidebars translucent; lumen-glass draws whole-window glass for GTK apps on an opt-in list | 3.14 |
+| Q2 | Ship both `power-profiles-daemon` and `tuned-ppd` | They conflict on `ppd-service` (checked in the Fedora 44 repos) | `tuned-ppd` only; same D-Bus API | 1.1, 1.3 |
+| Q3 | After an update, "shell started" and "network up" within 2 minutes, or roll back | Nobody logs in after a "Tonight" restart, and a laptop may boot offline, so good updates would roll back | The boot check needs no login and only needs NetworkManager running; the shell is checked at the first login, which offers to go back | 5.6 |
+| Q4 | Hardware report on the live USB; installer from `anaconda-iso` | `anaconda-iso` has no live desktop and installs unattended by default | Install media is a live ISO built from the Lumen image; `anaconda-iso` with a partial kickstart is the fallback, and dropping the live report then needs your approval | 1.8, 6.10, 6.12 |
+| Q5 | "Get help from a friend" over Plasma's remote desktop with a one-time code | KRdp has no relay, so it can't reach a friend on another network | Same network in v0.1, said plainly; RustDesk from the Store for help over the internet; a Lumen relay after v0.1 if you approve it | 5.22a |
+| — | Image defaults go in `/usr/etc` | `bootc container lint` rejects `/usr/etc` (checked against bootc 1.17.1 in Fedora 44) | `/usr/lib` and `/usr/share` where the software reads them, otherwise the image's `/etc` | 1.2, 1.3 |
 
-Already known and tracked elsewhere: `/usr/etc` (step 1.3). ADR 0001 fixed suspend-then-hibernate and BitLocker resizing in the spec.
+ADR 0001 fixed suspend-then-hibernate and BitLocker resizing.
 
 ### Open design questions
 
