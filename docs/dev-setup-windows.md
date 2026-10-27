@@ -40,7 +40,7 @@ You do steps 1–5 once. Step 6 checks the result.
 
    The first line should say `WSL version: 2.` something.
 
-## 2. Install Fedora on drive D:
+## 2. Install Fedora on the D: drive
 
 1. See which Fedora versions WSL offers:
 

@@ -9,10 +9,12 @@ SPDX-License-Identifier: GPL-3.0-or-later
 You are the lead engineer of Lumen OS, a desktop Linux distribution. The full specification is docs/spec.md. Read it before every phase. If the spec and this file disagree, the spec wins; if the spec is technically wrong, stop and tell me.
 
 ## Product
+
 Easy by default, powerful underneath, never breaks, liquid-glass design, and a real alternative to Windows. A new user never needs a terminal; a power user is never blocked by the GUI.
 
 ## Fixed architecture
-- Image: OCI image FROM quay.io/fedora-ostree-desktops/kinoite:<current Fedora>, managed by bootc. Built with Podman; qcow2 via bootc-image-builder; the install ISO is a live ISO built from the image (ADR 0002).
+
+- Image: OCI image FROM `quay.io/fedora-ostree-desktops/kinoite:<current Fedora>`, managed by bootc. Built with Podman; qcow2 via bootc-image-builder; the install ISO is a live ISO built from the image (ADR 0002).
 - Compositor: KWin 6 (Wayland only). Glass: KWin effect plugin "lumen-glass" (fork of KWin's blur effect).
 - Shell: Plasma shell package org.lumen.desktop with our own QML containments/plasmoids.
 - Apps: Qt 6/QML (C++). System services: Rust with zbus. CLI: Rust (clap).
@@ -21,12 +23,15 @@ Easy by default, powerful underneath, never breaks, liquid-glass design, and a r
 - Security: Secure Boot, LUKS2 + TPM2, SELinux enforcing, firewalld, cosign-signed images, no telemetry.
 
 ## Critical build rule
+
 KWin and Plasma plugins have no stable ABI. lumen-glass and lumen-shell must be compiled in a multi-stage Containerfile stage FROM the same base image digest they ship in, against that image's kwin-devel / plasma-workspace-devel, then installed as RPMs. Never build them against a different KWin version.
 
 ## Repo layout
+
 image/ (Containerfile, overlay/, packages.toml), design/tokens/ (tokens.json + exporters), glass/, shell/, apps/settings, apps/store, apps/welcome, apps/backup, apps/windows-app (the "Open Windows app" dialog), services/ (updated, health, hwd, settingsd, backupd), cli/, compat/ (compatibility database, schema, lumen-compat crate), windows-setup/ (Lumen Setup for Windows), installer/, hardware/hardware.json, tests/, docs/.
 
 ## Working rules
+
 - Work one phase at a time. At the end of each phase: run every acceptance test, show results, list known issues, wait for "continue".
 - Prefer upstream components; patch only when needed and record why in docs/decisions/NNNN-title.md (ADR format).
 - Every feature ships with tests. CI must stay green. Small commits, conventional commit messages.
@@ -36,7 +41,9 @@ image/ (Containerfile, overlay/, packages.toml), design/tokens/ (tokens.json + e
 - When unsure, ask one specific question rather than guessing.
 
 ## Step mode (how we work across sessions)
+
 The owner works in short sessions to stay within usage limits. PROGRESS.md is the step list and the hand-off between sessions. These rules refine the working rules above.
+
 - At the start of a session, read PROGRESS.md and do the step under "Current step" (or the first unchecked one). Do that step plus any following steps marked ➕ (a batch of small steps), then stop. Commit after each step in the batch.
 - Read only the docs/spec.md sections the step names, not the whole spec. This replaces "read it before every phase" while in step mode.
 - Commit after each meaningful piece of work, so a session that ends early loses nothing.

@@ -111,6 +111,8 @@ else
     "Run this script inside the Fedora WSL distribution (docs/dev-setup-windows.md, step 2)"
 fi
 
+# /etc/os-release is the machine's own file, so shellcheck can't follow it.
+# shellcheck source=/dev/null
 if [[ -r /etc/os-release ]]; then
   os_id=$(. /etc/os-release && printf '%s' "${ID:-}")
   os_name=$(. /etc/os-release && printf '%s' "${PRETTY_NAME:-${NAME:-unknown}}")
@@ -229,6 +231,8 @@ linux_free=$(free_gb "$HOME")
 host_free='' host_drive=''
 if [[ -n ${WSL_DISTRO_NAME:-} ]]; then
   base=$(windows_base_path "$WSL_DISTRO_NAME")
+  # Strip Windows' long-path prefix \\?\ (the quotes hold it literally).
+  # shellcheck disable=SC1003
   base=${base#'\\?\'}
   if [[ $base =~ ^([A-Za-z]): ]]; then
     host_drive=${BASH_REMATCH[1]^^}
