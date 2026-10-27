@@ -13,6 +13,7 @@ Architecture decision records (ADRs). Each one records a decision that changes t
 | [0001](0001-compete-with-windows.md) | Make switching from Windows a primary goal | Accepted |
 | [0002](0002-fix-spec-errors-from-architecture-review.md) | Fix the spec errors found while writing the architecture | Accepted |
 | [0003](0003-licence.md) | Licence: GPL-3.0-or-later for code, ODbL for the compatibility data | Accepted |
+| [0004](0004-phase-0-review.md) | Decisions from the Phase 0 review: build chain, disk unlock, theme baseline, variants and the rest | Accepted |
 
 ## Writing an ADR
 

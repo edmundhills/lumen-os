@@ -44,3 +44,4 @@ The spec named no licence, and step 0.4 creates the repository skeleton, so one 
 ## Follow-up
 
 - 2026-10-27, steps 0.4 and 0.5: items 4 and 5 are in place. `LICENSE` and `LICENSES/GPL-3.0-or-later.txt` hold the GPL-3.0 text copied unchanged from gnu.org. Every file has an SPDX header, or an entry in `REUSE.toml` if it can't hold one (the architecture image), and `just lint` runs `reuse lint`. `CONTRIBUTING.md` has the DCO rule, with one addition this ADR didn't cover, for the owner's review at step 0.8: only a person can certify the DCO, so an AI assistant never adds a `Signed-off-by:` line, and the person who submits its work signs off.
+- 2026-10-27, step 0.8: the owner kept the rule that an AI assistant never signs off, and the copyright line "Lumen OS contributors" ([ADR 0004](0004-phase-0-review.md)).
