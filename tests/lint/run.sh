@@ -31,15 +31,22 @@ passes=0 failures=0
 
 # check NAME COMMAND...: run one check, and show its output only if it fails.
 check() {
-  local name=$1 out
+  local name=$1 out status
   shift
   if out=$("$@" 2>&1); then
     passes=$((passes + 1))
     printf '  PASS  %s\n' "$name"
   else
+    status=$?
     failures=$((failures + 1))
     printf '  FAIL  %s\n' "$name"
-    printf '%s\n' "$out" | sed 's/^/        /'
+    [[ -z $out ]] || printf '%s\n' "$out" | sed 's/^/        /'
+    # A tool that crashes can stop without saying why, so say how it ended.
+    if ((status > 128)); then
+      printf '        (crashed with exit status %d)\n' "$status"
+    elif [[ -z $out ]]; then
+      printf '        (no output; exit status %d)\n' "$status"
+    fi
   fi
 }
 
