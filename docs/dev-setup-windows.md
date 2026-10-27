@@ -13,7 +13,7 @@ You do steps 1–5 once. Step 6 checks the result.
 ## This machine (checked 2026-10-27)
 
 | What | Found | OK? |
-|---|---|---|
+| --- | --- | --- |
 | Windows | Windows 11 Home, build 26200 | ✅ WSL 2 is supported |
 | CPU | AMD Ryzen 7 5800X, virtualization on in firmware | ✅ |
 | Memory | 16 GB | ✅ meets the spec; WSL gets half by default |
@@ -93,7 +93,7 @@ sudo dnf install -y git podman just gh skopeo jq qemu-system-x86-core
 ```
 
 | Tool | Why we need it | Required? |
-|---|---|---|
+| --- | --- | --- |
 | git | Version control | yes |
 | podman | Builds and runs the OS image (a container image) | yes |
 | just | Runs the project's build recipes (`just lint`, `just build-image`, …) | yes |
@@ -146,7 +146,7 @@ Each line is **PASS**, **WARN** (worth fixing, doesn't block work) or **FAIL** (
 What it checks:
 
 | Area | Checks | Level |
-|---|---|---|
+| --- | --- | --- |
 | System | Running in WSL 2; distribution is Fedora; systemd is running; not run as root | required |
 | Tools | git, podman, just, gh are Fedora programs, not Windows ones | required |
 | | skopeo, jq, qemu | recommended |
@@ -167,7 +167,7 @@ just lint
 just test
 ```
 
-`just lint` checks licences, formatting and the links between documents; `just test` runs the tests that work on this PC. Both run their tools in a container (`tests/lint/Containerfile`), so nothing else needs installing, and WSL gets the same results as CI. The first run downloads Fedora and the tools and builds the container, which takes a few minutes and about 420 MB of disk; after that each run takes a few seconds. Run `just` to list the other recipes.
+`just lint` checks licences, formatting and the links between documents; `just test` runs the tests that work on this PC. Both run their tools in a container (`tests/lint/Containerfile`), so nothing else needs installing, and WSL gets the same results as CI. The first run downloads Fedora and the tools and builds the container, which takes a few minutes and about 450 MB of disk; after that each run takes a few seconds. Run `just` to list the other recipes.
 
 ## Where the code lives
 

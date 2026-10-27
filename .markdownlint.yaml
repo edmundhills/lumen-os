@@ -13,9 +13,3 @@ MD013: false
 # Bold lead-in lines such as **Mitigation** in docs/risks.md are used on
 # purpose, as labels rather than headings.
 MD036: false
-
-# Table column style. Off because Node.js 24 in Fedora 44 (nodejs24-24.18.0)
-# crashes with a segmentation fault in Intl.Segmenter on emoji, which this rule
-# uses to measure table cells, and several tables in docs/ contain emoji.
-# Turn it back on once Fedora's Node.js no longer crashes.
-MD060: false

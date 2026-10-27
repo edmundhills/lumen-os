@@ -8,8 +8,9 @@
 # Usage: bash tests/lint/selftest.sh
 #
 # `just test` runs this in the lint container. It copies the repository to a
-# temporary folder, checks that the copy passes, adds one fault for each check,
-# and checks that every check then fails. Exits 0 when all of that holds.
+# temporary folder, checks that the copy passes and that markdownlint can
+# measure a table that holds an emoji, adds one fault for each check, and checks
+# that every check then fails. Exits 0 when all of that holds.
 
 set -u
 
@@ -40,6 +41,17 @@ if out=$(bash "$work/tests/lint/run.sh" 2>&1); then
 else
   fail "An unchanged copy of the repository should pass" "$out"
 fi
+
+# markdownlint measures any table cell that isn't plain ASCII with
+# Intl.Segmenter, which crashes Node if its full ICU data is missing
+# (tests/lint/Containerfile).
+printf '# Table\n\n| Check | OK? |\n| --- | --- |\n| Emoji | ✅ |\n' >"$work/table.md"
+if out=$(cd -- "$work" && markdownlint-cli2 :table.md 2>&1); then
+  pass "markdownlint measures a table that holds an emoji"
+else
+  fail "markdownlint should measure a table that holds an emoji (exit status $?)" "$out"
+fi
+rm -- "$work/table.md"
 
 # One fault for each check, named by a word from its line in run.sh's output.
 cd -- "$work" || exit 2

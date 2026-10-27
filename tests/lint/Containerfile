@@ -12,6 +12,12 @@ RUN dnf install -y --setopt=install_weak_deps=False \
         git-core \
         just \
         markdownlint-cli2 \
+        # Node's full ICU data. Fedora's Node has only English data built in and
+        # loads the rest from this package, a weak dependency that the option
+        # above skips. Without it Node crashes in Intl.Segmenter, which
+        # markdownlint uses to measure table cells that aren't plain ASCII.
+        # The 24 is Node's major version: it must match the Node dnf installs.
+        nodejs24-full-i18n \
         python3 \
         reuse \
         ShellCheck \
