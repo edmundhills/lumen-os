@@ -180,6 +180,8 @@ Lumen OS stack · 6 layers
 
 Everything below the services layer comes from Fedora and KDE upstream; the compositor effect, shell, services and apps are what Lumen builds, all styled from one token file.
 
+Licence: Lumen's code is GPL-3.0-or-later; the compatibility database is ODbL 1.0 (ADR 0003).
+
 ## Spec: image build and layout
 
 The OS is a single OCI container image built from a Containerfile, so the whole system is versioned, reproducible and rolled back as one unit.
