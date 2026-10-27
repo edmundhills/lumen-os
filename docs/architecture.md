@@ -1,6 +1,6 @@
 # Lumen OS architecture
 
-Status: part 1 of 2, draft for the owner's review (2026-10-27), written against the spec as amended by [ADR 0001](decisions/0001-compete-with-windows.md) and [ADR 0002](decisions/0002-fix-spec-errors-from-architecture-review.md). Part 1 covers the components and how they talk to each other. Part 2 (build flow and dependency graph) is step 0.2.
+Status: draft for the owner's review (2026-10-27), written against the spec as amended by [ADR 0001](decisions/0001-compete-with-windows.md) and [ADR 0002](decisions/0002-fix-spec-errors-from-architecture-review.md). Part 1 (sections 1 to 8, step 0.1) covers the components and how they talk to each other. Part 2 (sections 9 and 10, step 0.2) covers how they are built and released, and draws the dependency graphs.
 
 [docs/spec.md](spec.md) is the source of truth. This document turns it into concrete names, paths and interfaces. Where the spec leaves something open, this document proposes an answer and marks it **Proposed**. Each proposal gets an ADR in `docs/decisions/` when the step that builds it starts. The spec errors found while writing it are listed in [section 8](#8-spec-problems-and-open-questions) and fixed by [ADR 0002](decisions/0002-fix-spec-errors-from-architecture-review.md).
 
@@ -90,7 +90,7 @@ Lumen's apps use `org.lumen.Settings`, `org.lumen.Store`, `org.lumen.Welcome`, `
 
 Lumen's own apps ship as RPMs in the image, not as Flatpaks. They are part of the OS: they need the system services and must match the image version, like KDE's System Settings does today. Third-party apps are Flatpaks only, including Bottles, which runs Windows apps.
 
-Where each RPM gets built (COPR, CI or a Containerfile stage) is part 2.
+Where each RPM gets built is [section 9.2](#92-where-each-package-is-built).
 
 ## 4. Components
 
@@ -215,7 +215,7 @@ Owns OS image updates (bootc), Flatpaks in the system installation, firmware, co
   - Signals: `UpdateReady(version, needsRestart)`, `BootHealthResult(ok, details)`.
 - **History:** bootc keeps only the booted, staged and rollback deployments, but Settings > Updates > History lists every installed version. So lumen-updated keeps its own log in `/var/lib/lumen/updates/`.
 - **Proposed: compatibility database refresh.** lumen-updated downloads the newer database, checks its signature, and only then replaces `/var/lib/lumen/compat/windows-apps.json`. Readers trust that file because only lumen-updated (root) can write it, so they never verify, download or look anything up online. Where the file is published is decided at step 7.3.
-- **Proposed: going back to an older version** needs CI to keep immutable dated tags (for example `stable-20261027`) next to the moving `stable` tag (release train, step 9.1). After a user goes back, the version they left is "held" so the next check doesn't offer it straight away; the hold lifts when a newer version appears.
+- **Proposed: going back to an older version** needs CI to keep immutable dated tags (for example `stable-44.20261027`, [section 9.7](#97-versions-tags-and-keys)) next to the moving `stable` tag (release train, step 9.1). After a user goes back, the version they left is "held" so the next check doesn't offer it straight away; the hold lifts when a newer version appears.
 - **Low priority:** downloads run in a transient unit with idle CPU and I/O scheduling.
 - **Post-boot health check** (ADR 0002): within 2 minutes of boot and without waiting for a login, it checks that SDDM is up, NetworkManager is running and no critical units failed. Two failed boots in a row fall back to the previous deployment; try greenboot for this before writing our own.
 - **Proposed: first-login check.** A user unit started at login waits for the shell. If the shell hasn't started, the unit opens a small standalone dialog ("The desktop didn't start after the update. Go back to the previous version?") that calls `Rollback()`. It can't use a notification, because Plasma's notification server runs inside the shell that failed.
@@ -385,12 +385,12 @@ The install media is a live ISO built from the Lumen image (ADR 0002; try Univer
 | --- | --- | --- | --- |
 | `org.lumen.Updates1` | system | lumen-updated | Settings, CLI, shell, lumen-health, lumen-hwd, lumen-settingsd |
 | `org.lumen.Health1` | system | lumen-health | Settings, CLI, shell |
-| `org.lumen.Hardware1` | system | lumen-hwd | Settings, CLI, hardware report, lumen-health |
+| `org.lumen.Hardware1` | system | lumen-hwd | Settings, CLI, hardware report, lumen-health, Welcome ([Q8](#8-spec-problems-and-open-questions)) |
 | `org.lumen.Settings1` | session | lumen-settingsd | Settings, CLI, shell, lumen-glass, lumen-backupd, Welcome |
 | `org.lumen.Backup1` | session | lumen-backupd | Backup app, Settings, CLI, shell, Welcome |
 | `org.lumen.Glass1` (**Proposed**) | session | `kwin_wayland` (lumen-glass) | Settings, session tests |
 
-Lumen services call each other in one direction only: lumen-health and lumen-hwd call lumen-updated, and lumen-updated calls no other Lumen service. Part 2 draws this as a graph. The Windows-app parts add no D-Bus service: lumen-compat is a library.
+Lumen services call each other in one direction only: lumen-health and lumen-hwd call lumen-updated, and lumen-updated calls no other Lumen service. [Section 10.2](#102-run-time) draws this as a graph. The Windows-app parts add no D-Bus service: lumen-compat is a library.
 
 ### 6.2 Upstream D-Bus services Lumen uses
 
@@ -474,7 +474,319 @@ ADR 0001 fixed suspend-then-hibernate and BitLocker resizing.
 | Q9 | "Every setting is also a config file and a CLI command." Does `lumen settings` also cover settings owned upstream (Wi-Fi, displays, Bluetooth)? | Not in v0.1. Those already have config files and CLIs (`nmcli`, `kscreen-doctor`, `bluetoothctl`); the Advanced section of each Settings page shows the matching command | Step 5.2 |
 | Q10 | lumen-compat is Rust, but the Store, the dialog and Welcome are C++, and Lumen Setup for Windows (C++ on Windows) needs the same `hardware.json` rules as lumen-hwd. How do they share code? | Each shared Rust crate gets a small C interface (generated with cbindgen) that the C++ programs link, on Linux and on Windows. No extra daemon | Steps 7.4, 7.9 |
 | Q11 | The Store installs websites as apps. What runs them? | Use the user's browser where it can open a site in its own app window (Chromium-based browsers can; Firefox on Linux can't), else GNOME Web, a Flatpak with web apps built in. Create the launchers through the dynamic launcher portal, after checking that xdg-desktop-portal-kde implements it | Step 7.7 |
+| Q12 | The spec's build chain builds Lumen's packages in COPR. COPR builds against Fedora's current repositories, not against the pinned base image, which breaks the build rule for KWin and Plasma code and is risky for Qt apps ([section 9.2](#92-where-each-package-is-built)). Where should Lumen's own packages be built? | All of them in stages of the image build, so one commit makes one image and everything is compiled against what ships. COPR only for outside packages Fedora lacks (none yet). If you agree, the spec's build chain line changes to match | Step 0.8, before 1.2 |
+| Q13 | The variants are `lumen-nvidia` and `lumen-gaming`, so a gamer with an NVIDIA card (most PC gamers) has no image with both | Two choices instead of one: driver (open or NVIDIA) and edition (desktop or gaming). That adds a fourth image, `lumen-gaming-nvidia`, built from `lumen-nvidia` plus the gaming layer. `SwitchVariant` changes one choice and keeps the other | Steps 1.10, 1.11 |
+| Q14 | The variants table calls `lumen:beta` the "Next Fedora release", but the release train makes beta the build that becomes stable every 2 weeks. Both can't be true all the time | Beta is the weekly promotion of a green `dev` build, on the same Fedora as stable. During a Fedora rebase, `main` moves to the new release and beta carries it for the 4 weeks the spec asks for, while a maintenance branch keeps building and promoting stable on the old release | Step 9.1 |
+| Q15 | GitHub release files are limited to 2 GiB each and the ISO will be bigger ([section 9.6](#96-disk-images-and-install-media)). Where do people download it? | Choose a host as v0.1 nears; the options and their costs come to you at step 9.5. Until then CI keeps test ISOs as short-lived workflow artifacts | Step 9.5 |
 
-## Part 2
+## 9. Build flow
 
-Build flow and the dependency graph: step 0.2.
+Everything Lumen ships is built from this repository by CI. The OS is one Containerfile, `image/Containerfile`, with several stages. CI builds it with Podman, tests it, signs what it pushes to `ghcr.io`, and makes a qcow2 for tests and a live ISO for installing. Lumen Setup for Windows is built separately, on a Windows runner. [Section 10.1](#101-build-time) draws the whole flow.
+
+### 9.1 Rules
+
+1. **One commit, one image** (**Proposed**, [Q12](#8-spec-problems-and-open-questions)). Every Lumen package in an image comes from the same commit and the same image build, so the shell, the services and the apps can never come from two different commits.
+2. **Built against what ships.** Code that links KWin, Plasma or Qt is compiled in a stage derived from the stage it ships in, against exactly the same package versions. This is the CLAUDE.md build rule, applied to every compiled Lumen package.
+3. **Outside packages come only through the manifest.** Packages from Fedora, and from RPM Fusion for the variants, enter only through the package manifest (`image/packages.toml`), so the package diff against the last release shows every change.
+4. **What was tested is what ships.** A channel moves by pointing its tag at an image digest that passed its tests. Promotion never rebuilds.
+5. **Only `main` signs.** Builds of pull requests and other branches are tested but never signed or pushed to a channel. The signing keys live in a GitHub environment that only workflows on `main` can use.
+
+### 9.2 Where each package is built
+
+**Proposed** ([Q12](#8-spec-problems-and-open-questions)): every package built from this repository is built in a stage of the image build. Each package's RPM spec file sits next to its code (for example `glass/lumen-glass.spec`).
+
+| Package (RPM) | Built from | Stage | Links against | Phase |
+| --- | --- | --- | --- | --- |
+| `lumen-glass` | `glass/` | `build-glass` | KWin, which has no stable ABI | 3 |
+| `lumen-decoration` | `design/` | `build-design` | KDecoration; loaded by KWin | 2 |
+| `lumen-theme` | `design/tokens/` and the exporters | `build-design` | Nothing: `tokens.json`, the exporters' output, the `org.lumen.style` QML module, the global theme | 2 |
+| `lumen-shell` | `shell/` | `build-shell` | libplasma, plasma-workspace, KDE Frameworks, Qt | 4 |
+| `lumen-updated`, `lumen-health`, `lumen-hwd`, `lumen-settingsd`, `lumen-backupd`, `lumen-cli` | `services/`, `cli/` (one Cargo workspace) | `build-rust` | glibc, libflatpak (stable C interfaces) | 5 |
+| `lumen-compat` (library with a C interface), `lumen-compat-data` (the database) | `compat/` | `build-rust` | glibc | 7 |
+| `lumen-hardware-data` | `hardware/hardware.json` | `build-rust` | Nothing | 6 |
+| `lumen-settings`, `lumen-store`, `lumen-welcome`, `lumen-backup`, `lumen-windows-app`, `lumen-hwreport` | `apps/` | `build-apps` | Qt, KDE Frameworks, Plasma's settings backends, `lumen-compat` | 5 to 7 |
+| `lumen-installer` (kickstart and Anaconda WebUI theme) | `installer/` | `live`, for the install media only | Nothing | 1, 6 |
+
+`image/overlay/` isn't packaged: the final stage copies it into the image, as the spec says. If the system services get their own SELinux policy (step 5.1 decides), it is one more package from `build-rust`, built with `selinux-policy-devel`.
+
+**Why not COPR.** The spec's build chain says Lumen's packages are "RPMs built in our COPR repo". COPR builds against Fedora's current repositories, not against our pinned base image:
+
+- For lumen-glass and lumen-shell, that breaks the CLAUDE.md build rule. The spec's own Phase 3 already builds lumen-glass in a Containerfile stage for this reason.
+- For the apps, it is risky. Qt and KDE Frameworks are only backward compatible: an app built against a newer Qt than the image has may install cleanly and then fail when it starts. Settings also uses Plasma's settings backends, which promise no stable interface at all.
+- For the Rust services it would work, but every merge would need a COPR build of the same commit to finish before the image build could start. That adds a queue outside CI, and a way for one image to mix two commits.
+
+Building in stages avoids all three. COPR stays available for packages from outside this repository that Fedora doesn't carry; none are needed yet.
+
+### 9.3 Inside the image build
+
+| Stage | Derived from | What it does |
+| --- | --- | --- |
+| `base` | Kinoite, pinned by digest | Adds and removes the packages in `image/packages.toml`. No Lumen code. Every later stage derives from it |
+| `devel` | `base` | Adds compilers, CMake, Cargo, `rpm-build` and the `-devel` packages, each at exactly the version `base` has ([9.4](#94-matching-the-base-image-exactly)). Never shipped. CI's unit tests and developers' containers use it too (`podman build --target devel`) |
+| `build-design` | `devel` | Runs the token exporters, builds the decoration plugin and packages the global theme |
+| `build-rust` | `devel` | Builds the Cargo workspace (services, CLI, lumen-compat) and packages the data files |
+| `build-glass` | `devel` | Builds lumen-glass |
+| `build-shell` | `devel` | Builds lumen-shell. Needs `org.lumen.style` from `build-design` and the D-Bus interface files |
+| `build-apps` | `devel` | Builds the apps. Needs `org.lumen.style`, the interface files, and lumen-compat's C interface from `build-rust` |
+| `lumen` | `base` | Installs the Lumen RPMs from the build stages with every package repository turned off, copies `image/overlay/`, writes `/usr/lib/os-release` and the image labels, and runs `bootc container lint` as its last step. This is the image users get |
+| `lumen-nvidia`, `lumen-gaming` | `lumen` | The variants ([9.5](#95-variants)) |
+| `live` | `lumen` | The install media only ([9.6](#96-disk-images-and-install-media)) |
+
+- Installing Lumen's RPMs with the repositories turned off is what enforces rule 3. If a Lumen package needs something `base` doesn't have, the build stops and names it, and the fix is a line in `packages.toml`.
+- The RPMs reach the `lumen` stage through a bind mount from the build stages (`RUN --mount=type=bind,from=…`), so no copy of them stays behind in a layer.
+- Each build stage copies in only the folders it builds. Podman can then run independent stages in parallel (`--jobs`) and reuse any stage whose inputs didn't change.
+- Translations (`.ts` and `.po` files, step 8.7) are compiled in the stage of the package that owns them.
+- Phase 1 has only `base` and `lumen`. Each later phase adds its build stage.
+- **Proposed:** after the build, CI re-chunks the image, so that an update downloads only the packages that changed rather than one large layer holding everything Lumen added. This matters on slow and metered connections. rpm-ostree has a command for this; step 1.5 picks the tool.
+
+### 9.4 Matching the base image exactly
+
+The base image is pinned by digest, but Fedora's mirrors carry only the release-day build and the newest update of each package. A plain `dnf install kwin-devel` in the `devel` stage would usually fetch a newer KWin than `base` ships, upgrade KWin inside the build stage to match, and compile lumen-glass against the wrong version. The build would pass, and the effect would then fail to load, or crash KWin, on users' machines.
+
+**Proposed:**
+
+- The `devel` stage installs each `-devel` package at the exact version and release of the matching package in `base`. When the mirrors no longer have that build, it downloads it from Koji, Fedora's build system, which keeps past builds.
+- A guard check at the end of `devel` compares its package list with `base`'s. Adding packages is fine; changing or removing one fails the build. The `lumen` stage can't drift: it derives from `base` and installs with the repositories turned off.
+- `base` may itself update a few Kinoite packages when something in `packages.toml` needs a newer version. That is safe, because `devel` and `lumen` both derive from `base`, not from the bare digest. This is why rule 2 says "the stage it ships in", which is stricter than CLAUDE.md's "the same base image digest".
+- Renovate opens a pull request for each new Kinoite digest (step 8.2). That keeps the gap to the mirrors small, so Koji is the exception. CI rebuilds lumen-glass and lumen-shell against the new KWin and Plasma and runs every test. If the new KWin breaks lumen-glass, the pull request stays red and users stay on the previous base, so an upstream change can't reach users untested.
+- Plasma has three feature releases a year, and Fedora ships each one as an update to its current release, so each arrives through an ordinary digest bump. A feature release usually changes KWin's blur effect, so rebasing lumen-glass onto it is planned work every time (risk register, step 0.3).
+
+### 9.5 Variants
+
+- **`lumen-gaming`** is `lumen` plus Steam, the Gamescope session, MangoHud and the controller udev rules (spec). Steam needs 32-bit libraries that must match the 64-bit Mesa in `base` exactly, so they follow the exact-version rule of 9.4.
+- **`lumen-nvidia`** is `lumen` plus NVIDIA's driver. A `kmods` stage builds the kernel modules with akmods against `base`'s exact kernel (the 9.4 rule again) and signs them with Lumen's module signing key, and the variant installs them. With Secure Boot on, the kernel loads only signed modules; users enrol the key once as a MOK (step 1.12).
+- Both derive from the finished `lumen` image of the same build. Every variant carries the same Lumen RPMs, so lumen-glass is built and tested once per commit.
+- The two variants can't be combined: a gamer with an NVIDIA card has no image with both. See [Q13](#8-spec-problems-and-open-questions).
+- Beta is a channel, not a variant ([9.8](#98-ci-and-the-release-train), [Q14](#8-spec-problems-and-open-questions)).
+
+### 9.6 Disk images and install media
+
+- **qcow2**, for the boot and update tests: bootc-image-builder makes it from the `lumen` image, and from each variant for the boot test.
+- **Live ISO**, for installing (ADR 0002). A `live` stage, derived from `lumen`, adds Anaconda WebUI and `lumen-installer` (kickstart and theme), starts the hardware report when the live session starts, and keeps Welcome from running. Titanoboa, tried first at step 1.8, turns it into an ISO.
+- **Proposed:** the ISO also carries a copy of the `lumen` image for Anaconda to install, so installing needs no network and download speed can't push it past the spec's 10 minutes. The installed system then tracks `ghcr.io/<org>/lumen:<channel>` and accepts only signed images from its first update (section 4.8). How the copy reaches Anaconda is worked out at step 1.8.
+- **Proposed: one ISO, made from the default image.** The live session runs on the open graphics drivers, which is enough for the installer. After install, the hardware report and lumen-hwd suggest the NVIDIA or gaming variant, and `SwitchVariant` moves to it (section 4.5). That keeps one download and one install path to test; variant ISOs can come later if testers need them.
+- GitHub release files are limited to 2 GiB each. The ISO holds a live system and a copy of the image, so it will be larger and needs another host ([Q15](#8-spec-problems-and-open-questions)).
+
+### 9.7 Versions, tags and keys
+
+**Proposed: the build version** is `<Fedora release>.<build date>`, for example `44.20261027`, with `.1`, `.2` for further builds on the same day. It goes into the image label `org.opencontainers.image.version` (which `bootc status` shows and Settings > Updates > History lists), into `IMAGE_VERSION` in `/usr/lib/os-release`, and into the dated tags. The product version (0.1 and so on) is `VERSION_ID`. `ID_LIKE=fedora` stays, so tools that look for Fedora keep working.
+
+**Proposed: tags**, the same for every variant:
+
+| Tag | Points at | Moves |
+| --- | --- | --- |
+| `dev`, `dev-44.20261027` | Each green build of `main` | Every merge |
+| `beta`, `beta-44.20261027` | A `dev` build promoted after the update test | Weekly |
+| `stable`, `stable-44.20261027` | A `beta` build after 7 days with no blocker | Every 2 weeks |
+| `sha-<commit>` | The build of that commit | Never |
+
+The dated tags never move. "Go back to this version" (section 4.5) switches to one of them, so CI keeps every beta and stable build. **Proposed:** builds that only ever reached `dev` are deleted after 30 days (step 9.1).
+
+**Proposed: keys**, one per job, so a leaked key can sign only one kind of thing:
+
+| Key | Signs | Kept in | Step |
+| --- | --- | --- | --- |
+| Image key (cosign) | Image digests and their SBOM attestations | GitHub secret, `main` only. The public key ships in the image for `/etc/containers/policy.json` | 1.6, 1.7 |
+| Release key | `SHA256SUMS` for the ISO and the other release files; the release index Lumen Setup reads | GitHub secret | 9.5 |
+| Compatibility database key | The published database file | GitHub secret. The public key ships in the image | 7.3 |
+| Module signing key | NVIDIA kernel modules | GitHub secret. The public certificate ships in the image; users enrol it as a MOK | 1.11, 1.12 |
+| Windows code-signing certificate | Lumen Setup for Windows | Provided by the owner, kept as a GitHub secret | 7.9 |
+
+Every pushed image gets an SPDX SBOM from syft, attached to the image as a signed attestation and published with each release (step 1.6). The image lint's package diff compares it with the last stable's.
+
+### 9.8 CI and the release train
+
+```mermaid
+flowchart LR
+  change["Change:<br/>push or pull request"] --> test["image workflow:<br/>build, lint, unit, boot,<br/>session and glass tests"]
+  renovate["Renovate:<br/>new Kinoite digest"] --> change
+  nightly["Nightly compatibility job"] -->|"new results"| change
+  test -->|"on main, green"| sign["Re-chunk, sign,<br/>SBOM, push"]
+  sign --> dev[("dev")]
+  dev -->|"weekly, update test green"| beta[("beta")]
+  beta -->|"every 2 weeks, after 7 days<br/>with no blocker"| stable[("stable")]
+  stable --> release["Release: ISO, SBOM,<br/>checksums, changelog"]
+```
+
+A red build of `main` is never signed or pushed. Promotion only moves tags to tested digests, so a broken commit on `main` can't reach beta, whether it came through a pull request or a direct push.
+
+| Workflow | Runs on | Does | Step |
+| --- | --- | --- | --- |
+| `lint` | Every push and pull request | Formatters and linters; schema checks for the tokens, the compatibility database and the hardware database | 0.6 |
+| `image` | Every push and pull request | Builds `lumen` and the variants and runs the unit, image lint, boot, session, glass and accessibility tests. On `main`, when green: re-chunks, signs, attaches the SBOM and pushes `dev` | 1.5, 1.9 |
+| `promote` | Weekly for beta, every 2 weeks for stable, or on demand | Runs the update test on the candidate, moves the channel tag to its digest, and builds the ISO and qcow2 for the release | 9.1, 9.2 |
+| `compat` | Nightly | The Windows compatibility test, plus (from Phase 7) the ProtonDB and AreWeAntiCheatYet imports; opens a pull request with the results | 1.16, 7.2 |
+| `windows-setup` | Changes to `windows-setup/`, `hardware/` or the hardware-matching crate; releases | Builds Lumen Setup for Windows on a Windows runner; signs it for releases | 7.9 |
+| Renovate | When upstream changes | Pull requests for the Kinoite digest, the pinned tool images (bootc-image-builder, Titanoboa), GitHub Actions and Cargo dependencies | 8.2 |
+
+Until `promote` exists, the ISO is built on demand (step 1.8). GitHub's hosted runners have limited disk (step 1.5 frees space first) and a 6-hour limit per job; whether they expose KVM for the boot test is checked at step 1.9.
+
+### 9.9 Where each test layer runs
+
+| Test layer (spec) | Runs in | When |
+| --- | --- | --- |
+| Unit | The `devel` stage as a container: `cargo test`, Qt Test | Every push and pull request |
+| Image lint | `bootc container lint` as the `lumen` stage's last step; the package diff of the SBOM against the last stable | Every image build |
+| Boot test | The qcow2 in QEMU/KVM on the runner | Every push and pull request |
+| Session test | The `lumen` image run as a plain container: `kwin_wayland --virtual`, the shell, scripted D-Bus calls, screenshots. **Proposed:** the system services the shell talks to (UPower, NetworkManager, logind) are faked with python-dbusmock, so no VM is needed | Every push and pull request |
+| Glass visual test | The same container, rendering in software (Mesa's llvmpipe), because the runners have no GPU. The tier rules pick Solid for software rendering (section 4.2), so the tests force each tier through a test-only setting | Every push and pull request |
+| Accessibility | The session test container: Orca smoke test, keyboard navigation script | Every push and pull request |
+| Performance | Boot time and idle RAM in the VM, to catch regressions. The budgets themselves are signed off on real hardware at the acceptance steps, because shared runners are noisy and have no GPU | Every build of `main`; acceptance steps |
+| Update test | Previous stable's qcow2, upgraded to the candidate, rebooted, rolled back, rebooted | Before every promotion, and nightly |
+| Windows compatibility | The `compat` workflow | Nightly |
+| Hardware lab | Real machines, by hand | Before each stable |
+
+If the boot test makes pull requests too slow, step 1.9 can move it to builds of `main`; promotion still requires it.
+
+### 9.10 Built outside the image
+
+- **Lumen Setup for Windows** (`windows-setup/`) is built on a GitHub Windows runner with Qt for Windows and Rust's MSVC toolchain, because it links the C interface of the hardware-matching crate ([Q10](#8-spec-problems-and-open-questions)) and carries a copy of `hardware/hardware.json`. Each release is signed with the owner's code-signing certificate (step 7.9). **Proposed:** Setup finds the current ISO through a small signed release index published with each release, as Fedora Media Writer does with Fedora's release list, and checks the ISO's checksum and signature before it writes the USB drive.
+- **The compatibility database** (`compat/`) is checked against its schema on every change. Each image ships the current file in `lumen-compat-data`. Between image updates, a signed copy is published for lumen-updated (where: step 7.3). **Proposed:** the nightly results arrive as pull requests; one that only updates "last tested" dates merges itself once CI is green, and one that changes a rating waits for review.
+
+### 9.11 Building on the owner's PC
+
+Linux tooling runs in WSL (Fedora 44, 7.7 GiB of RAM, no nested virtualization), so the heavy work happens in CI. The `just` targets come at step 0.5:
+
+| Target | In WSL | In CI |
+| --- | --- | --- |
+| `lint` | Yes | Yes |
+| `test` | Unit tests in the `devel` container | Every test layer |
+| `build-image` | Yes, but slow, and it needs plenty of free disk | Yes |
+| `build-iso` | Not planned | Yes |
+| `run-vm` | No: there is no `/dev/kvm` | The boot and update tests |
+
+## 10. Dependency graphs
+
+### 10.1 Build time
+
+Arrows point from what is needed to what needs it. Cylinders come from upstream, plain boxes are folders in this repository, rounded boxes are stages of `image/Containerfile` (each build stage names the folders it builds), and the pills are the install and test media CI makes from the image. The build stages hand their RPMs to `lumen`.
+
+```mermaid
+flowchart TB
+  kinoite[("Kinoite image,<br/>pinned by digest")]
+  repos[("Fedora repositories<br/>and Koji")]
+  pkgs["image/packages.toml"]
+  ifaces["services/interfaces/<br/>D-Bus interface files"]
+  overlay["image/overlay/"]
+  installer["installer/"]
+  base("base")
+  devel("devel")
+  bdesign("build-design<br/>design/")
+  brust("build-rust<br/>services/, cli/, compat/, hardware/")
+  bglass("build-glass<br/>glass/")
+  bshell("build-shell<br/>shell/")
+  bapps("build-apps<br/>apps/")
+  lumen("lumen")
+  nvidia("lumen-nvidia")
+  gaming("lumen-gaming")
+  live("live")
+  iso(["Live ISO"])
+  qcow(["qcow2 for tests"])
+
+  kinoite --> base
+  pkgs --> base
+  repos --> base
+  base --> devel
+  repos -->|"exact versions"| devel
+  devel --> bdesign
+  devel --> brust
+  devel --> bglass
+  devel --> bshell
+  devel --> bapps
+  ifaces --> brust
+  ifaces --> bshell
+  ifaces --> bapps
+  bdesign -->|"org.lumen.style"| bshell
+  bdesign -->|"org.lumen.style"| bapps
+  brust -->|"lumen-compat C API"| bapps
+  base --> lumen
+  overlay --> lumen
+  bdesign --> lumen
+  brust --> lumen
+  bglass --> lumen
+  bshell --> lumen
+  bapps --> lumen
+  lumen --> nvidia
+  lumen --> gaming
+  lumen --> live
+  installer --> live
+  live --> iso
+  lumen -->|"copy to install"| iso
+  lumen --> qcow
+```
+
+Two things are built outside the image ([section 9.10](#910-built-outside-the-image)) and left out of the graph: Lumen Setup for Windows, from `windows-setup/`, `hardware/hardware.json` and the hardware-matching crate; and the published compatibility database, from `compat/`. The NVIDIA driver and Steam come from RPM Fusion into their variants.
+
+The graph has no cycles. `build-design`, `build-rust` and `build-glass` can run in parallel; `build-shell` waits for `build-design`, and `build-apps` for `build-design` and `build-rust`. lumen-glass needs nothing else that Lumen builds, so it can be built and tested against a new KWin on its own.
+
+### 10.2 Run time
+
+Arrows are calls: D-Bus calls, or library calls into lumen-compat. Signals go the other way and aren't drawn. The upstream services that the apps and the shell use directly ([section 6.2](#62-upstream-d-bus-services-lumen-uses)) are left out to keep the graph readable. bootc, Flatpak and Bottles are drawn because each has a fixed set of Lumen callers.
+
+Plain boxes are apps, the shell, the CLI and lumen-glass; the double-edged box is the lumen-compat library; rounded boxes are session services; hexagons are system services; cylinders are upstream.
+
+```mermaid
+flowchart TB
+  settingsapp["Settings"]
+  cli["lumen CLI"]
+  shell["lumen-shell"]
+  welcome["Welcome"]
+  store["Store"]
+  backupapp["Backup"]
+  winapp["Open Windows app"]
+  hwreport["Hardware report"]
+  glass["lumen-glass, inside KWin"]
+  compat[["lumen-compat library"]]
+  settingsd("lumen-settingsd")
+  backupd("lumen-backupd")
+  health{{"lumen-health"}}
+  hwd{{"lumen-hwd"}}
+  updated{{"lumen-updated"}}
+  bootc[("bootc")]
+  flatpak[("Flatpak:<br/>libflatpak and system helper")]
+  bottles[("Bottles Flatpak")]
+
+  settingsapp --> settingsd
+  settingsapp --> backupd
+  settingsapp --> glass
+  settingsapp --> updated
+  settingsapp --> health
+  settingsapp --> hwd
+  settingsapp --> bottles
+  cli --> settingsd
+  cli --> backupd
+  cli --> compat
+  cli --> updated
+  cli --> health
+  cli --> hwd
+  cli --> flatpak
+  cli --> bottles
+  shell --> settingsd
+  shell --> backupd
+  shell --> updated
+  shell --> health
+  welcome --> settingsd
+  welcome --> backupd
+  welcome --> compat
+  welcome --> hwd
+  welcome --> flatpak
+  store --> compat
+  store --> flatpak
+  backupapp --> backupd
+  winapp --> compat
+  winapp --> bottles
+  hwreport --> hwd
+  glass --> settingsd
+  backupd --> settingsd
+  settingsd --> updated
+  health --> hwd
+  health --> updated
+  hwd --> updated
+  updated --> bootc
+  updated --> flatpak
+```
+
+- No arrow goes from the system services into the session: they only emit signals (section 2).
+- Among Lumen's own services the graph has no cycles: lumen-health calls lumen-hwd and lumen-updated, lumen-hwd and lumen-settingsd call lumen-updated, and lumen-backupd and lumen-glass call lumen-settingsd. **Proposed:** step 5.1 adds a test that keeps it that way.
+- lumen-updated calls no other Lumen component, so a broken shell, app or service can't stop it from rolling back. The boot check and the first-login dialog (section 4.5) reach it without them.
+- Welcome's call to lumen-hwd is the TPM enrolment proposed in [Q8](#8-spec-problems-and-open-questions).
