@@ -14,7 +14,7 @@ Claude reads CLAUDE.md automatically, does that one step, commits, updates this 
 
 ## Current step
 
-**0.1**
+**0.2**
 
 ## Notes for the next session
 
