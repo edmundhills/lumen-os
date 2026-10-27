@@ -71,7 +71,7 @@ free_gb() {
   [[ -n $mib ]] && printf '%d\n' $((mib / 1024))
 }
 
-# Windows folder that holds this distribution's virtual disk, e.g. D:\WSL\FedoraLinux-43.
+# Windows folder that holds this distribution's virtual disk, e.g. D:\WSL\FedoraLinux-44.
 windows_base_path() {
   local ps=powershell.exe
   have "$ps" || ps=/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe

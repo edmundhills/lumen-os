@@ -48,13 +48,13 @@ You do steps 1–5 once. Step 6 checks the result.
    wsl --list --online
    ```
 
-   Pick the highest `FedoraLinux-NN` in the list. The commands below use `FedoraLinux-43`; put your number in its place.
+   Pick the highest `FedoraLinux-NN` in the list. The commands below use `FedoraLinux-44`; put your number in its place.
 
 2. Install it on D: (C: doesn't have 100 GB free):
 
    ```powershell
    New-Item -ItemType Directory -Force D:\WSL
-   wsl --install FedoraLinux-43 --location D:\WSL\FedoraLinux-43
+   wsl --install FedoraLinux-44 --location D:\WSL\FedoraLinux-44
    ```
 
 3. Fedora opens and asks for a **username**. Use a short lowercase name, for example `edmund`. Fedora creates the user without a password and lets it use `sudo` without one.
@@ -67,10 +67,10 @@ You do steps 1–5 once. Step 6 checks the result.
 5. Back in PowerShell, make Fedora the default, so plain `wsl` opens it:
 
    ```powershell
-   wsl --set-default FedoraLinux-43
+   wsl --set-default FedoraLinux-44
    ```
 
-To open Fedora later: Start menu → **FedoraLinux-43**, or type `wsl` in PowerShell.
+To open Fedora later: Start menu → **FedoraLinux-44**, or type `wsl` in PowerShell.
 
 ## 3. Optional: give WSL more memory
 
@@ -183,7 +183,7 @@ There is one checkout: the Windows folder `C:\Users\edmun\Downloads\Lumen OS`, w
 Claude Code runs on Windows and reaches the Linux tools through `wsl.exe`:
 
 ```powershell
-wsl -d FedoraLinux-43 --cd "C:\Users\edmun\Downloads\Lumen OS" -- just lint
+wsl -d FedoraLinux-44 --cd "C:\Users\edmun\Downloads\Lumen OS" -- just lint
 ```
 
 - Set `$env:WSL_UTF8 = '1'` first, or `wsl.exe`'s own messages come out as UTF-16 with spaces between the letters.
@@ -198,7 +198,7 @@ wsl -d FedoraLinux-43 --cd "C:\Users\edmun\Downloads\Lumen OS" -- just lint
 
 ```powershell
 wsl --shutdown
-wsl --manage FedoraLinux-43 --move D:\WSL\FedoraLinux-43
+wsl --manage FedoraLinux-44 --move D:\WSL\FedoraLinux-44
 ```
 
 If your WSL version doesn't know `--manage`, run `wsl --update` first.
