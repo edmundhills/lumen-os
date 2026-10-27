@@ -62,6 +62,8 @@ printf '#!/usr/bin/env bash\necho $1\n' >fault.sh
 printf 'if true; then\n    echo "indented by 4 spaces, not 2"\nfi\n' >>fault.sh
 printf '# Fault\n\n#No space after the hash\n\n[A link](no-such-file.md)\n' >fault.md
 printf '\nfault:\n  echo "a recipe indented by 2 spaces, not 4"\n' >>justfile
+printf 'key: 1\nkey: 2\n' >fault.yaml
+printf 'on: push\njobs:\n  fault:\n    needs: no-such-job\n    runs-on: ubuntu-24.04\n    steps:\n      - run: "true"\n' >.github/workflows/fault.yml
 rm -- glass/README.md
 git add -A
 
@@ -71,6 +73,8 @@ faults=(
   "shfmt:a badly indented script"
   "markdownlint:a heading with no space after the #"
   "check-links:a link to a missing file"
+  "yamllint:a key given twice"
+  "actionlint:a job that needs a missing job"
   "just:a badly indented justfile recipe"
   "Whitespace:a line that ends in a space"
   "layout:a missing README"

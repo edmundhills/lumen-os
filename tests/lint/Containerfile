@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # The lint tools, so that `just lint` gives the same result in WSL and in CI.
-# All of them come from Fedora's own repositories. The base is pinned by digest
-# (Fedora 44, 2026-10-27); Renovate will bump it from step 8.2.
+# All but actionlint come from Fedora's own repositories. The base and
+# actionlint are pinned (2026-10-27); Renovate will bump them from step 8.2.
 
 FROM quay.io/fedora/fedora:44@sha256:e34bf26713717aed250ebb18b959df39bca38a0e4a5cb9eb024b8e19c41162e2
 
@@ -22,7 +22,20 @@ RUN dnf install -y --setopt=install_weak_deps=False \
         reuse \
         ShellCheck \
         shfmt \
+        yamllint \
     && dnf clean all \
     # The checkout is mounted from the host, so its owner may differ from the
     # container's user; git would then refuse to read it.
     && git config --system --add safe.directory '*'
+
+# actionlint checks the GitHub Actions workflows, and runs ShellCheck on their
+# scripts. Fedora doesn't package it, so this is the x86_64 binary from its
+# release page, checked against the checksum published there. It is linked
+# statically, so it runs on Fedora.
+ARG ACTIONLINT_VERSION=1.7.12
+ARG ACTIONLINT_SHA256=8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+RUN curl --fail --silent --show-error --location --output /tmp/actionlint.tar.gz \
+        "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
+    && printf '%s  %s\n' "$ACTIONLINT_SHA256" /tmp/actionlint.tar.gz | sha256sum --check --strict \
+    && tar -xzf /tmp/actionlint.tar.gz -C /usr/local/bin actionlint \
+    && rm /tmp/actionlint.tar.gz

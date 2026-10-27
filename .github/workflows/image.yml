@@ -1,0 +1,40 @@
+# SPDX-FileCopyrightText: 2026 Lumen OS contributors
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# The image workflow. For now its build job is a placeholder: image/Containerfile
+# arrives at step 1.2, and step 1.5 makes this job build the image and push it
+# to ghcr.io. docs/architecture.md, section 9.8.
+
+name: image
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # A new push cancels the older run of a branch or pull request, but every run
+  # on main finishes, so each commit there gets a result.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  build:
+    name: Build the image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build (placeholder)
+        run: |
+          echo "::notice title=Nothing to build yet::image/Containerfile arrives at step 1.2," \
+            "and step 1.5 makes this job build it."

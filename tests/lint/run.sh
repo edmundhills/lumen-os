@@ -51,12 +51,16 @@ check() {
 }
 
 # Sort the files git tracks or would track into the lists the checks need.
-shell_files=() markdown_files=() text_files=()
+shell_files=() markdown_files=() yaml_files=() workflow_files=() text_files=()
 while IFS= read -r -d '' f; do
   [[ -f $f ]] || continue # deleted, but not yet staged
   case $f in
     *.md) markdown_files+=("$f") ;;
     *.sh) shell_files+=("$f") ;;
+    *.yaml | *.yml)
+      yaml_files+=("$f")
+      [[ $f != .github/workflows/* ]] || workflow_files+=("$f")
+      ;;
     *)
       # A file with no extension is a shell script if its first line says so.
       if [[ ${f##*/} != *.* ]] && head -n 1 -- "$f" | grep -Eq '^#!.*[/ ](ba)?sh([[:space:]]|$)'; then
@@ -72,6 +76,8 @@ shell_lint() { ((${#shell_files[@]} == 0)) || shellcheck -- "${shell_files[@]}";
 shell_format() { ((${#shell_files[@]} == 0)) || shfmt -d -- "${shell_files[@]}"; }
 # A leading ':' makes markdownlint-cli2 read each name as a path, not a glob.
 markdown_style() { ((${#markdown_files[@]} == 0)) || markdownlint-cli2 "${markdown_files[@]/#/:}"; }
+yaml_style() { ((${#yaml_files[@]} == 0)) || yamllint --strict -- "${yaml_files[@]}"; }
+workflows() { ((${#workflow_files[@]} == 0)) || actionlint -- "${workflow_files[@]}"; }
 
 # Text files use LF line endings, have no trailing spaces or tabs, and end with a newline.
 whitespace() {
@@ -115,6 +121,8 @@ check "Shell scripts (shellcheck)" shell_lint
 check "Shell formatting (shfmt, .editorconfig)" shell_format
 check "Markdown style (markdownlint, .markdownlint.yaml)" markdown_style
 check "Markdown links (check-links.py)" python3 tests/lint/check-links.py "${markdown_files[@]}"
+check "YAML style (yamllint, .yamllint.yaml)" yaml_style
+check "GitHub Actions workflows (actionlint)" workflows
 check "justfile formatting (just --fmt)" just --fmt --check
 check "Whitespace and line endings" whitespace
 check "Repository layout and licence files" layout
