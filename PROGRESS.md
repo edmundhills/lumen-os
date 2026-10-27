@@ -26,7 +26,7 @@ Claude reads CLAUDE.md automatically, does that one step, commits, updates this 
 - ADR 0001 accepted 2026-10-27: Lumen is built to compete with Windows. Applied to the spec, this file and CLAUDE.md (new Phase 7 "Switching from Windows"; old Phases 7–8 are now 8–9). The gap list `docs/competing-with-windows.md` is a living document: update it when a gap changes. The owner deferred a Windows-style "Familiar" layout and a built-in AI assistant; don't add either without asking.
 - Machine facts (2026-10-27): Ryzen 7 5800X, 16 GB RAM, virtualization on in firmware, Windows 11 Home build 26200, gh not installed on Windows. Claude reaches WSL from Windows with `wsl -d <distro> --cd "<repo>" -- <cmd>`; set `WSL_UTF8=1` (else UTF-16 output), and from Git Bash prefix `MSYS_NO_PATHCONV=1`.
 - 0.1 done 2026-10-27: `docs/architecture.md` part 1. Written against the spec as amended by ADR 0001. Its section 8 listed five spec errors (Q1–Q5); with the `/usr/etc` issue they were fixed in the spec, PROGRESS.md and the architecture on the owner's instruction (ADR 0002, 2026-10-27). Q6–Q11 are proposals waiting for the owner's review at 0.8. Step 0.2 fills the "Part 2" heading at the end of the same file; section 6.1 already gives the service call direction for the graph.
-- ADR 0002 (2026-10-27) is a product choice the owner can still reverse: remote help is same-network in v0.1, with RustDesk offered for the internet. Building a live ISO from a bootc image (step 1.8) is the riskiest fix; the fallback is in the ADR.
+- ADR 0002 (2026-10-27): the owner confirmed that remote help is same-network in v0.1, with RustDesk offered for help over the internet. Building a live ISO from a bootc image (step 1.8) is the riskiest fix; the fallback is in the ADR.
 
 ---
 

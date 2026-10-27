@@ -47,7 +47,7 @@ Writing `docs/architecture.md` part 1 (step 0.1) turned up five places where the
 
 **Problem.** The spec puts remote help on Plasma's remote desktop (KRdp) behind a one-time code. KRdp is a plain RDP server with no relay. A friend on another network can't reach it unless the user forwards a port on their router. Windows' Quick Assist works across the internet because Microsoft runs a relay.
 
-**Decision.** This one was a product choice; the lead engineer made it on the owner's instruction to fix the issues, and the owner can change it.
+**Decision.** This one was a product choice. The lead engineer proposed it, and the owner confirmed it on 2026-10-27.
 
 - v0.1: KRdp on the same network, behind a one-time code and a visible indicator. The page says plainly that the friend must be on the same network.
 - For help over the internet, the same page offers RustDesk from the Store, with a plain note that RustDesk's own servers carry the connection. Confirm at step 5.22a that RustDesk is on Flathub and works on Plasma Wayland.
