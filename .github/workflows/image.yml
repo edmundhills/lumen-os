@@ -2,9 +2,9 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# The image workflow. For now its build job is a placeholder: image/Containerfile
-# arrives at step 1.2, and step 1.5 makes this job build the image and push it
-# to ghcr.io. docs/architecture.md, section 9.8.
+# The image workflow. For now its build job is a placeholder: step 1.5 makes it
+# build image/Containerfile (`just build-image` builds it in WSL) and push the
+# image to ghcr.io. docs/architecture.md, section 9.8.
 
 name: image
 
@@ -36,5 +36,5 @@ jobs:
 
       - name: Build (placeholder)
         run: |
-          echo "::notice title=Nothing to build yet::image/Containerfile arrives at step 1.2," \
-            "and step 1.5 makes this job build it."
+          echo "::notice title=Not built in CI yet::Step 1.5 makes this job build" \
+            "image/Containerfile and push the image to ghcr.io."

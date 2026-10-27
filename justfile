@@ -27,10 +27,9 @@ test: _lint-image
     {{ lint_container }} bash tests/lint/selftest.sh
     {{ lint_container }} python3 -m unittest discover --start-directory image
 
-# Build the OS image with Podman
+# Build the OS image with Podman. The first build downloads Kinoite (2.9 GiB)
 build-image:
-    @test -f image/Containerfile || { echo "Nothing to build yet: image/Containerfile arrives at step 1.2." >&2; exit 1; }
-    podman build --file image/Containerfile --tag localhost/lumen:dev .
+    podman build --file image/Containerfile --target lumen --tag localhost/lumen:dev .
 
 # Build the install ISO
 build-iso:

@@ -12,7 +12,7 @@ The Lumen OS image: an OCI container image built `FROM` Fedora Kinoite and manag
 | --- | --- | --- |
 | `packages.toml` | The package manifest: the Fedora packages Lumen keeps from Kinoite, adds and removes, by the areas of the spec's manifest | 1.1 |
 | `packages.py` | Checks the manifest (`just lint`) and applies it in the `base` stage. It stops the build if the manifest doesn't match Kinoite, or if dnf removes a package the manifest doesn't list. `test_packages.py` holds its unit tests (`just test`) | 1.1 |
-| `Containerfile` | The multi-stage build: `base`, `devel`, the build stages, `lumen`, the variants and `live` | 1.2 |
+| `Containerfile` | The multi-stage build. Phase 1 has `base` (Kinoite plus the manifest) and `lumen` (the image users get, ending with `bootc container lint`); `devel`, the build stages, the variants and `live` come with their steps | 1.2 |
 | `overlay/` | Files copied into the image as they are: vendor defaults in `/usr/lib` and `/usr/share`, and the image's `/etc` only where a setting can live nowhere else. Never `/usr/etc` (ADR 0002) | 1.3 |
 
 - Kinoite is pinned by digest. Every Lumen package that links KWin or Plasma is built in a stage of this Containerfile against that exact base (CLAUDE.md, "Critical build rule").

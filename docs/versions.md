@@ -40,7 +40,7 @@ From the x86_64 image. The KWin and Plasma versions are the ones lumen-glass, th
 
 The Fedora 45 Kinoite build of the same day (`45.20261027.0`, a pre-release) has the same KWin and Plasma (6.7.5), Qt (6.11.2) and KDE Frameworks (6.31.0), with kernel 7.2.11. Moving to 45 therefore doesn't change what lumen-glass is built against. Fedora 44 is supported until 2027-06-02.
 
-**When step 1.2 starts**, read the versions again: if Fedora 45 has been released by then, start on 45, because the spec says to build on the current Fedora.
+Step 1.2 read the versions again on 2026-10-27: Fedora 45 was still in final freeze and `kinoite:44` still pointed at the digest above, so `image/Containerfile` pins it. Once Fedora 45 is released, the pin moves to `kinoite:45` the way every pin bump is made (step 1.5), because the spec says to build on the current Fedora; the release train then decides when stable gets it (ADR 0004, Q14).
 
 ## Things to know
 

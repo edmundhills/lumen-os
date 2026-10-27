@@ -1,0 +1,39 @@
+# SPDX-FileCopyrightText: 2026 Lumen OS contributors
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# The Lumen OS image: Fedora Kinoite with Lumen's packages, run by bootc.
+# docs/architecture.md, section 9.3, describes every stage. Phase 1 has two:
+#
+#   base    Kinoite, pinned by digest, with the changes in image/packages.toml.
+#           Every later stage derives from it.
+#   lumen   The image users get. It ends with `bootc container lint`.
+#
+# Build it from the top of the repository with `just build-image`, which runs
+#   podman build --file image/Containerfile --target lumen .
+
+# Fedora Kinoite 44, build 44.20261027.0, with KWin and Plasma 6.7.5
+# (docs/versions.md). The digest is the multi-architecture index's. quay.io
+# deletes dated builds after four weeks, so the pin must be bumped at least
+# every two weeks (step 1.5, ADR 0004).
+FROM quay.io/fedora-ostree-desktops/kinoite:44@sha256:9f71aa8ed1520cde0d09514cc46c54d01d69af79948de17ea988155dfe0e5e18 AS base
+
+# Install and remove packages. packages.py stops the build if the manifest
+# doesn't match the base image, or if dnf removes a package it doesn't list.
+# Then remove what dnf leaves behind: its lock in /run, and its cache, repo
+# state, log and ldconfig's cache in /var. bootc fills /var only on the first
+# install, so the image keeps nothing there that systemd-tmpfiles doesn't
+# create, and bootc container lint warns about anything else. Kinoite's own
+# /var holds only /var/tmp.
+RUN --mount=type=bind,source=image,target=/run/lumen/image \
+    python3 /run/lumen/image/packages.py apply /run/lumen/image/packages.toml \
+    && rm -rf /run/dnf /var/cache/* /var/lib/dnf /var/log/*
+
+FROM base AS lumen
+
+# Later steps add here: image/overlay (step 1.3), the Lumen RPMs from the build
+# stages (Phases 2 to 7), os-release and the image labels (step 1.5).
+
+# Catch image mistakes, such as content in /usr/etc or a missing kernel. A
+# warning fails the build too, so none can pile up unnoticed.
+RUN bootc container lint --fatal-warnings
