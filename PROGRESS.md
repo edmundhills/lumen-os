@@ -14,7 +14,7 @@ Claude reads CLAUDE.md automatically, does that one step, commits, updates this 
 
 ## Current step
 
-**0.2**
+**0.3**
 
 ## Notes for the next session
 
@@ -25,7 +25,10 @@ Claude reads CLAUDE.md automatically, does that one step, commits, updates this 
 - A4 done 2026-10-27: Fedora 44 in WSL as `FedoraLinux-44` (on D:, user `User`), default distro. Check passes (18 pass). Nested virtualization does NOT work (`/dev/kvm` missing; maybe SVM off in BIOS), so no local VMs: run boot tests in CI. WSL has 7.7 GiB RAM. Fedora WSL has no awk; scripts must not assume it.
 - ADR 0001 accepted 2026-10-27: Lumen is built to compete with Windows. Applied to the spec, this file and CLAUDE.md (new Phase 7 "Switching from Windows"; old Phases 7–8 are now 8–9). The gap list `docs/competing-with-windows.md` is a living document: update it when a gap changes. The owner deferred a Windows-style "Familiar" layout and a built-in AI assistant; don't add either without asking.
 - Machine facts (2026-10-27): Ryzen 7 5800X, 16 GB RAM, virtualization on in firmware, Windows 11 Home build 26200, gh not installed on Windows. Claude reaches WSL from Windows with `wsl -d <distro> --cd "<repo>" -- <cmd>`; set `WSL_UTF8=1` (else UTF-16 output), and from Git Bash prefix `MSYS_NO_PATHCONV=1`.
-- 0.1 done 2026-10-27: `docs/architecture.md` part 1. Written against the spec as amended by ADR 0001. Its section 8 listed five spec errors (Q1–Q5); with the `/usr/etc` issue they were fixed in the spec, PROGRESS.md and the architecture on the owner's instruction (ADR 0002, 2026-10-27). Q6–Q11 are proposals waiting for the owner's review at 0.8. Step 0.2 fills the "Part 2" heading at the end of the same file; section 6.1 already gives the service call direction for the graph.
+- 0.1 done 2026-10-27: `docs/architecture.md` part 1. Written against the spec as amended by ADR 0001. Its section 8 listed five spec errors (Q1–Q5); with the `/usr/etc` issue they were fixed in the spec, PROGRESS.md and the architecture on the owner's instruction (ADR 0002, 2026-10-27). Q6–Q11 are proposals waiting for the owner's review at 0.8.
+- 0.2 done 2026-10-27: `docs/architecture.md` part 2 (sections 9 and 10): build flow, Containerfile stages, exact-version matching against the base image, variants, install media, tags and keys, CI workflows, where each test runs, and three Mermaid graphs (checked to render with Mermaid 10.9.1 and 11.4.1). It adds open questions Q12–Q15 for the 0.8 review. **Q12 must be decided before 1.2**: it proposes building all Lumen packages in Containerfile stages instead of COPR (the spec's build chain says COPR); if the owner agrees, change the spec's "Base and build chain" item 2 to match, and COPR may not be needed at all.
+- Risks for 0.3 found while writing part 2 (sections 9.4–9.9): KWin/Plasma version drift between the pinned image and Fedora's mirrors (exact `-devel` versions, Koji fallback); rebasing lumen-glass on every Plasma feature release (three a year); the ISO exceeding GitHub's 2 GiB release-file limit (Q15); runner disk, the 6-hour job limit, and KVM on hosted runners; GPU-less CI, so glass tests run on llvmpipe and frame-time budgets need real hardware; large update downloads without re-chunking; NVIDIA module signing and MOK enrolment. Part 1 already flagged Flatpak theming (section 4.3) and camera access that bypasses PipeWire (section 4.4).
+- ADR 0002 follow-up (step 0.2): the spec's build chain and CLAUDE.md's fixed architecture now say the install ISO is a live ISO built from the image, not from bootc-image-builder.
 - ADR 0002 (2026-10-27): the owner confirmed that remote help is same-network in v0.1, with RustDesk offered for help over the internet. Building a live ISO from a bootc image (step 1.8) is the riskiest fix; the fallback is in the ADR.
 
 ---
@@ -40,7 +43,7 @@ Claude reads CLAUDE.md automatically, does that one step, commits, updates this 
 ## Phase 0 — Plan and skeleton (spec: "Claude Code prompt → Phase 0")
 
 - [x] **0.1** `docs/architecture.md` part 1: components and how they talk (D-Bus names, files, protocols).
-- [ ] **0.2** `docs/architecture.md` part 2: build flow and a Mermaid dependency graph.
+- [x] **0.2** `docs/architecture.md` part 2: build flow and a Mermaid dependency graph.
 - [ ] **0.3** `docs/risks.md`: top 15 technical risks with mitigations. Must include: the Secure Boot UEFI CA 2023 transition, hibernation under kernel lockdown, codec patents, BitLocker on Windows drives, Windows code signing for Lumen Setup, and the licences of compatibility data.
 - [ ] **0.4** Repo skeleton from the CLAUDE.md layout, with a README in each folder.
 - [ ] **0.5** `justfile` (build-image, build-iso, run-vm, test, lint) and lint tooling. *Done when:* `just lint` passes in WSL.
