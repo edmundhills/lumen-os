@@ -167,7 +167,7 @@ A new user should never need the terminal, and a power user should never be bloc
 
 ### Powerful
 
-- Every setting is also a config file and a CLI command (`lumen settings set ...`), so it can be scripted and synced.
+- Every setting is also a config file and a CLI command (`lumen settings set ...`), so it can be scripted and synced. Settings that upstream tools already own (Wi-Fi, displays, Bluetooth) keep their own config files and commands (`nmcli`, `kscreen-doctor`, `bluetoothctl`), and the Advanced section of their Settings page shows the command (ADR 0004).
 - Advanced toggle in each Settings page reveals expert options instead of hiding them in another tool.
 - Per-app rules (which monitor, which workspace, which GPU, power profile).
 - Developer mode: one switch installs toolbox containers, git, editors, Docker/Podman and language runtimes.
@@ -195,7 +195,7 @@ The OS is a single OCI container image built from a Containerfile, so the whole 
 ### Base and build chain
 
 1. `FROM quay.io/fedora-ostree-desktops/kinoite:<current Fedora release>`: Fedora's KDE atomic image, which already carries KWin, Qt 6 and the Plasma libraries we reuse.
-1. Layer Lumen packages (RPMs built in our COPR repo) and remove unwanted defaults.
+1. Layer Lumen packages and remove unwanted defaults. Every package built from this repository is built as an RPM in a stage of the same Containerfile, against the stage it ships in, so one commit makes one image. Fedora packages come in through `image/packages.toml`. COPR is only for outside packages that Fedora lacks (ADR 0004).
 1. Copy config overlays from `image/overlay` into the image. Vendor defaults go in `/usr/lib` and `/usr/share` wherever the software reads them there (systemd, polkit, sysctl, udev, XDG data directories). Config that only exists in `/etc` goes in the image's `/etc`, which bootc treats as the default and 3-way merges with local changes on every update. Never create `/usr/etc`: it is a bootc implementation detail and `bootc container lint` rejects it (ADR 0002).
 1. Run `bootc container lint` to catch image mistakes.
 1. Push to `ghcr.io/<org>/lumen:<channel>` signed with cosign; build the qcow2 with `bootc-image-builder` and the live install ISO from the image (see "Installer", ADR 0002).
@@ -207,7 +207,10 @@ The OS is a single OCI container image built from a Containerfile, so the whole 
 | lumen:stable | Everyone | Default image, updated every 2 weeks |
 | lumen-nvidia:stable | NVIDIA GPU owners | Proprietary driver as signed kmod, built with akmods in CI |
 | lumen-gaming:stable | Gamers | Adds Steam, Gamescope session, MangoHud, controller udev rules |
-| lumen:beta | Testers | Next Fedora release, weekly builds |
+| lumen-gaming-nvidia:stable | Gamers with NVIDIA GPUs | lumen-nvidia plus the gaming additions |
+| lumen:beta, and the beta of each variant | Testers | Weekly promotion of a green dev build, on the same Fedora release as stable; carries a new Fedora release for 4 weeks before it reaches stable |
+
+The variants are two independent choices: the driver (open or NVIDIA) and the edition (desktop or gaming). Switching one keeps the other (ADR 0004).
 
 ### Package manifest (system layer)
 
@@ -266,7 +269,7 @@ lumen-glass is a KWin 6 effect plugin, started as a fork of KWin's built-in blur
 
 - Wayland clients: `org_kde_kwin_blur` region (Qt apps via `KWindowEffects::enableBlurBehind`). Add `ext-background-effect-v1` support when it lands in KWin.
 - GTK apps: GTK 4 has no loadable modules and Flatpak apps can't load modules from the host, so GTK apps get glass from the compositor instead (ADR 0002). The GTK 4 and GTK 3 themes make header bars and sidebars translucent, and lumen-glass draws glass behind the whole window for GTK apps on an opt-in list of app IDs kept with the tokens. Glass shows only where the theme left the window translucent; content stays opaque.
-- Glass style per surface is set by a window property or shell role: `bar`, `dock`, `menu`, `popover`, `notification`, `sidebar`, `titlebar`. Each role maps to a preset in tokens.json.
+- Glass style per surface is set by its role: `bar`, `dock`, `menu`, `popover`, `notification`, `sidebar`, `titlebar`. Shell surfaces and Lumen apps name their role through a small Lumen Wayland protocol, `lumen_glass_manager_v1`, which lumen-glass serves; other windows get a role from their window type (ADR 0004). Each role maps to a preset in tokens.json.
 - Windows that request nothing get rounded corners and a soft shadow only.
 
 ### Render pipeline per frame
@@ -391,7 +394,7 @@ These four are the user's first impression, so each must work without reading an
 1. Language and keyboard (auto-detected from location if allowed).
 1. Wi-Fi.
 1. Create account: name, password or PIN, fingerprint enrolment if a reader exists.
-1. Encryption: enrol TPM2 unlock with `systemd-cryptenroll --tpm2-device=auto --tpm2-with-pin` (PIN optional); show and offer to save the recovery key.
+1. Encryption: enrol TPM2 unlock with `systemd-cryptenroll`, bound to Secure Boot state (PCR 7) and to Lumen's own boot measurements through a systemd-pcrlock policy (PIN optional; ADR 0004); show and offer to save the recovery key.
 1. Privacy: location, crash reports (off by default).
 1. Look: light, dark or auto; accent colour; dock position.
 1. Import: copy Documents, Pictures, Music, browser bookmarks from a Windows or macOS drive. A BitLocker drive is unlocked with its recovery key, with a hint on where to find it.
@@ -485,7 +488,7 @@ Every GUI action goes through a D-Bus service, and the `lumen` CLI calls the sam
 | lumen-updated (`org.lumen.Updates1`) | system, root, polkit-guarded | OS, Flatpak, firmware and compatibility-database updates; rollback; post-boot health check |
 | lumen-health (`org.lumen.Health1`) | system | System Health checks and fixes |
 | lumen-hwd (`org.lumen.Hardware1`) | system | Hardware report, driver status, NVIDIA image switch |
-| lumen-settingsd (`org.lumen.Settings1`) | user session | Reads and writes Lumen settings (stored in `~/.config/lumen/*.toml`), emits change signals |
+| lumen-settingsd (`org.lumen.Settings1`) | user session | Reads and writes Lumen settings, emits change signals. Per-user settings are stored in `~/.config/lumen/*.toml`. Machine-wide ones (update channel, automatic updates, firewall) are passed to the system service that owns them, stored in `/etc/lumen/`, and need the admin password (ADR 0004) |
 | lumen-backupd (`org.lumen.Backup1`) | user session | restic schedules and restores |
 
 Privileged actions use polkit with admin auth, cached 5 minutes. Services are written in Rust (zbus) for memory safety; UI apps in C++/QML.
@@ -513,7 +516,7 @@ The system is secure by default with no settings changed: a stolen laptop reveal
 
 | Threat | Defence |
 | --- | --- |
-| Stolen or lost device | LUKS2 full-disk encryption; TPM2 unlock bound to Secure Boot state (PCR 7) with optional PIN; recovery key shown once at setup |
+| Stolen or lost device | LUKS2 full-disk encryption; TPM2 unlock bound to Secure Boot state (PCR 7) and to Lumen's own boot measurements, which systemd-pcrlock predicts across updates, with the volume key measured, so another signed system booted on the laptop can't unlock the disk; optional PIN; recovery key shown once at setup. If that binding can't be made reliable, a PIN becomes the default (ADR 0004) |
 | Tampered boot chain | Secure Boot with Fedora's signed shim, kernel and modules; NVIDIA and other out-of-tree kmods signed with our key, enrolled via MOK on first boot; kernel lockdown stays on (never traded for hibernation); the hardware check warns when firmware lacks the Microsoft UEFI CA 2023 |
 | Malicious Windows program | Runs under Wine inside the Bottles Flatpak sandbox, one bottle per app, no home-folder access by default; the dialog shows the publisher and rating before anything runs |
 | Tampered OS image | Read-only `/usr`; images signed with cosign; bootc verifies signatures before staging (policy in `/etc/containers/policy.json`) |
@@ -521,7 +524,7 @@ The system is secure by default with no settings changed: a stolen laptop reveal
 | Network attack | firewalld on, public zone by default; no listening services out of the box; SSH off unless Developer mode enables it |
 | Privilege escalation | SELinux enforcing; polkit for every admin action; `sudo` requires admin group; services run with systemd hardening (ProtectSystem, NoNewPrivileges, sandboxing) |
 | Screen and input snooping | Wayland isolates apps; screen sharing only via portal with a visible indicator; camera and mic indicators in the top bar |
-| Supply chain | CI builds from pinned base image digests; SBOM published with every release; Renovate bot opens update PRs |
+| Supply chain | CI builds from pinned base image digests, bumped at least every two weeks, with a copy of each pinned base on ghcr.io so older builds stay reproducible (ADR 0004); SBOM published with every release; Renovate bot opens update PRs |
 | Unpatched software | Automatic security updates; Health warns if the system is more than 14 days behind |
 
 Privacy: no telemetry, no account required, crash reports opt-in, the Store fetches metadata anonymously, and compatibility ratings are looked up offline.
@@ -577,7 +580,7 @@ No image reaches users unless it boots in a VM, passes the automated checks, and
 - Every merge to `main` builds `lumen:dev`.
 - Weekly `lumen:beta` from main after green CI.
 - Every 2 weeks, the beta that has been out 7 days with no blocker becomes `lumen:stable`.
-- Major Fedora version rebase: beta for 4 weeks before stable.
+- Major Fedora version rebase: beta for 4 weeks before stable, while a maintenance branch keeps building stable on the old release (ADR 0004).
 - Every release publishes signed images, ISO, SBOM, changelog in plain English, and checksums.
 
 ## Claude Code prompt
@@ -587,7 +590,7 @@ The prompt is a pack: one project memory file Claude Code reads every session, t
 ### Before you start
 
 1. A Linux machine (Fedora is easiest) or a VM with nested KVM, Podman, 100 GB free disk, 16 GB RAM.
-1. A GitHub account and an empty repo `lumen-os`; a COPR account for building RPMs.
+1. A GitHub account and an empty repo `lumen-os`. A COPR account is only needed if Lumen ever packages outside software that Fedora lacks (ADR 0004).
 1. Export this doc as Markdown and save it in the repo as `docs/spec.md`. It is the source of truth Claude Code works from.
 1. Save the first block below as `CLAUDE.md` in the repo root.
 1. Paste Phase 0. When it finishes and its tests pass, paste Phase 1, and so on. Expect each phase to take several sessions.
@@ -612,10 +615,10 @@ Easy by default, powerful underneath, never breaks, liquid-glass design, and a r
 - Security: Secure Boot, LUKS2 + TPM2, SELinux enforcing, firewalld, cosign-signed images, no telemetry.
 
 ## Critical build rule
-KWin and Plasma plugins have no stable ABI. lumen-glass and lumen-shell must be compiled in a multi-stage Containerfile stage FROM the same base image digest they ship in, against that image's kwin-devel / plasma-workspace-devel, then installed as RPMs. Never build them against a different KWin version.
+KWin and Plasma plugins have no stable ABI. lumen-glass and lumen-shell must be compiled in a multi-stage Containerfile stage FROM the same base image digest they ship in, against that image's kwin-devel / plasma-workspace-devel, then installed as RPMs. Never build them against a different KWin version. Every other Lumen package is built the same way, in a stage of the image build, not in COPR (ADR 0004).
 
 ## Repo layout
-image/ (Containerfile, overlay/, packages.toml), design/tokens/ (tokens.json + exporters), glass/, shell/, apps/settings, apps/store, apps/welcome, apps/backup, apps/windows-app (the "Open Windows app" dialog), services/ (updated, health, hwd, settingsd, backupd), cli/, compat/ (compatibility database, schema, lumen-compat crate), windows-setup/ (Lumen Setup for Windows), installer/, hardware/hardware.json, tests/, docs/.
+image/ (Containerfile, overlay/, packages.toml), design/tokens/ (tokens.json + exporters), glass/, shell/, apps/settings, apps/store, apps/welcome, apps/backup, apps/windows-app (the "Open Windows app" dialog), apps/hwreport (the hardware report), services/ (updated, health, hwd, settingsd, backupd), cli/, compat/ (compatibility database, schema, lumen-compat crate), windows-setup/ (Lumen Setup for Windows), installer/, hardware/hardware.json, tests/, docs/.
 
 ## Working rules
 - Work one phase at a time. At the end of each phase: run every acceptance test, show results, list known issues, wait for "continue".
@@ -645,7 +648,7 @@ Acceptance: `just lint` passes; CI green; docs reviewed by me.
 Build the base image per docs/spec.md "Spec: image build and layout".
 1. image/Containerfile: FROM kinoite (pinned by digest); install packages from image/packages.toml; remove the stock Plasma default layout and Discover; copy image/overlay into the image (vendor defaults in /usr/lib and /usr/share, /etc only where needed, never /usr/etc); enable services (firewalld, fwupd-refresh.timer, snapper timers, tuned-ppd); SELinux enforcing; run `bootc container lint`.
 2. Btrfs defaults and snapper config for /home (24 hourly, 7 daily, 4 weekly).
-3. Variants: lumen (default), lumen-nvidia (akmods-built signed kmods; MOK enrolment doc), lumen-gaming.
+3. Variants: lumen (default), lumen-nvidia (akmods-built signed kmods; MOK enrolment doc), lumen-gaming, and lumen-gaming-nvidia (lumen-nvidia plus the gaming additions).
 4. CI: build all variants, push to ghcr.io with cosign signatures, generate SBOM (syft), build the qcow2 with bootc-image-builder and the live install ISO from the image (anaconda-iso only as the fallback in "Installer").
 5. tests/boot: boot the qcow2 in QEMU/KVM in CI, assert SDDM reached within 60 s and `systemctl --failed` is empty.
 6. Configure /etc/containers/policy.json so the system only accepts our signed images.
@@ -664,7 +667,7 @@ Implement design/tokens per the spec's "Liquid glass" and "Design tokens" sectio
 2. Exporters (run at image build): QML singleton module org.lumen.style; KDE colour schemes; Qt style (Kvantum); GTK 4/libadwaita CSS; GTK 3 theme; window decoration (KDecoration plugin) with rounded corners and glass titlebar role; cursor and icon theme config (an open icon set with accent recolouring).
 3. Global theme (look-and-feel package) org.lumen.desktop.
 4. Visual test: screenshot a Qt app, a GTK 4 app, a GTK 3 app and a Flatpak app in light and dark; store as golden images.
-Acceptance: all four app types visibly match in both modes; changing the accent in one place updates all of them after re-export.
+Acceptance: all four app types visibly match in both modes: the same light or dark mode, accent, contrast and fonts everywhere. Lumen's apps and apps in the image get the full style, GTK 3 Flatpaks get it through a Flathub theme extension, and libadwaita apps keep their own shapes (ADR 0004). Changing the accent in one place updates all of them after re-export.
 ```
 
 ### Phase 3: lumen-glass
@@ -674,7 +677,7 @@ Implement glass/ per the spec's "Spec: lumen-glass effect" section exactly.
 1. Fork KWin's blur effect (matching the image's KWin version) into a plugin named lumen-glass; build it in a Containerfile stage against that version.
 2. Shared 1/4-res dual-Kawase blur computed once per frame; damage-aware caching so idle frames do no blur work.
 3. Material fragment shader: rounded-rect SDF, edge refraction with RGB dispersion, vibrancy, adaptive tint guaranteeing 4.5:1 contrast against the theme text colour using backdrop luminance from the smallest mip, rim light, blue-noise dither texture.
-4. Roles: read the glass role from a window property set by the shell/apps; map to presets in tokens.json; reload on token change via D-Bus.
+4. Roles: read the glass role from the lumen_glass_manager_v1 protocol, with the window type as a fallback; map to presets in tokens.json; reload on token change via D-Bus.
 5. Rounded corners and soft shadows for all windows; glass titlebar role.
 6. Tiers Full/Lite/Solid; first-boot benchmark service (systemd oneshot) writing /var/lib/lumen/glass-tier; battery saver drops one tier; honour Reduce Transparency and Reduce Motion.
 7. Spring-based open/close/morph animations; smooth-min SDF merging for dock shapes.

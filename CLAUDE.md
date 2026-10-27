@@ -24,11 +24,11 @@ Easy by default, powerful underneath, never breaks, liquid-glass design, and a r
 
 ## Critical build rule
 
-KWin and Plasma plugins have no stable ABI. lumen-glass and lumen-shell must be compiled in a multi-stage Containerfile stage FROM the same base image digest they ship in, against that image's kwin-devel / plasma-workspace-devel, then installed as RPMs. Never build them against a different KWin version.
+KWin and Plasma plugins have no stable ABI. lumen-glass and lumen-shell must be compiled in a multi-stage Containerfile stage FROM the same base image digest they ship in, against that image's kwin-devel / plasma-workspace-devel, then installed as RPMs. Never build them against a different KWin version. Every other Lumen package is built the same way, in a stage of the image build, not in COPR (ADR 0004).
 
 ## Repo layout
 
-image/ (Containerfile, overlay/, packages.toml), design/tokens/ (tokens.json + exporters), glass/, shell/, apps/settings, apps/store, apps/welcome, apps/backup, apps/windows-app (the "Open Windows app" dialog), services/ (updated, health, hwd, settingsd, backupd), cli/, compat/ (compatibility database, schema, lumen-compat crate), windows-setup/ (Lumen Setup for Windows), installer/, hardware/hardware.json, tests/, docs/.
+image/ (Containerfile, overlay/, packages.toml), design/tokens/ (tokens.json + exporters), glass/, shell/, apps/settings, apps/store, apps/welcome, apps/backup, apps/windows-app (the "Open Windows app" dialog), apps/hwreport (the hardware report), services/ (updated, health, hwd, settingsd, backupd), cli/, compat/ (compatibility database, schema, lumen-compat crate), windows-setup/ (Lumen Setup for Windows), installer/, hardware/hardware.json, tests/, docs/.
 
 ## Working rules
 
