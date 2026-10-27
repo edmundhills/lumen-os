@@ -14,7 +14,7 @@ Claude reads CLAUDE.md automatically, does that one step, commits, updates this 
 
 ## Current step
 
-**A4**
+**0.1**
 
 ## Notes for the next session
 
@@ -23,7 +23,7 @@ Claude reads CLAUDE.md automatically, does that one step, commits, updates this 
 - Spec source: `C:\Users\edmun\Downloads\Perfect Linux Distro — Spec & Build Prompt.docx`.
 - A3 done 2026-10-27: repo https://github.com/edmundhills/lumen-os (push works); COPR account active. Commits must use the owner's GitHub no-reply email (set in `.git/config`), never their personal email.
 - No licence is chosen yet (the spec doesn't name one). lumen-glass forks KWin code (GPL-2.0-or-later), so the licence must be GPL-compatible. Ask the owner before 0.4.
-- A4 prepared 2026-10-27, waiting on the owner. Written: `docs/dev-setup-windows.md` and `tests/dev-env/check-wsl.sh` (tested in Git Bash with stub tools; not yet run in real WSL). The owner must do steps 1–6 of the guide: install WSL (admin), install the newest `FedoraLinux-NN` on **D:** (C: has only 99.9 GB free, under the 100 GB the spec asks for), install the tools, `gh auth login`, then run the check. When the check prints "Ready." (exit 0): tick A4, record the distro name and the nested-virtualization result here, and move "Current step" to 0.1. If it fails, fix what the FAIL lines say.
+- A4 done 2026-10-27: Fedora 44 in WSL as `FedoraLinux-44` (on D:, user `User`), default distro. Check passes (18 pass). Nested virtualization does NOT work (`/dev/kvm` missing; maybe SVM off in BIOS), so no local VMs: run boot tests in CI. WSL has 7.7 GiB RAM. Fedora WSL has no awk; scripts must not assume it.
 - 2026-10-27: the owner wants Lumen to compete with Windows. Proposal written, **not yet approved**: `docs/decisions/0001-compete-with-windows.md` (Status: Proposed) and the gap list `docs/competing-with-windows.md`. It flags two spec errors (suspend-then-hibernate vs Secure Boot lockdown; "resize NTFS" fails on BitLocker) and adds a new Phase 7. Don't change the spec or the step list for it until the owner approves; if they do, apply the ADR's "Proposed changes" sections and set its status to Accepted.
 - Machine facts (2026-10-27): Ryzen 7 5800X, 16 GB RAM, virtualization on in firmware, Windows 11 Home build 26200, gh not installed on Windows. Claude reaches WSL from Windows with `wsl -d <distro> --cd "<repo>" -- <cmd>`; set `WSL_UTF8=1` (else UTF-16 output), and from Git Bash prefix `MSYS_NO_PATHCONV=1`.
 - Spec issue to raise at step 1.3: the spec puts image defaults in `/usr/etc`, but `bootc container lint` rejects images that contain `/usr/etc`. The likely fix is to write defaults to `/etc` in the Containerfile (bootc 3-way merges it) or to `/usr/lib` / `/usr/share`. Verify, ask the owner, record an ADR.
@@ -35,7 +35,7 @@ Claude reads CLAUDE.md automatically, does that one step, commits, updates this 
 - [x] **A1** 👤 Move the project to a permanent folder (e.g. `Documents\lumen-os`) and `git init`. *Done when:* CLAUDE.md and PROGRESS.md are in a git repo.
 - [x] **A2** Convert the .docx to `docs/spec.md` with a tool (pandoc or python-docx), not by retyping. Keep tables as Markdown tables; note the missing architecture diagram. *Done when:* every spec section and table is present.
 - [x] **A3** 👤 Create an empty GitHub repo `lumen-os` (public = free Actions minutes), add the remote, push. Create a COPR account (needed from Phase 1). *Done when:* `git push` works.
-- [ ] **A4** 👤 Dev setup on Windows 11 Home: WSL2 + Fedora, Podman, `just`, git, gh. Claude writes `docs/dev-setup-windows.md` and a check script. Check 100 GB free disk and whether nested virtualization works. *Done when:* the check script passes in WSL.
+- [x] **A4** 👤 Dev setup on Windows 11 Home: WSL2 + Fedora, Podman, `just`, git, gh. Claude writes `docs/dev-setup-windows.md` and a check script. Check 100 GB free disk and whether nested virtualization works. *Done when:* the check script passes in WSL.
 
 ## Phase 0 — Plan and skeleton (spec: "Claude Code prompt → Phase 0")
 
