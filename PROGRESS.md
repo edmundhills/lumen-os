@@ -30,6 +30,8 @@ Claude reads CLAUDE.md automatically, does that step (plus any ➕ steps right a
 - Risks for 0.3 found while writing part 2 (sections 9.4–9.9): KWin/Plasma version drift between the pinned image and Fedora's mirrors (exact `-devel` versions, Koji fallback); rebasing lumen-glass on every Plasma feature release (three a year); the ISO exceeding GitHub's 2 GiB release-file limit (Q15); runner disk, the 6-hour job limit, and KVM on hosted runners; GPU-less CI, so glass tests run on llvmpipe and frame-time budgets need real hardware; large update downloads without re-chunking; NVIDIA module signing and MOK enrolment. Part 1 already flagged Flatpak theming (section 4.3) and camera access that bypasses PipeWire (section 4.4).
 - ADR 0002 follow-up (step 0.2): the spec's build chain and CLAUDE.md's fixed architecture now say the install ISO is a live ISO built from the image, not from bootc-image-builder.
 - ADR 0002 (2026-10-27): the owner confirmed that remote help is same-network in v0.1, with RustDesk offered for help over the internet. Building a live ISO from a bootc image (step 1.8) is the riskiest fix; the fallback is in the ADR.
+- 0.3 done 2026-10-27: `docs/risks.md`, 15 ranked risks with mitigations, a watch list, and sources checked that day. It is a living document: update a risk when it changes. It adds Q16 (what "match" means for Flatpak theming, before 2.1) and **Q17** (TPM unlock bound to PCR 7 without a PIN can be defeated by booting any Fedora-signed system, so the spec's "a stolen laptop reveals nothing" doesn't hold; owner chooses PIN by default or more PCRs via systemd-pcrlock) for the 0.8 review. Q17 changes the spec's security table once decided.
+- For 0.4 (licence question): SignPath Foundation's free Windows code signing (risk 9) needs an OSI-approved licence for every component and no commercial dual licensing. Mention this when asking the owner. The compatibility data stays ODbL, and contributions to `compat/` need a DCO sign-off (risk 12).
 
 ---
 
@@ -44,7 +46,7 @@ Claude reads CLAUDE.md automatically, does that step (plus any ➕ steps right a
 
 - [x] **0.1** `docs/architecture.md` part 1: components and how they talk (D-Bus names, files, protocols).
 - [x] **0.2** `docs/architecture.md` part 2: build flow and a Mermaid dependency graph.
-- [ ] **0.3** `docs/risks.md`: top 15 technical risks with mitigations. Must include: the Secure Boot UEFI CA 2023 transition, hibernation under kernel lockdown, codec patents, BitLocker on Windows drives, Windows code signing for Lumen Setup, and the licences of compatibility data.
+- [x] **0.3** `docs/risks.md`: top 15 technical risks with mitigations. Must include: the Secure Boot UEFI CA 2023 transition, hibernation under kernel lockdown, codec patents, BitLocker on Windows drives, Windows code signing for Lumen Setup, and the licences of compatibility data.
 - [ ] **0.4** Repo skeleton from the CLAUDE.md layout, with a README in each folder.
 - [ ] ➕ **0.5** `justfile` (build-image, build-iso, run-vm, test, lint) and lint tooling. *Done when:* `just lint` passes in WSL.
 - [ ] **0.6** GitHub Actions: lint job and a placeholder build job. *Done when:* CI is green.
