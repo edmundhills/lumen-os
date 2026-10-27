@@ -14,14 +14,14 @@ Claude reads CLAUDE.md automatically, does that one step, commits, updates this 
 
 ## Current step
 
-**A3**
+**A4**
 
 ## Notes for the next session
 
 - `docs/spec.md` was generated from the .docx by a converter script; the architecture diagram is `docs/images/architecture.png`. If the .docx changes, regenerate it with a converter (e.g. pandoc) rather than hand-editing.
 - Project folder: `C:\Users\edmun\Downloads\Lumen OS`. Git for Windows is installed at `C:\Program Files\Git\cmd\git.exe` (open a new terminal if `git` isn't on PATH yet).
 - Spec source: `C:\Users\edmun\Downloads\Perfect Linux Distro — Spec & Build Prompt.docx`.
-- A3 (2026-10-26): prepared, waiting on the owner. No remote yet; `gh` is not installed on Windows (it comes in A4), so the push goes through Git Credential Manager (already configured; it opens a browser sign-in). The owner chose their GitHub no-reply email: it is set in this repo's `.git/config` and all earlier commits were rewritten to it before the first push. Never commit with the owner's personal email. Next session: run `git ls-remote origin`; if it lists `refs/heads/main`, tick A3 (ask whether the COPR account exists) and do A4.
+- A3 done 2026-10-27: repo https://github.com/edmundhills/lumen-os (push works); COPR account active. Commits must use the owner's GitHub no-reply email (set in `.git/config`), never their personal email.
 - No licence is chosen yet (the spec doesn't name one). lumen-glass forks KWin code (GPL-2.0-or-later), so the licence must be GPL-compatible. Ask the owner before 0.4.
 - Spec issue to raise at step 1.3: the spec puts image defaults in `/usr/etc`, but `bootc container lint` rejects images that contain `/usr/etc`. The likely fix is to write defaults to `/etc` in the Containerfile (bootc 3-way merges it) or to `/usr/lib` / `/usr/share`. Verify, ask the owner, record an ADR.
 
@@ -31,7 +31,7 @@ Claude reads CLAUDE.md automatically, does that one step, commits, updates this 
 
 - [x] **A1** 👤 Move the project to a permanent folder (e.g. `Documents\lumen-os`) and `git init`. *Done when:* CLAUDE.md and PROGRESS.md are in a git repo.
 - [x] **A2** Convert the .docx to `docs/spec.md` with a tool (pandoc or python-docx), not by retyping. Keep tables as Markdown tables; note the missing architecture diagram. *Done when:* every spec section and table is present.
-- [ ] **A3** 👤 Create an empty GitHub repo `lumen-os` (public = free Actions minutes), add the remote, push. Create a COPR account (needed from Phase 1). *Done when:* `git push` works.
+- [x] **A3** 👤 Create an empty GitHub repo `lumen-os` (public = free Actions minutes), add the remote, push. Create a COPR account (needed from Phase 1). *Done when:* `git push` works.
 - [ ] **A4** 👤 Dev setup on Windows 11 Home: WSL2 + Fedora, Podman, `just`, git, gh. Claude writes `docs/dev-setup-windows.md` and a check script. Check 100 GB free disk and whether nested virtualization works. *Done when:* the check script passes in WSL.
 
 ## Phase 0 — Plan and skeleton (spec: "Claude Code prompt → Phase 0")
