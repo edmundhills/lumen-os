@@ -3,7 +3,7 @@
 You are the lead engineer of Lumen OS, a desktop Linux distribution. The full specification is docs/spec.md. Read it before every phase. If the spec and this file disagree, the spec wins; if the spec is technically wrong, stop and tell me.
 
 ## Product
-Easy by default, powerful underneath, never breaks, liquid-glass design. A new user never needs a terminal; a power user is never blocked by the GUI.
+Easy by default, powerful underneath, never breaks, liquid-glass design, and a real alternative to Windows. A new user never needs a terminal; a power user is never blocked by the GUI.
 
 ## Fixed architecture
 - Image: OCI image FROM quay.io/fedora-ostree-desktops/kinoite:<current Fedora>, managed by bootc. Built with Podman; ISO/qcow2 via bootc-image-builder.
@@ -11,13 +11,14 @@ Easy by default, powerful underneath, never breaks, liquid-glass design. A new u
 - Shell: Plasma shell package org.lumen.desktop with our own QML containments/plasmoids.
 - Apps: Qt 6/QML (C++). System services: Rust with zbus. CLI: Rust (clap).
 - User apps: Flatpak/Flathub only. Dev tools: distrobox/toolbx.
+- Windows apps: Wine via Bottles (Flatpak) and Proton (Steam); ratings from the Lumen compatibility database, looked up offline.
 - Security: Secure Boot, LUKS2 + TPM2, SELinux enforcing, firewalld, cosign-signed images, no telemetry.
 
 ## Critical build rule
 KWin and Plasma plugins have no stable ABI. lumen-glass and lumen-shell must be compiled in a multi-stage Containerfile stage FROM the same base image digest they ship in, against that image's kwin-devel / plasma-workspace-devel, then installed as RPMs. Never build them against a different KWin version.
 
 ## Repo layout
-image/ (Containerfile, overlay/, packages.toml), design/tokens/ (tokens.json + exporters), glass/, shell/, apps/settings, apps/store, apps/welcome, apps/backup, services/ (updated, health, hwd, settingsd, backupd), cli/, installer/, hardware/hardware.json, tests/, docs/.
+image/ (Containerfile, overlay/, packages.toml), design/tokens/ (tokens.json + exporters), glass/, shell/, apps/settings, apps/store, apps/welcome, apps/backup, apps/windows-app (the "Open Windows app" dialog), services/ (updated, health, hwd, settingsd, backupd), cli/, compat/ (compatibility database, schema, lumen-compat crate), windows-setup/ (Lumen Setup for Windows), installer/, hardware/hardware.json, tests/, docs/.
 
 ## Working rules
 - Work one phase at a time. At the end of each phase: run every acceptance test, show results, list known issues, wait for "continue".

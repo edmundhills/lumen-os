@@ -1,6 +1,6 @@
 # What stops Linux competing with Windows, and what Lumen does about each
 
-Status: draft for the owner's review (2026-10-27). Decision record: [ADR 0001](decisions/0001-compete-with-windows.md).
+Status: living document; accepted with ADR 0001 on 2026-10-27 and reflected in `docs/spec.md` and `PROGRESS.md`. Update it when a gap changes. Decision record: [ADR 0001](decisions/0001-compete-with-windows.md).
 
 **Goal.** Someone leaving Windows should be able to switch without losing a file, an app, a game they care about or a device they own. Where something won't come with them, Lumen tells them honestly *before* they install, and offers the best way around it.
 
@@ -45,7 +45,7 @@ This is a living list. Each gap is either covered by the spec, partly covered, a
 | Bringing files across | Manual copying | Welcome step 7 imports Documents, Pictures, Music and bookmarks | ✅ |
 | Bringing apps across | Users rebuild their app list by memory | Welcome reads the programs installed on the Windows drive and shows, for each one: Lumen version available / runs as a Windows app / use this alternative | ➕ |
 | Familiar shortcuts | Vary by desktop | Windows-style shortcuts (Super+E, Super+L, Super+V, Super+., Super+Shift+S) | ✅ |
-| Familiar layout | Top bar plus dock feels like a Mac | Optional "Familiar" layout in Welcome: bottom taskbar-style dock with a Start-style launcher. Owner to decide | ➕ (owner's call) |
+| Familiar layout | Top bar plus dock feels like a Mac | Optional "Familiar" layout in Welcome: bottom taskbar-style dock with a Start-style launcher | Deferred by the owner (2026-10-27) |
 
 ## 4. Hardware and drivers
 
@@ -75,7 +75,7 @@ This is a living list. Each gap is either covered by the spec, partly covered, a
 | Voice typing | Not built in | Local-only dictation (no cloud, no telemetry) | ➕ after v0.1 |
 | Work and school sign-in (Active Directory, Entra ID), device management | Possible but uncommon | Consumer focus for v1; revisit later | ⛔ for v1 |
 | Screen reader parity | Orca is behind NVDA and JAWS | Orca tests per spec | 🟡 |
-| Built-in AI assistant (Windows has Copilot) | None | Owner to decide; if added, local-first and opt-in | ❓ owner's call |
+| Built-in AI assistant (Windows has Copilot) | None | If ever added: local-first and opt-in | Deferred by the owner (2026-10-27) |
 | Preinstalled on PCs in shops | OEM deals | Business, not engineering | ⛔ |
 
 ## Data sources for compatibility ratings

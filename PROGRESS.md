@@ -1,6 +1,6 @@
 # Lumen OS — step-by-step build plan
 
-The spec's 9 phases, cut into session-sized steps. Do **one step per session**.
+The spec's 10 phases (0–9), cut into session-sized steps. Do **one step per session**.
 
 ## How to resume
 
@@ -18,13 +18,12 @@ Claude reads CLAUDE.md automatically, does that one step, commits, updates this 
 
 ## Notes for the next session
 
-- `docs/spec.md` was generated from the .docx by a converter script; the architecture diagram is `docs/images/architecture.png`. If the .docx changes, regenerate it with a converter (e.g. pandoc) rather than hand-editing.
+- `docs/spec.md` is the source of truth (owner's decision, 2026-10-27, ADR 0001). Edit it directly; the original .docx (`C:\Users\edmun\Downloads\Perfect Linux Distro — Spec & Build Prompt.docx`) is historical and no longer kept in sync. The architecture diagram is `docs/images/architecture.png`.
 - Project folder: `C:\Users\edmun\Downloads\Lumen OS`. Git for Windows is installed at `C:\Program Files\Git\cmd\git.exe` (open a new terminal if `git` isn't on PATH yet).
-- Spec source: `C:\Users\edmun\Downloads\Perfect Linux Distro — Spec & Build Prompt.docx`.
 - A3 done 2026-10-27: repo https://github.com/edmundhills/lumen-os (push works); COPR account active. Commits must use the owner's GitHub no-reply email (set in `.git/config`), never their personal email.
 - No licence is chosen yet (the spec doesn't name one). lumen-glass forks KWin code (GPL-2.0-or-later), so the licence must be GPL-compatible. Ask the owner before 0.4.
 - A4 done 2026-10-27: Fedora 44 in WSL as `FedoraLinux-44` (on D:, user `User`), default distro. Check passes (18 pass). Nested virtualization does NOT work (`/dev/kvm` missing; maybe SVM off in BIOS), so no local VMs: run boot tests in CI. WSL has 7.7 GiB RAM. Fedora WSL has no awk; scripts must not assume it.
-- 2026-10-27: the owner wants Lumen to compete with Windows. Proposal written, **not yet approved**: `docs/decisions/0001-compete-with-windows.md` (Status: Proposed) and the gap list `docs/competing-with-windows.md`. It flags two spec errors (suspend-then-hibernate vs Secure Boot lockdown; "resize NTFS" fails on BitLocker) and adds a new Phase 7. Don't change the spec or the step list for it until the owner approves; if they do, apply the ADR's "Proposed changes" sections and set its status to Accepted.
+- ADR 0001 accepted 2026-10-27: Lumen is built to compete with Windows. Applied to the spec, this file and CLAUDE.md (new Phase 7 "Switching from Windows"; old Phases 7–8 are now 8–9). The gap list `docs/competing-with-windows.md` is a living document: update it when a gap changes. The owner deferred a Windows-style "Familiar" layout and a built-in AI assistant; don't add either without asking.
 - Machine facts (2026-10-27): Ryzen 7 5800X, 16 GB RAM, virtualization on in firmware, Windows 11 Home build 26200, gh not installed on Windows. Claude reaches WSL from Windows with `wsl -d <distro> --cd "<repo>" -- <cmd>`; set `WSL_UTF8=1` (else UTF-16 output), and from Git Bash prefix `MSYS_NO_PATHCONV=1`.
 - Spec issue to raise at step 1.3: the spec puts image defaults in `/usr/etc`, but `bootc container lint` rejects images that contain `/usr/etc`. The likely fix is to write defaults to `/etc` in the Containerfile (bootc 3-way merges it) or to `/usr/lib` / `/usr/share`. Verify, ask the owner, record an ADR.
 
@@ -41,7 +40,7 @@ Claude reads CLAUDE.md automatically, does that one step, commits, updates this 
 
 - [ ] **0.1** `docs/architecture.md` part 1: components and how they talk (D-Bus names, files, protocols).
 - [ ] **0.2** `docs/architecture.md` part 2: build flow and a Mermaid dependency graph.
-- [ ] **0.3** `docs/risks.md`: top 15 technical risks with mitigations.
+- [ ] **0.3** `docs/risks.md`: top 15 technical risks with mitigations. Must include: the Secure Boot UEFI CA 2023 transition, hibernation under kernel lockdown, codec patents, BitLocker on Windows drives, Windows code signing for Lumen Setup, and the licences of compatibility data.
 - [ ] **0.4** Repo skeleton from the CLAUDE.md layout, with a README in each folder.
 - [ ] **0.5** `justfile` (build-image, build-iso, run-vm, test, lint) and lint tooling. *Done when:* `just lint` passes in WSL.
 - [ ] **0.6** GitHub Actions: lint job and a placeholder build job. *Done when:* CI is green.
@@ -58,11 +57,15 @@ Claude reads CLAUDE.md automatically, does that one step, commits, updates this 
 - [ ] **1.6** 👤 cosign signing (you add the key as a repo secret) and SBOM with syft.
 - [ ] **1.7** `/etc/containers/policy.json` and sigstore config so the system accepts only our signed images.
 - [ ] **1.8** CI: bootc-image-builder builds qcow2 and anaconda-iso artifacts.
-- [ ] **1.9** `tests/boot`: QEMU/KVM boot test in CI; SDDM within 60 s; `systemctl --failed` empty.
+- [ ] **1.9** `tests/boot`: QEMU/KVM boot test in CI; SDDM within 60 s; `systemctl --failed` empty. Also boot once with Secure Boot (OVMF) and record whether kernel lockdown is on and hibernation is offered (`/sys/kernel/security/lockdown`, `/sys/power/state`) in ADR 0001's follow-up.
 - [ ] **1.10** Variant `lumen-gaming`: Steam, Gamescope session, MangoHud, controller udev rules.
 - [ ] **1.11** ⚠️ Variant `lumen-nvidia`: akmods-built, signed kmods in CI.
 - [ ] **1.12** NVIDIA MOK enrolment doc; CI matrix builds all variants.
-- [ ] **1.13** 👤 Phase 1 acceptance: install the ISO in a VM (VirtualBox 7 has a virtual TPM and Secure Boot) with encryption; `bootc status`, `bootc upgrade`, `bootc rollback`. Claude writes the checklist; you run it.
+- [ ] **1.13** Windows-app base in the image: `ntsync` autoload, Bottles preinstalled on first boot, `.exe` and `.msi` open in Bottles until the Phase 7 dialog exists, metric-compatible fonts (Liberation, Carlito, Caladea). Boot test checks `/dev/ntsync` exists.
+- [ ] **1.14** 👤 Codecs and hardware video decoding: Claude writes the options and their legal trade-offs as an ADR; you choose; Claude ships the choice.
+- [ ] **1.15** Compatibility database v0 in `compat/`: JSON schema, validation test, first 20 entries, ODbL licence file.
+- [ ] **1.16** ⚠️ Nightly CI compatibility job: install and launch freely downloadable Windows apps under the image's Wine, screenshot the window, update each entry's "last tested".
+- [ ] **1.17** 👤 Phase 1 acceptance: install the ISO in a VM (VirtualBox 7 has a virtual TPM and Secure Boot) with encryption; `bootc status`, `bootc upgrade`, `bootc rollback`; double-clicking an `.exe` opens Bottles; the compatibility job is green. Claude writes the checklist; you run it.
 
 ## Phase 2 — Design tokens and theme (spec: "Liquid glass", "Design tokens", Phase 2)
 
@@ -139,15 +142,16 @@ Claude reads CLAUDE.md automatically, does that one step, commits, updates this 
 - [ ] **5.11** `lumen-backupd` (restic schedules) and `lumen backup`.
 - [ ] **5.12** CLI: `lumen app`, `lumen dev enable`, `lumen glass tier`.
 - [ ] **5.13** Settings app frame: glass sidebar, search across pages, `lumen-settings://` deep links.
-- [ ] **5.14** Settings pages: Wi-Fi & Network, Bluetooth.
+- [ ] **5.14** Settings pages: Wi-Fi & Network (including OpenConnect VPN import), Bluetooth.
 - [ ] **5.15** Settings pages: Displays, Sound.
 - [ ] **5.16** Settings pages: Appearance, Desktop & Dock.
-- [ ] **5.17** Settings pages: Notifications, Power & Battery.
+- [ ] **5.17** Settings pages: Notifications, Power & Battery (suspend and critical-battery action; hibernate only where Secure Boot lockdown allows it, per ADR 0001).
 - [ ] **5.18** Settings pages: Privacy & Security, Users.
 - [ ] **5.19** Settings pages: Apps, Updates.
 - [ ] **5.20** Settings pages: Backup, Drivers & Hardware.
 - [ ] **5.21** Settings pages: Keyboard & Input, Accessibility.
-- [ ] **5.22** Settings pages: Developer, About & Health.
+- [ ] **5.22** Settings pages: Developer, About & Health (including "Reset Lumen": keep files or erase everything).
+- [ ] **5.22a** "Get help from a friend": Plasma remote desktop behind a one-time code and a visible indicator.
 - [ ] **5.23** Tests: GUI and CLI give identical results; update + rollback in the VM; each Health check triggered and fixed.
 - [ ] **5.24** 👤 Phase 5 acceptance.
 
@@ -156,33 +160,48 @@ Claude reads CLAUDE.md automatically, does that one step, commits, updates this 
 - [ ] **6.1** Store backend (libflatpak + AppStream): list and search.
 - [ ] **6.2** Store home collections and app page (screenshots, verified badge, plain-English permissions with risk colour).
 - [ ] **6.3** One-button install/update/remove/open; Windows/macOS name aliases data file.
-- [ ] **6.4** Bottles flow for `.exe` files.
+- [ ] **6.4** Essentials collection adds a OneDrive client, OpenRGB, Piper and Solaar (the `.exe` flow moved to 7.5).
 - [ ] **6.5** Welcome steps 1–3: language and keyboard, Wi-Fi, account with fingerprint.
 - [ ] **6.6** Welcome step 4: TPM2 enrolment and recovery key.
 - [ ] **6.7** Welcome steps 5–9: privacy, look, import, apps, gesture tour.
 - [ ] **6.8** Backup app UI: external drive, SMB, S3.
 - [ ] **6.9** "Previous versions" in Files via snapper.
-- [ ] **6.10** Installer theme and the three install modes.
-- [ ] **6.11** `hardware/hardware.json` and the `lumen-hwd` compare logic.
+- [ ] **6.10** Installer theme and the three install modes; "Install alongside Windows" detects BitLocker and Fast Startup and never resizes a BitLocker volume.
+- [ ] **6.11** `hardware/hardware.json` and the `lumen-hwd` compare logic, including the Microsoft UEFI CA 2023 check.
 - [ ] **6.12** Live-session hardware report app (green / amber / red).
 - [ ] **6.13** 👤 Phase 6 acceptance: install to usable desktop in < 15 min; a non-technical tester sets up, installs an app, restores a file and runs a backup unaided.
 
-## Phase 7 — Hardening, accessibility, performance (spec: "Spec: security model", Phase 7)
+## Phase 7 — Switching from Windows (spec: "Spec: Windows apps and switching", Phase 7)
 
-- [ ] **7.1** Security review part 1 (boot, disk, image) → `docs/security.md`; fix gaps.
-- [ ] **7.2** Security review part 2 (apps, network, privilege, supply chain: SBOM, Renovate, pinned digests); fix gaps.
-- [ ] **7.3** Accessibility audit: shell surfaces.
-- [ ] **7.4** Accessibility audit: apps.
-- [ ] **7.5** Performance: boot < 10 s on NVMe.
-- [ ] **7.6** Performance: idle RAM < 1.5 GB.
-- [ ] **7.7** Translations: string extraction, Weblate config, pseudo-locale.
-- [ ] **7.8** 👤 Phase 7 acceptance on a real laptop.
+- [ ] **7.1** 👤 `docs/windows-apps.md`: the top 100 apps Windows users need, by category, with today's status; confirm the licences of ProtonDB, AreWeAntiCheatYet and any other source; pick the OneDrive client. You review the list.
+- [ ] **7.2** Compatibility database v1: recipes, alternatives, anti-cheat status; import ProtonDB and AreWeAntiCheatYet data with attribution; cover the top 100.
+- [ ] **7.3** Signed database updates through `lumen-updated`; offline lookup only; test that a lookup makes no network request.
+- [ ] **7.4** `lumen-compat` Rust crate: identify an `.exe` or `.msi` (version info, installer type, file hash) and match it; `lumen app check`.
+- [ ] **7.5** "Open Windows app" dialog (`apps/windows-app`): rating, reason, alternatives, Install / Try it; creates the bottle with its recipe; adds the app to the menu.
+- [ ] **7.6** Sandbox defaults for Bottles; Windows apps in Settings → Apps; `lumen app list --windows`; full removal.
+- [ ] **7.7** Store: ratings on Windows-name searches, Windows alternatives collection, web apps, Heroic and Lutris, anti-cheat status.
+- [ ] **7.8** Welcome: "Your Windows apps" scan of the Windows drive; BitLocker unlock by recovery key for the scan and the file import.
+- [ ] **7.9** ⚠️ 👤 Lumen Setup for Windows (`windows-setup/`, fork of Fedora Media Writer): hardware check, BitLocker / Fast Startup / Secure Boot checks, partition shrink, UTC clock, USB writer; built on a Windows CI runner. You provide a Windows code-signing certificate, or SmartScreen will warn users.
+- [ ] **7.10** Dual-boot Health checks: Fast Startup, clock mismatch, missing boot entry, Secure Boot certificate.
+- [ ] **7.11** Tests: every top-100 app has a rating and a path; dialog, Store and CLI agree; offline lookup; sandbox defaults.
+- [ ] **7.12** 👤 Phase 7 acceptance: a Windows user installs Lumen with Lumen Setup, sees their apps' status, and installs five Windows apps by double-clicking, with every rating correct; at least 80% of the top-100 list is covered.
 
-## Phase 8 — Release v0.1 (spec: "Testing, CI and release", Phase 8)
+## Phase 8 — Hardening, accessibility, performance (spec: "Spec: security model", Phase 8)
 
-- [ ] **8.1** Release train in CI: dev on every merge, weekly beta, stable every 2 weeks after 7 days in beta.
-- [ ] **8.2** Update test job: install previous, upgrade, reboot, roll back, reboot.
-- [ ] **8.3** Docs: user guide and install guide.
-- [ ] **8.4** Docs: FAQ, hardware notes, contributing guide.
-- [ ] **8.5** 👤 Publish v0.1 (you approve): signed images, ISO, SBOM, checksums, plain-English changelog.
-- [ ] **8.6** 👤 Install and run v0.1 on two real machines.
+- [ ] **8.1** Security review part 1 (boot, disk, image) → `docs/security.md`; fix gaps.
+- [ ] **8.2** Security review part 2 (apps including Windows-app bottles and Lumen Setup, network, privilege, supply chain: SBOM, Renovate, pinned digests); fix gaps.
+- [ ] **8.3** Accessibility audit: shell surfaces.
+- [ ] **8.4** Accessibility audit: apps.
+- [ ] **8.5** Performance: boot < 10 s on NVMe.
+- [ ] **8.6** Performance: idle RAM < 1.5 GB.
+- [ ] **8.7** Translations: string extraction, Weblate config, pseudo-locale.
+- [ ] **8.8** 👤 Phase 8 acceptance on a real laptop.
+
+## Phase 9 — Release v0.1 (spec: "Testing, CI and release", Phase 9)
+
+- [ ] **9.1** Release train in CI: dev on every merge, weekly beta, stable every 2 weeks after 7 days in beta.
+- [ ] **9.2** Update test job: install previous, upgrade, reboot, roll back, reboot.
+- [ ] **9.3** Docs: user guide and install guide.
+- [ ] **9.4** Docs: FAQ (including what won't come over from Windows), hardware notes, contributing guide.
+- [ ] **9.5** 👤 Publish v0.1 (you approve): signed images, ISO, SBOM, checksums, plain-English changelog.
+- [ ] **9.6** 👤 Install and run v0.1 on two real machines, one of them alongside Windows through Lumen Setup.

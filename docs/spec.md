@@ -8,6 +8,8 @@ Build the distro as an image-based layer on Fedora (bootc / atomic), with KDE's 
 
 What we own is everything the user touches: the shell, the glass design system, the settings app, the update and app story, the installer and the defaults. Working name below: **Lumen OS** (placeholder).
 
+Lumen is built to be a real alternative to Windows. Someone switching keeps their files, apps, games and devices, and where something won't come with them, Lumen says so honestly *before* they install and offers the best way around it. The full list of what stops Linux competing with Windows today, and what Lumen does about each item, is `docs/competing-with-windows.md`; the decision is ADR 0001.
+
 Why this base:
 
 - **Fedora bootc**: atomic, image-based updates with rollback; new kernels and Mesa quickly; strong upstream security (SELinux, signed images).
@@ -28,9 +30,14 @@ Most desktop Linux pain is not missing features but inconsistency, breakage and 
 | Inconsistent look between GTK, Qt, Electron and Flatpak apps | One design token set exported to Qt, GTK 4/libadwaita, GTK 3, and icon/cursor themes; portals for file pickers |
 | Hardware hit-and-miss: NVIDIA, Wi-Fi, fingerprint, printers, sleep | Hardware check on the live USB before install; NVIDIA drivers signed into the image; driver status page in Settings |
 | Fractional scaling and multi-monitor quirks | Wayland-only, per-monitor scale, HDR and VRR on by default where supported |
-| Battery life worse than Windows/macOS | power-profiles-daemon tuned per device class, suspend-then-hibernate, per-app energy view |
-| Gaming setup is fiddly | Steam, Proton, Gamescope and MangoHud preinstalled; a Game Mode toggle |
-| Windows apps and file sharing | Bottles for Windows apps; built-in SMB, phone link (KDE Connect) and cloud accounts |
+| Battery life worse than Windows/macOS | power-profiles-daemon tuned per device class, reliable suspend with a safe shutdown at critical battery, per-app energy view. No hibernation while Secure Boot lockdown blocks it (ADR 0001) |
+| Gaming setup is fiddly | Steam, Proton, Gamescope and MangoHud preinstalled; a Game Mode toggle; Heroic and Lutris for other launchers; anti-cheat status shown before install |
+| Windows apps don't run, and nobody tells you which will | A plain-English compatibility rating before every install; double-click an `.exe` to install it with a tested recipe into its own sandboxed bottle (Wine via Bottles); web apps and named alternatives when an app won't run |
+| No honest answer about what will come with you | Hardware check and "Your Windows apps" report before and during setup: what works, what needs an alternative, what won't |
+| Installing alongside or replacing Windows is risky | Lumen Setup for Windows checks BitLocker, Fast Startup and Secure Boot certificates and makes room safely; Health catches clock and boot-menu problems after Windows updates |
+| Vendor apps for mice, keyboards and RGB are Windows-only | Device rules in the image; OpenRGB, Piper and Solaar in the Store |
+| Video plays badly or drains the battery | Codecs and hardware video decoding chosen and shipped deliberately (ADR, owner's decision) |
+| File sharing and cloud | Built-in SMB, phone link (KDE Connect), cloud accounts and a OneDrive client |
 | Fragmented settings spread across tools | One searchable Settings app covering everything, including firewall, backups and drivers |
 | No real backup story for normal users | Btrfs snapshots of /home hourly, plus a Time Machine-style external backup wizard |
 | Security left to the user | Secure Boot, full-disk encryption with TPM unlock, sandboxed apps, firewall on, automatic security updates |
@@ -79,6 +86,18 @@ These are the must-haves for v1, grouped by area. Each is testable, so Claude Co
 
 - Steam, Proton, Gamescope, MangoHud, GameMode; controller support out of the box.
 - Colour-managed display pipeline, HDR, and low-latency PipeWire for audio work.
+
+### Switching from Windows
+
+- Double-clicking an `.exe` or `.msi` always opens the "Open Windows app" dialog, never "no app can open this file".
+- Every Windows app gets a compatibility rating before install, with the reason and alternatives. Ratings are looked up offline and send no network requests.
+- Every app on the top-100 list (`docs/windows-apps.md`) has a rating and at least one path: runs, installable web app, or a named alternative. At least 80% are covered.
+- Windows apps can't read the home folder unless the user allows it; removing a Windows app removes its bottle completely.
+- Anti-cheat status is shown before installing a game.
+- Wine's `ntsync` kernel module is loaded on every image.
+- The Windows drive can be imported and scanned even when BitLocker is on (with the recovery key).
+- "Install alongside Windows" never resizes a BitLocker volume from Linux.
+- The hardware check warns, before Windows is erased, when the firmware lacks the Microsoft UEFI CA 2023.
 
 ### Accessibility and internationalisation
 
@@ -187,12 +206,13 @@ The OS is a single OCI container image built from a Containerfile, so the whole 
 | Area | Included | Removed from Kinoite |
 | --- | --- | --- |
 | Desktop | KWin, Plasma libraries, LayerShellQt, KRunner, xdg-desktop-portal-kde, lumen-shell, lumen-glass | Stock Plasma panels and default plasmoids |
-| System | bootc, flatpak, distrobox, podman, snapper, btrfs-progs, fwupd, power-profiles-daemon, tuned-ppd | discover (replaced by Lumen Store) |
-| Hardware | Mesa, Intel/AMD firmware, sof-firmware, fprintd, iio-sensor-proxy, cups + ipp-usb, bluez | none |
-| Media | PipeWire, WirePlumber, ffmpeg-free plus codecs via Flatpak runtime | none |
-| Input | IBus and Fcitx5, Inter and JetBrains Mono fonts, Noto CJK and emoji | Unused font packs |
+| System | bootc, flatpak, distrobox, podman, snapper, btrfs-progs, fwupd, power-profiles-daemon, tuned-ppd, ntsync autoload (Wine) | discover (replaced by Lumen Store) |
+| Hardware | Mesa, Intel/AMD firmware, sof-firmware, fprintd, iio-sensor-proxy, cups + ipp-usb, sane-airscan, bluez, device rules for OpenRGB and libratbag (ratbagd) | none |
+| Media | PipeWire, WirePlumber, ffmpeg-free plus codecs via Flatpak runtime; system codecs and hardware video decoding per the codecs ADR (step 1.14) | none |
+| Network | NetworkManager-openconnect (Cisco, GlobalProtect, Fortinet VPNs) | none |
+| Input | IBus and Fcitx5, Inter and JetBrains Mono fonts, Noto CJK and emoji, metric-compatible fonts for Office documents (Liberation, Carlito, Caladea) | Unused font packs |
 
-User apps (browser, office, media, editor) ship as Flatpaks preinstalled on first boot, not baked into the image, so they update independently.
+User apps (browser, office, media, editor, Bottles) ship as Flatpaks preinstalled on first boot, not baked into the image, so they update independently.
 
 ### Filesystem layout
 
@@ -303,24 +323,24 @@ Lumen Settings is a new QML app with a glass sidebar and search; it reuses KDE's
 
 | Page | Basic options | Advanced toggle reveals | Backend |
 | --- | --- | --- | --- |
-| Wi-Fi & Network | Networks, hotspot, VPN import (WireGuard, OpenVPN file) | Static IP, DNS over TLS, proxy, MAC randomisation | NetworkManager |
+| Wi-Fi & Network | Networks, hotspot, VPN import (WireGuard, OpenVPN file, OpenConnect: Cisco, GlobalProtect, Fortinet) | Static IP, DNS over TLS, proxy, MAC randomisation | NetworkManager |
 | Bluetooth | Pair, battery levels | Codec choice (LDAC, aptX, AAC), LE Audio | BlueZ |
 | Displays | Arrange, scale, refresh, HDR, Night Light | Colour profile (ICC), VRR policy, per-app GPU | KScreen |
 | Sound | Output/input, per-app volume | Sample rate, latency, EQ | PipeWire / WirePlumber |
 | Appearance | Light/dark/auto, accent, wallpaper, glass on/off | Glass tier, corner radius, fonts, icon theme | tokens + lumen-glass |
 | Desktop & Dock | Dock size, auto-hide, hot corners | Tiling layouts, per-workspace rules | lumen-shell config |
 | Notifications | Per-app on/off, focus modes | Sound, priority, lock-screen content | Plasma notifications |
-| Power & Battery | Profile, battery health, usage per app | Charge limit (80%), suspend-then-hibernate timing | power-profiles-daemon, UPower |
+| Power & Battery | Profile, battery health, usage per app | Charge limit (80%), suspend timing, critical-battery action (hibernate offered only where Secure Boot lockdown allows it) | power-profiles-daemon, UPower |
 | Privacy & Security | Camera/mic/location per app, screen lock, firewall on/off | Firewall rules, Secure Boot and TPM status, Flatpak permissions | firewalld, Flatpak portals |
 | Users | Accounts, avatar, password, fingerprint | Groups, autologin | AccountsService |
-| Apps | Default apps, startup apps, uninstall | Flatpak permission overrides (like Flatseal) | Flatpak |
+| Apps | Default apps, startup apps, uninstall, Windows apps (rating, remove, reset) | Flatpak permission overrides (like Flatseal) | Flatpak |
 | Updates | Status, restart, auto-update toggle | History, rollback, channel (stable/beta), firmware | lumen-updated |
 | Backup | Destinations, schedule, restore | Retention, exclusions | restic |
 | Drivers & Hardware | Device list with status icons | Switch to NVIDIA image, kernel arguments | lumen-hwd |
 | Keyboard & Input | Layouts, shortcuts, touchpad, mouse | Remapping, compose key, input method | KWin input |
 | Accessibility | Screen reader, zoom, large text, contrast, reduce motion/transparency | Sticky/slow keys, colour filters | KWin + Orca |
 | Developer | Developer mode switch | Containers list, SSH server, kernel logs | distrobox, podman |
-| About & Health | Device name, specs, System Health | Logs export, reset to defaults | lumen-health |
+| About & Health | Device name, specs, System Health, Get help from a friend (remote desktop with a one-time code and a visible indicator) | Logs export, Reset Lumen (keep files or erase everything) | lumen-health, Plasma remote desktop |
 
 ### System Health checks (each with a plain-English result and a Fix button)
 
@@ -336,6 +356,10 @@ Lumen Settings is a new QML app with a glass sidebar and search; it reuses KDE's
 | Broken Flatpak or permissions | Repair (`flatpak repair`) |
 | Backup not run in 7 days | Run backup now |
 | Time not synced | Enable NTP |
+| Windows Fast Startup left the Windows drive locked | Explain it; show the one Windows setting to turn off |
+| Clock differs from Windows (local time vs UTC) | Explain it; Lumen Setup for Windows sets Windows to UTC |
+| Lumen boot entry missing (often after a Windows update) | Restore the boot entry and boot order |
+| Firmware lacks the Microsoft UEFI CA 2023 | Explain it; suggest Windows Update or a firmware update |
 
 ## Spec: Store, first run, installer, hardware report
 
@@ -346,8 +370,11 @@ These four are the user's first impression, so each must work without reading an
 - Front end over Flathub using libflatpak and AppStream metadata; home page with curated collections (Essentials, Creative, Gaming, Developer, Windows alternatives).
 - Each app page: screenshots, verified-publisher badge, permissions in plain English ("Can read your whole home folder") with a risk colour, size, last update.
 - Install, update, remove and "Open" in one button; updates applied automatically by lumen-updated.
-- Search understands Windows/macOS names ("Photoshop" suggests GIMP, Krita, Photopea; "Word" suggests LibreOffice, OnlyOffice).
-- Windows apps: a Bottles shortcut with a guide when users drop a `.exe` on the desktop.
+- Search understands Windows/macOS names ("Photoshop" suggests GIMP, Krita, Photopea; "Word" suggests LibreOffice, OnlyOffice) and shows the Windows app's compatibility rating next to the alternatives.
+- The "Windows alternatives" collection is driven by the compatibility database.
+- Web apps: install a website as an app with its own icon and window (Office on the web, Teams, Photopea, Xbox Cloud Gaming).
+- Gaming collection includes Heroic (Epic, GOG) and Lutris; game pages show anti-cheat status.
+- Windows apps: see "Spec: Windows apps and switching".
 
 ### Welcome (first run)
 
@@ -357,21 +384,83 @@ These four are the user's first impression, so each must work without reading an
 1. Encryption: enrol TPM2 unlock with `systemd-cryptenroll --tpm2-device=auto --tpm2-with-pin` (PIN optional); show and offer to save the recovery key.
 1. Privacy: location, crash reports (off by default).
 1. Look: light, dark or auto; accent colour; dock position.
-1. Import: copy Documents, Pictures, Music, browser bookmarks from a Windows or macOS drive.
-1. Apps: tick-box picks (Chrome/Firefox, Spotify, Steam, Discord, VS Code, etc.).
+1. Import: copy Documents, Pictures, Music, browser bookmarks from a Windows or macOS drive. A BitLocker drive is unlocked with its recovery key, with a hint on where to find it.
+1. Apps: tick-box picks (Chrome/Firefox, Spotify, Steam, Discord, VS Code, etc.), plus "Your Windows apps": the programs installed on the Windows drive, each shown as Lumen version available / runs as a Windows app / use this alternative / won't work.
 1. Done: a 30-second gesture tour that can be skipped.
 
 ### Installer
 
 - Anaconda WebUI from `bootc-image-builder` (anaconda-iso target), themed with Lumen tokens.
-- Three choices only: Erase disk (default, encrypted), Install alongside Windows (resize NTFS with a warning and a backup reminder), Custom (expert partitioning).
+- Three choices only: Erase disk (default, encrypted), Install alongside Windows, Custom (expert partitioning).
+- Install alongside Windows uses free space the user (or Lumen Setup for Windows) made by shrinking Windows from inside Windows. If the Windows partition is plain NTFS and there is no free space, it can resize NTFS, with a warning and a backup reminder. It never resizes a BitLocker volume from Linux, and it stops with a plain-English explanation if Windows Fast Startup or hibernation has left the drive locked.
 - Under 10 minutes on a typical SSD.
 
 ### Hardware report (live USB)
 
-- `lumen-hwd report` gathers PCI/USB IDs (lspci, lsusb), firmware status (fwupd), Secure Boot state, GPU, Wi-Fi, fingerprint, webcam, audio, sleep support.
+- `lumen-hwd report` gathers PCI/USB IDs (lspci, lsusb), firmware status (fwupd), Secure Boot state and whether the firmware trusts the Microsoft UEFI CA 2023, GPU, Wi-Fi, fingerprint, webcam, audio, sleep support.
 - Compares against `hardware.json` (known good, known issues with workarounds, known broken), maintained in the repo and updated with the image.
 - Shows green / amber / red per device before the user commits to install.
+
+## Spec: Windows apps and switching
+
+Windows apps run on Wine: desktop apps through Bottles (Flatpak), games through Proton (Steam). Lumen adds what Linux is missing: an honest answer before install, tested settings applied automatically, and a safe way to move over from Windows.
+
+### Compatibility ratings
+
+| Rating | Meaning | Colour |
+| --- | --- | --- |
+| Works great | Installs and runs with no known problems | Green |
+| Works with issues | Runs; known issues listed in plain English | Amber |
+| Won't work | Doesn't run, with the reason ("uses anti-cheat that blocks Linux", "the publisher doesn't support it") and alternatives | Red |
+| Not tested yet | No data. The user can try; the app runs in its own bottle | Grey |
+
+Every rating shows when and how it was last tested. Entries not tested in the last 6 months show as "Not tested yet".
+
+### Compatibility database
+
+- `compat/windows-apps.json`, validated against a JSON schema in CI and published under ODbL 1.0 (required because it includes ProtonDB data).
+- Each entry: name, publisher, how to recognise it (PE version info such as ProductName and CompanyName, installer type, SHA-256 of known installers, Steam App ID), rating, reason, known issues, recipe, alternatives (Flatpak IDs, web app URLs), anti-cheat status, last tested (Wine or Proton version, date, by CI or a maintainer), sources.
+- Recipe: Bottles environment (application or gaming), dependencies (for example Visual C++ runtimes, .NET, core fonts), DLL overrides and environment variables.
+- Sources: Lumen's nightly CI tests and maintainers first; ProtonDB report exports (ODbL 1.0 + DbCL, with attribution) for games; AreWeAntiCheatYet for anti-cheat status (licence confirmed in step 7.1). Never scrape.
+- Delivery: shipped in the image and refreshed as a signed file by lumen-updated. Lookups happen offline; Lumen never sends "this user is installing X" anywhere.
+- The `lumen-compat` Rust crate identifies a file and looks it up. The Store, the dialog, Welcome and the CLI all use it, so they can't disagree.
+
+### "Open Windows app" dialog
+
+1. The user double-clicks an `.exe` or `.msi`.
+1. The dialog shows the app's name and publisher (read from the file), its rating and reason, alternatives ("LibreOffice is a Lumen app that opens Word files"), and anti-cheat status for games.
+1. Install creates a bottle for that app with its recipe, runs the installer, and adds the app to the app menu with its icon.
+1. For "Not tested yet", the dialog says so, explains that the app runs in its own space, and offers Try it.
+1. Nothing installs until the user presses a button.
+
+### Sandbox
+
+- Bottles runs as a Flatpak; each Windows app gets its own bottle.
+- Lumen keeps Bottles' default Flatpak permissions (no home-folder access beyond Downloads) and never widens them silently. The user can grant more from Settings → Apps → Windows apps.
+- Removing a Windows app deletes its bottle.
+
+### Games
+
+- Steam with Proton (gaming image, or ticked in Welcome); Heroic for Epic and GOG; Lutris for other launchers.
+- Anti-cheat status comes from the compatibility database and shows before install.
+
+### Lumen Setup for Windows
+
+- A Windows program in `windows-setup/`, forked from Fedora Media Writer (Qt, which already downloads, verifies and writes USB drives on Windows). Built on a GitHub Actions Windows runner and code-signed, so Windows doesn't warn users.
+- Steps: hardware check against `hardware.json` with green / amber / red; checks for BitLocker, Fast Startup, Secure Boot and the Microsoft UEFI CA 2023; shows where the BitLocker recovery key is and asks the user to save it; for "alongside Windows", shrinks the Windows partition with Windows' own tools, turns off Fast Startup and sets the Windows clock to UTC; downloads, verifies and writes the USB; explains how to boot from it.
+- Every change to Windows needs its own confirm button.
+
+### Honest limits
+
+Lumen says these plainly in ratings, the Store and the FAQ, and offers the best alternative:
+
+- Microsoft 365 desktop apps (use Office on the web, LibreOffice or OnlyOffice).
+- Adobe Creative Cloud and some large CAD suites.
+- Games whose kernel anti-cheat the publisher hasn't enabled for Linux.
+- 4K video in streaming services' browser players (DRM limits).
+- Windows Hello face unlock, iCloud desktop sync, and Windows-only drivers and vendor tools.
+
+After v0.1: Windows apps in a window through a Windows virtual machine with the user's own licence; an opt-in "Report how it went" button; parental controls; local-only dictation.
 
 ## Spec: lumen CLI and services
 
@@ -381,7 +470,7 @@ Every GUI action goes through a D-Bus service, and the `lumen` CLI calls the sam
 
 | Service (D-Bus name) | Runs as | Responsibility |
 | --- | --- | --- |
-| lumen-updated (`org.lumen.Updates1`) | system, root, polkit-guarded | OS, Flatpak, firmware updates; rollback; post-boot health check |
+| lumen-updated (`org.lumen.Updates1`) | system, root, polkit-guarded | OS, Flatpak, firmware and compatibility-database updates; rollback; post-boot health check |
 | lumen-health (`org.lumen.Health1`) | system | System Health checks and fixes |
 | lumen-hwd (`org.lumen.Hardware1`) | system | Hardware report, driver status, NVIDIA image switch |
 | lumen-settingsd (`org.lumen.Settings1`) | user session | Reads and writes Lumen settings (stored in `~/.config/lumen/*.toml`), emits change signals |
@@ -398,7 +487,8 @@ Privileged actions use polkit with admin auth, cached 5 minutes. Services are wr
 | `lumen settings get / set / list / export / import` | Any setting by key, e.g. `lumen settings set appearance.theme dark` |
 | `lumen health [--fix]` | Run checks; optionally apply safe fixes |
 | `lumen hw report [--json]` | Hardware report |
-| `lumen app install / remove / list / search` | Flatpak wrapper with friendly names |
+| `lumen app install / remove / list / search` | Flatpak wrapper with friendly names; `list --windows` shows Windows apps |
+| `lumen app check <file>` | Compatibility rating for an `.exe` or `.msi` |
 | `lumen dev enable` | Developer mode: creates a Fedora toolbox and an Ubuntu distrobox, installs git and an editor |
 | `lumen backup now / list / restore` | Backups |
 | `lumen glass tier <full / lite / solid / auto>` | Override the glass tier |
@@ -412,7 +502,8 @@ The system is secure by default with no settings changed: a stolen laptop reveal
 | Threat | Defence |
 | --- | --- |
 | Stolen or lost device | LUKS2 full-disk encryption; TPM2 unlock bound to Secure Boot state (PCR 7) with optional PIN; recovery key shown once at setup |
-| Tampered boot chain | Secure Boot with Fedora's signed shim, kernel and modules; NVIDIA kmods signed with our key, enrolled via MOK on first boot |
+| Tampered boot chain | Secure Boot with Fedora's signed shim, kernel and modules; NVIDIA and other out-of-tree kmods signed with our key, enrolled via MOK on first boot; kernel lockdown stays on (never traded for hibernation); the hardware check warns when firmware lacks the Microsoft UEFI CA 2023 |
+| Malicious Windows program | Runs under Wine inside the Bottles Flatpak sandbox, one bottle per app, no home-folder access by default; the dialog shows the publisher and rating before anything runs |
 | Tampered OS image | Read-only `/usr`; images signed with cosign; bootc verifies signatures before staging (policy in `/etc/containers/policy.json`) |
 | Malicious or buggy app | Flatpak sandbox; portals for files, camera, screen capture; Store shows permissions before install; risky permissions flagged |
 | Network attack | firewalld on, public zone by default; no listening services out of the box; SSH off unless Developer mode enables it |
@@ -421,7 +512,7 @@ The system is secure by default with no settings changed: a stolen laptop reveal
 | Supply chain | CI builds from pinned base image digests; SBOM published with every release; Renovate bot opens update PRs |
 | Unpatched software | Automatic security updates; Health warns if the system is more than 14 days behind |
 
-Privacy: no telemetry, no account required, crash reports opt-in, the Store fetches metadata anonymously.
+Privacy: no telemetry, no account required, crash reports opt-in, the Store fetches metadata anonymously, and compatibility ratings are looked up offline.
 
 ## Default shortcuts and gestures
 
@@ -465,6 +556,7 @@ No image reaches users unless it boots in a VM, passes the automated checks, and
 | Glass visual test | Render 12 reference scenes (busy photo, white page, black, video frame); compare to golden images; compute text contrast | No visual regressions; contrast at least 4.5:1 on every scene |
 | Performance | Boot time (systemd-analyze), idle RAM, shell CPU, glass frame time on reference hardware | Budgets in Requirements are met |
 | Update test | Install previous release, upgrade to new, reboot, roll back, reboot | Updates and rollback work every release |
+| Windows compatibility | Nightly CI: install and launch freely downloadable Windows apps under the image's Wine and Bottles, screenshot the window | Ratings in the compatibility database stay true |
 | Accessibility | Orca smoke test, keyboard-only navigation script, axe-style checks on QML | Usable without mouse or sight |
 | Hardware lab | 6 reference laptops (Intel, AMD, NVIDIA, a cheap one, a high-DPI one, an older one) | Real-device sign-off before stable |
 
@@ -496,7 +588,7 @@ The prompt is a pack: one project memory file Claude Code reads every session, t
 You are the lead engineer of Lumen OS, a desktop Linux distribution. The full specification is docs/spec.md. Read it before every phase. If the spec and this file disagree, the spec wins; if the spec is technically wrong, stop and tell me.
 
 ## Product
-Easy by default, powerful underneath, never breaks, liquid-glass design. A new user never needs a terminal; a power user is never blocked by the GUI.
+Easy by default, powerful underneath, never breaks, liquid-glass design, and a real alternative to Windows. A new user never needs a terminal; a power user is never blocked by the GUI.
 
 ## Fixed architecture
 - Image: OCI image FROM quay.io/fedora-ostree-desktops/kinoite:<current Fedora>, managed by bootc. Built with Podman; ISO/qcow2 via bootc-image-builder.
@@ -504,13 +596,14 @@ Easy by default, powerful underneath, never breaks, liquid-glass design. A new u
 - Shell: Plasma shell package org.lumen.desktop with our own QML containments/plasmoids.
 - Apps: Qt 6/QML (C++). System services: Rust with zbus. CLI: Rust (clap).
 - User apps: Flatpak/Flathub only. Dev tools: distrobox/toolbx.
+- Windows apps: Wine via Bottles (Flatpak) and Proton (Steam); ratings from the Lumen compatibility database, looked up offline.
 - Security: Secure Boot, LUKS2 + TPM2, SELinux enforcing, firewalld, cosign-signed images, no telemetry.
 
 ## Critical build rule
 KWin and Plasma plugins have no stable ABI. lumen-glass and lumen-shell must be compiled in a multi-stage Containerfile stage FROM the same base image digest they ship in, against that image's kwin-devel / plasma-workspace-devel, then installed as RPMs. Never build them against a different KWin version.
 
 ## Repo layout
-image/ (Containerfile, overlay/, packages.toml), design/tokens/ (tokens.json + exporters), glass/, shell/, apps/settings, apps/store, apps/welcome, apps/backup, services/ (updated, health, hwd, settingsd, backupd), cli/, installer/, hardware/hardware.json, tests/, docs/.
+image/ (Containerfile, overlay/, packages.toml), design/tokens/ (tokens.json + exporters), glass/, shell/, apps/settings, apps/store, apps/welcome, apps/backup, apps/windows-app (the "Open Windows app" dialog), services/ (updated, health, hwd, settingsd, backupd), cli/, compat/ (compatibility database, schema, lumen-compat crate), windows-setup/ (Lumen Setup for Windows), installer/, hardware/hardware.json, tests/, docs/.
 
 ## Working rules
 - Work one phase at a time. At the end of each phase: run every acceptance test, show results, list known issues, wait for "continue".
@@ -527,7 +620,7 @@ image/ (Containerfile, overlay/, packages.toml), design/tokens/ (tokens.json + e
 ```text
 Read CLAUDE.md and docs/spec.md fully. Then:
 1. Write docs/architecture.md: components, how they talk (D-Bus names, files, protocols), build flow, and a dependency graph.
-2. Write docs/risks.md: top 15 technical risks (e.g. KWin ABI churn, NVIDIA signing, TPM enrolment UX) with mitigations.
+2. Write docs/risks.md: top 15 technical risks (e.g. KWin ABI churn, NVIDIA signing, TPM enrolment UX, the Secure Boot UEFI CA 2023 transition, hibernation under kernel lockdown, codec patents, BitLocker on Windows drives, Windows code signing for Lumen Setup, licences of compatibility data) with mitigations.
 3. Create the full repo skeleton from CLAUDE.md with README files, and a justfile with targets: build-image, build-iso, run-vm, test, lint.
 4. Set up GitHub Actions: lint job, and a placeholder build job.
 5. Check which Fedora release and KWin version are current in the Kinoite image and record them in docs/versions.md.
@@ -544,7 +637,11 @@ Build the base image per docs/spec.md "Spec: image build and layout".
 4. CI: build all variants, push to ghcr.io with cosign signatures, generate SBOM (syft), build qcow2 + anaconda-iso with bootc-image-builder.
 5. tests/boot: boot the qcow2 in QEMU/KVM in CI, assert SDDM reached within 60 s and `systemctl --failed` is empty.
 6. Configure /etc/containers/policy.json so the system only accepts our signed images.
-Acceptance: ISO installs in a VM with encryption; system boots; `bootc status` shows our signed image; `bootc upgrade` to a newer CI build and `bootc rollback` both work.
+7. Windows-app base: ntsync autoload, Bottles preinstalled on first boot, .exe and .msi open in Bottles until the Phase 7 dialog exists, metric-compatible fonts. Boot test checks /dev/ntsync exists and records whether kernel lockdown is on and hibernation is offered under Secure Boot.
+8. Codecs and hardware video decoding: write the options and their legal trade-offs as an ADR; the owner chooses; ship the choice.
+9. Compatibility database v0 in compat/: JSON schema, validation test, first 20 entries, ODbL licence file.
+10. Nightly CI job: install and launch freely downloadable Windows apps under the image's Wine, screenshot the window, update each entry's "last tested".
+Acceptance: ISO installs in a VM with encryption; system boots; `bootc status` shows our signed image; `bootc upgrade` to a newer CI build and `bootc rollback` both work; double-clicking an .exe opens Bottles; the compatibility job is green.
 ```
 
 ### Phase 2: design tokens and theme
@@ -599,30 +696,46 @@ Acceptance: every setting changeable from both GUI and CLI with identical result
 
 ```text
 Implement per "Spec: Store, first run, installer, hardware report" and the backup part of the updates spec.
-1. Lumen Store (libflatpak + AppStream): collections, plain-English permissions, Windows/macOS name aliases (data file), Bottles flow for .exe files.
+1. Lumen Store (libflatpak + AppStream): collections, plain-English permissions, Windows/macOS name aliases (data file); Essentials adds a OneDrive client, OpenRGB, Piper and Solaar.
 2. Welcome: all 9 steps, including TPM2 enrolment with recovery key and Windows/macOS file import.
 3. Backup app over restic with external drive, SMB and S3 targets; "Previous versions" in Files via snapper.
-4. Installer: theme Anaconda WebUI; three install modes.
-5. lumen-hwd report + hardware/hardware.json; live-session hardware report app.
+4. Installer: theme Anaconda WebUI; three install modes; "Install alongside Windows" detects BitLocker and Fast Startup and never resizes a BitLocker volume.
+5. lumen-hwd report + hardware/hardware.json, including the Microsoft UEFI CA 2023 check; live-session hardware report app.
 Acceptance: fresh install to first usable desktop in under 15 minutes in a VM; a non-technical tester completes setup, installs an app, restores a file and runs a backup with no help.
 ```
 
-### Phase 7: hardening, accessibility, performance
+### Phase 7: switching from Windows
 
 ```text
-1. Security review against the spec's threat table; fix gaps; document in docs/security.md.
+Implement per "Spec: Windows apps and switching".
+1. docs/windows-apps.md: the top 100 apps Windows users need, by category, with today's status; confirm the licences of every data source. The owner reviews the list.
+2. Compatibility database v1: recipes, alternatives, anti-cheat status; import ProtonDB and AreWeAntiCheatYet data with attribution; cover the top 100. Signed updates through lumen-updated; offline lookup only.
+3. lumen-compat crate: identify an .exe or .msi (version info, installer type, hash) and match it; `lumen app check`.
+4. "Open Windows app" dialog: rating, reason, alternatives, Install / Try it; creates the bottle with its recipe; adds the app to the menu.
+5. Sandbox defaults; Windows apps in Settings → Apps; `lumen app list --windows`; full removal.
+6. Store: ratings on Windows-name searches, Windows alternatives collection, web apps, Heroic and Lutris, anti-cheat status.
+7. Welcome: "Your Windows apps" scan of the Windows drive, with BitLocker unlock by recovery key.
+8. Lumen Setup for Windows (fork of Fedora Media Writer): hardware check, BitLocker / Fast Startup / Secure Boot checks, partition shrink, UTC clock, USB writer; built and code-signed in CI.
+9. Dual-boot Health checks: Fast Startup, clock, missing boot entry, Secure Boot certificate.
+Acceptance: every top-100 app has a rating and a path, and at least 80% are covered; the dialog, Store and CLI give the same rating; a lookup makes no network request; a Windows user installs Lumen with Lumen Setup, sees their apps' status, and installs five Windows apps by double-clicking, with every rating correct.
+```
+
+### Phase 8: hardening, accessibility, performance
+
+```text
+1. Security review against the spec's threat table, including Windows-app bottles and Lumen Setup; fix gaps; document in docs/security.md.
 2. Accessibility audit of every app and shell surface (Orca, keyboard, contrast, large text, reduced motion/transparency).
 3. Performance pass: boot < 10 s on NVMe, idle RAM < 1.5 GB; profile and fix the top offenders.
 4. Translations: extract strings, set up Weblate config, ship English plus a pseudo-locale for testing.
 Acceptance: all budgets met in CI and on a real laptop; no failing accessibility checks.
 ```
 
-### Phase 8: release v0.1
+### Phase 9: release v0.1
 
 ```text
 1. Release train in CI: dev on every merge, weekly beta, stable every 2 weeks after 7 days in beta.
 2. Update test job: install previous release, upgrade, reboot, rollback, reboot.
 3. Docs: user guide, install guide, FAQ, hardware notes, contributing guide.
 4. Publish signed images, ISO, SBOM, checksums and a plain-English changelog.
-Acceptance: v0.1 ISO installs and runs on at least two real machines; every test layer in the spec's Testing table passes.
+Acceptance: v0.1 ISO installs and runs on at least two real machines, one of them alongside Windows through Lumen Setup; every test layer in the spec's Testing table passes.
 ```
