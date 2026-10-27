@@ -20,7 +20,7 @@ Claude reads CLAUDE.md automatically, does that step (plus any ➕ steps right a
 
 ## Current step
 
-**0.5**
+**0.6** (with ➕ 0.7)
 
 ## Notes for the next session
 
@@ -38,6 +38,10 @@ Claude reads CLAUDE.md automatically, does that step (plus any ➕ steps right a
 - ADR 0002 (2026-10-27): the owner confirmed that remote help is same-network in v0.1, with RustDesk offered for help over the internet. Building a live ISO from a bootc image (step 1.8) is the riskiest fix; the fallback is in the ADR.
 - 0.3 done 2026-10-27: `docs/risks.md`, 15 ranked risks with mitigations, a watch list, and sources checked that day. It is a living document: update a risk when it changes. It adds Q16 (what "match" means for Flatpak theming, before 2.1) and **Q17** (TPM unlock bound to PCR 7 without a PIN can be defeated by booting any Fedora-signed system, so the spec's "a stolen laptop reveals nothing" doesn't hold; owner chooses PIN by default or more PCRs via systemd-pcrlock) for the 0.8 review. Q17 changes the spec's security table once decided.
 - 0.4 done 2026-10-27: a README in every folder of the CLAUDE.md layout, plus `docs/README.md` and `docs/decisions/README.md` (ADR index and format); top-level `README.md` with the licence section; `CONTRIBUTING.md` with the DCO rule; `LICENSE` copied from gnu.org (sha256 `3972dc97…6986`, the same file Fedora ships in coreutils). `image/overlay/` doesn't exist yet: everything in it is copied into the image root, so it can't hold a README (step 1.3 creates it). The hardware report has no `apps/hwreport` folder yet, because that name is still a proposal for the 0.8 review. **For the 0.8 review:** CONTRIBUTING.md says an AI assistant never adds a `Signed-off-by:` line, so the commits Claude makes carry no sign-off until the owner decides how to sign them off; and copyright lines say "Lumen OS contributors".
+- 0.5 done 2026-10-27: `just lint` passes in WSL (8 of 8 checks, about 7 s) and `just test` passes (the self-test: each check fails on a planted fault). The tools run in a container from `tests/lint/Containerfile` (Fedora 44 pinned by digest; reuse 6.2, ShellCheck 0.11, shfmt 3.7, markdownlint-cli2 0.23, just 1.59; 419 MB, about 2 min to build the first time), with the checkout read-only and no network. `tests/lint/run.sh` lists the checks; `.editorconfig` holds the shfmt settings, `.markdownlint.yaml` the Markdown rules. `build-image`, `build-iso` and `run-vm` print which step makes them work and exit 1 until then. Every file now has an SPDX header; the architecture PNG is covered by `REUSE.toml`; `LICENSES/GPL-3.0-or-later.txt` must stay identical to `LICENSE` (lint checks it).
+- Known issue (0.5): Node.js 24 in Fedora 44 (`nodejs24-24.18.0`) segfaults in `Intl.Segmenter` on emoji, so markdownlint's MD060 (table column style) is off. A table with an emoji crashed markdownlint before that. Turn MD060 back on when the lint image's base moves to a fixed Node.
+- For 0.6: the CI lint job should run `just lint` and `just test` in the same container, so CI and WSL can't drift: Ubuntu runners have Podman, but `just` must be installed (pin the action or package). Add actionlint and yamllint for the workflow files then: yamllint is in Fedora's repositories, actionlint isn't (use its release binary with a checksum, or its container image pinned by digest). Mark new scripts executable with `git add --chmod=+x`, because the Windows checkout has `core.filemode=false`.
+- From Git Bash, `wsl.exe -d FedoraLinux-44 -- cmd` passes the command line through the login shell, which expands `$variables` first; use `--exec bash -c '...'` for scripts (now in the setup guide).
 
 ---
 
@@ -54,7 +58,7 @@ Claude reads CLAUDE.md automatically, does that step (plus any ➕ steps right a
 - [x] **0.2** `docs/architecture.md` part 2: build flow and a Mermaid dependency graph.
 - [x] **0.3** `docs/risks.md`: top 15 technical risks with mitigations. Must include: the Secure Boot UEFI CA 2023 transition, hibernation under kernel lockdown, codec patents, BitLocker on Windows drives, Windows code signing for Lumen Setup, and the licences of compatibility data.
 - [x] **0.4** Repo skeleton from the CLAUDE.md layout, with a README in each folder.
-- [ ] ➕ **0.5** `justfile` (build-image, build-iso, run-vm, test, lint) and lint tooling. *Done when:* `just lint` passes in WSL.
+- [x] ➕ **0.5** `justfile` (build-image, build-iso, run-vm, test, lint) and lint tooling. *Done when:* `just lint` passes in WSL.
 - [ ] **0.6** GitHub Actions: lint job and a placeholder build job. *Done when:* CI is green.
 - [ ] ➕ **0.7** `docs/versions.md`: current Fedora release, KWin version and Kinoite image digest (read via skopeo/podman, in CI or WSL).
 - [ ] **0.8** 👤 Phase 0 acceptance: you review the docs; `just lint` and CI are green.
