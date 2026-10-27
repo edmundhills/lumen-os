@@ -23,6 +23,8 @@ Claude reads CLAUDE.md automatically, does that one step, commits, updates this 
 - Spec source: `C:\Users\edmun\Downloads\Perfect Linux Distro — Spec & Build Prompt.docx`.
 - A3 done 2026-10-27: repo https://github.com/edmundhills/lumen-os (push works); COPR account active. Commits must use the owner's GitHub no-reply email (set in `.git/config`), never their personal email.
 - No licence is chosen yet (the spec doesn't name one). lumen-glass forks KWin code (GPL-2.0-or-later), so the licence must be GPL-compatible. Ask the owner before 0.4.
+- A4 prepared 2026-10-27, waiting on the owner. Written: `docs/dev-setup-windows.md` and `tests/dev-env/check-wsl.sh` (tested in Git Bash with stub tools; not yet run in real WSL). The owner must do steps 1–6 of the guide: install WSL (admin), install the newest `FedoraLinux-NN` on **D:** (C: has only 99.9 GB free, under the 100 GB the spec asks for), install the tools, `gh auth login`, then run the check. When the check prints "Ready." (exit 0): tick A4, record the distro name and the nested-virtualization result here, and move "Current step" to 0.1. If it fails, fix what the FAIL lines say.
+- Machine facts (2026-10-27): Ryzen 7 5800X, 16 GB RAM, virtualization on in firmware, Windows 11 Home build 26200, gh not installed on Windows. Claude reaches WSL from Windows with `wsl -d <distro> --cd "<repo>" -- <cmd>`; set `WSL_UTF8=1` (else UTF-16 output), and from Git Bash prefix `MSYS_NO_PATHCONV=1`.
 - Spec issue to raise at step 1.3: the spec puts image defaults in `/usr/etc`, but `bootc container lint` rejects images that contain `/usr/etc`. The likely fix is to write defaults to `/etc` in the Containerfile (bootc 3-way merges it) or to `/usr/lib` / `/usr/share`. Verify, ask the owner, record an ADR.
 
 ---
