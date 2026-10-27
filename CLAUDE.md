@@ -31,7 +31,7 @@ image/ (Containerfile, overlay/, packages.toml), design/tokens/ (tokens.json + e
 
 ## Step mode (how we work across sessions)
 The owner works in short sessions to stay within usage limits. PROGRESS.md is the step list and the hand-off between sessions. These rules refine the working rules above.
-- At the start of a session, read PROGRESS.md and do the step under "Current step" (or the first unchecked one). Do only that one step, then stop.
+- At the start of a session, read PROGRESS.md and do the step under "Current step" (or the first unchecked one). Do that step plus any following steps marked ➕ (a batch of small steps), then stop. Commit after each step in the batch.
 - Read only the docs/spec.md sections the step names, not the whole spec. This replaces "read it before every phase" while in step mode.
 - Commit after each meaningful piece of work, so a session that ends early loses nothing.
 - Before you stop, done or not, update PROGRESS.md: tick the step and move "Current step" to the next one, or write exactly where you stopped under "Notes for the next session".

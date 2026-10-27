@@ -8,9 +8,9 @@ The spec's 10 phases (0–9), cut into session-sized steps. Do **one step per se
 2. Send: `Do the next step in PROGRESS.md.`
 3. If a session ran out mid-step, send: `Continue the current step in PROGRESS.md.`
 
-Claude reads CLAUDE.md automatically, does that one step, commits, updates this file, and stops.
+Claude reads CLAUDE.md automatically, does that step (plus any ➕ steps right after it), commits, updates this file, and stops.
 
-**Legend:** 👤 = needs you (an account, an admin install, real hardware or an approval). ⚠️ = big step, may get split into a/b sub-steps.
+**Legend:** 👤 = needs you (an account, an admin install, real hardware or an approval). ⚠️ = big step, may get split into a/b sub-steps. ➕ = small step, done in the same session as the step above it (a batch).
 
 ## Current step
 
@@ -46,20 +46,20 @@ Claude reads CLAUDE.md automatically, does that one step, commits, updates this 
 - [x] **0.2** `docs/architecture.md` part 2: build flow and a Mermaid dependency graph.
 - [ ] **0.3** `docs/risks.md`: top 15 technical risks with mitigations. Must include: the Secure Boot UEFI CA 2023 transition, hibernation under kernel lockdown, codec patents, BitLocker on Windows drives, Windows code signing for Lumen Setup, and the licences of compatibility data.
 - [ ] **0.4** Repo skeleton from the CLAUDE.md layout, with a README in each folder.
-- [ ] **0.5** `justfile` (build-image, build-iso, run-vm, test, lint) and lint tooling. *Done when:* `just lint` passes in WSL.
+- [ ] ➕ **0.5** `justfile` (build-image, build-iso, run-vm, test, lint) and lint tooling. *Done when:* `just lint` passes in WSL.
 - [ ] **0.6** GitHub Actions: lint job and a placeholder build job. *Done when:* CI is green.
-- [ ] **0.7** `docs/versions.md`: current Fedora release, KWin version and Kinoite image digest (read via skopeo/podman, in CI or WSL).
+- [ ] ➕ **0.7** `docs/versions.md`: current Fedora release, KWin version and Kinoite image digest (read via skopeo/podman, in CI or WSL).
 - [ ] **0.8** 👤 Phase 0 acceptance: you review the docs; `just lint` and CI are green.
 
 ## Phase 1 — Bootable image (spec: "Spec: image build and layout", Phase 1)
 
 - [ ] **1.1** `image/packages.toml` from the package manifest table (install and remove lists).
-- [ ] **1.2** `image/Containerfile`: FROM Kinoite pinned by digest; install/remove packages; `bootc container lint`.
+- [ ] ➕ **1.2** `image/Containerfile`: FROM Kinoite pinned by digest; install/remove packages; `bootc container lint`.
 - [ ] **1.3** Overlay: enable firewalld, fwupd-refresh.timer, snapper timers, tuned-ppd; SELinux enforcing; remove the stock Plasma layout and Discover. Defaults go in `/usr/lib` and `/usr/share`, or the image's `/etc` where they can only live there; never `/usr/etc` (ADR 0002).
-- [ ] **1.4** Btrfs zstd defaults and snapper config for /home (24 hourly, 7 daily, 4 weekly).
+- [ ] ➕ **1.4** Btrfs zstd defaults and snapper config for /home (24 hourly, 7 daily, 4 weekly).
 - [ ] **1.5** CI: build the default image and push to ghcr.io (free runner disk space first; Kinoite images are large).
 - [ ] **1.6** 👤 cosign signing (you add the key as a repo secret) and SBOM with syft.
-- [ ] **1.7** `/etc/containers/policy.json` and sigstore config so the system accepts only our signed images.
+- [ ] ➕ **1.7** `/etc/containers/policy.json` and sigstore config so the system accepts only our signed images.
 - [ ] **1.8** ⚠️ CI: bootc-image-builder builds the qcow2; build the install ISO as a live ISO from our image (try Titanoboa first) that runs a live session and starts Anaconda WebUI (ADR 0002). Record the tool in an ADR. If no live ISO works, fall back to `anaconda-iso` with a partial kickstart and tell the owner.
 - [ ] **1.9** `tests/boot`: QEMU/KVM boot test in CI; SDDM within 60 s; `systemctl --failed` empty. Also boot once with Secure Boot (OVMF) and record whether kernel lockdown is on and hibernation is offered (`/sys/kernel/security/lockdown`, `/sys/power/state`) in ADR 0001's follow-up.
 - [ ] **1.10** Variant `lumen-gaming`: Steam, Gamescope session, MangoHud, controller udev rules.
@@ -74,17 +74,17 @@ Claude reads CLAUDE.md automatically, does that one step, commits, updates this 
 ## Phase 2 — Design tokens and theme (spec: "Liquid glass", "Design tokens", Phase 2)
 
 - [ ] **2.1** `tokens.json` part 1: colours (light, dark, 8 accents), Inter type scale, radii, 4 px spacing, elevation, plus a JSON schema.
-- [ ] **2.2** `tokens.json` part 2: glass presets per role (all parameters from the spec table) and spring presets; validation test.
+- [ ] ➕ **2.2** `tokens.json` part 2: glass presets per role (all parameters from the spec table) and spring presets; validation test.
 - [ ] **2.3** Exporter framework and the QML singleton module `org.lumen.style`.
 - [ ] **2.4** Exporter: KDE colour schemes.
-- [ ] **2.5** Exporter: Kvantum theme.
+- [ ] ➕ **2.5** Exporter: Kvantum theme.
 - [ ] **2.6** Exporter: GTK 4/libadwaita CSS.
-- [ ] **2.7** Exporter: GTK 3 theme.
+- [ ] ➕ **2.7** Exporter: GTK 3 theme.
 - [ ] **2.8** KDecoration plugin scaffold, built in a Containerfile stage.
-- [ ] **2.9** Decoration: rounded corners and glass titlebar role.
+- [ ] ➕ **2.9** Decoration: rounded corners and glass titlebar role.
 - [ ] **2.10** Cursor and icon theme config (open icon set with accent recolouring).
-- [ ] **2.11** Global theme (look-and-feel package) `org.lumen.desktop`.
-- [ ] **2.12** Run all exporters during the image build.
+- [ ] ➕ **2.11** Global theme (look-and-feel package) `org.lumen.desktop`.
+- [ ] ➕ **2.12** Run all exporters during the image build.
 - [ ] **2.13** Visual test: Qt, GTK 4, GTK 3 and Flatpak apps in light and dark; store golden images.
 - [ ] **2.14** 👤 Phase 2 acceptance: all four app types match in both modes; one accent change updates all of them.
 
@@ -102,7 +102,7 @@ Claude reads CLAUDE.md automatically, does that one step, commits, updates this 
 - [ ] **3.10** Tiers Full / Lite / Solid in the render path.
 - [ ] **3.11** First-boot benchmark oneshot → `/var/lib/lumen/glass-tier`; battery saver drops a tier; Reduce Transparency and Reduce Motion.
 - [ ] **3.12** Spring open/close/morph animations (stiffness 380, damping 30).
-- [ ] **3.13** Smooth-min SDF merging for dock shapes within 12 px.
+- [ ] ➕ **3.13** Smooth-min SDF merging for dock shapes within 12 px.
 - [ ] **3.14** GTK glass without a GTK module (ADR 0002): opt-in list of GTK app IDs with the tokens; lumen-glass draws whole-window glass for them; check that it shows only where the GTK themes (2.6, 2.7) left header bars and sidebars translucent.
 - [ ] **3.15** ⚠️ Test harness: `kwin_wayland --virtual` in CI rendering the 12 reference scenes.
 - [ ] **3.16** Golden-image compare, contrast computation, frame-time benchmark.
@@ -112,20 +112,20 @@ Claude reads CLAUDE.md automatically, does that one step, commits, updates this 
 
 - [ ] **4.1** Shell package `org.lumen.desktop` skeleton; builds and loads in the image.
 - [ ] **4.2** Top bar layout (left / centre / right), glass role bar, 32 px.
-- [ ] **4.3** Top bar indicators: tray, network, sound, battery, user; camera/mic/location indicators.
+- [ ] ➕ **4.3** Top bar indicators: tray, network, sound, battery, user; camera/mic/location indicators.
 - [ ] **4.4** Dock: pinned and running apps (TaskManager), running dot.
-- [ ] **4.5** Dock: progress bars, badges, recent files on right-click, auto-hide.
+- [ ] ➕ **4.5** Dock: progress bars, badges, recent files on right-click, auto-hide.
 - [ ] **4.6** Command palette QML UI over KRunner: apps, files, settings, calculator, unit and currency conversion.
-- [ ] **4.7** Palette: `>` commands, `?` web search, open windows.
+- [ ] ➕ **4.7** Palette: `>` commands, `?` web search, open windows.
 - [ ] **4.8** Quick settings tiles and sliders, rearrangeable.
 - [ ] **4.9** Notification centre: grouped, inline reply, actions, 7-day history.
-- [ ] **4.10** Focus modes (Work, Gaming, Sleep).
+- [ ] ➕ **4.10** Focus modes (Work, Gaming, Sleep).
 - [ ] **4.11** Overview restyle.
 - [ ] **4.12** Tiling: custom tiles, Super+arrows, saved layouts per monitor.
-- [ ] **4.13** Auto-tile KWin script per workspace.
+- [ ] ➕ **4.13** Auto-tile KWin script per workspace.
 - [ ] **4.14** Lock screen theme.
-- [ ] **4.15** SDDM theme (Wayland greeter).
-- [ ] **4.16** OSD restyle.
+- [ ] ➕ **4.15** SDDM theme (Wayland greeter).
+- [ ] ➕ **4.16** OSD restyle.
 - [ ] **4.17** Apply every shortcut and gesture; Super+/ cheat-sheet overlay.
 - [ ] **4.18** QML unit tests; session test that opens each surface and screenshots it.
 - [ ] **4.19** Keyboard-only and Orca tests; startup < 1.5 s and < 250 MB check.
@@ -135,16 +135,16 @@ Claude reads CLAUDE.md automatically, does that one step, commits, updates this 
 
 - [ ] **5.1** Rust workspace (`services/`, `cli/`), shared D-Bus interface crate, hardened systemd unit and polkit templates.
 - [ ] **5.2** `lumen-settingsd`: TOML store, get/set/list, change signals.
-- [ ] **5.3** `lumen` CLI skeleton (clap): `--json`, completions, `lumen settings`.
+- [ ] ➕ **5.3** `lumen` CLI skeleton (clap): `--json`, completions, `lumen settings`.
 - [ ] **5.4** `lumen-updated` part 1: timer, check order (bootc, Flatpak, fwupd), D-Bus API.
 - [ ] **5.5** `lumen-updated` part 2: low-priority downloads, metered/battery rules, staging, one notification.
 - [ ] **5.6** `lumen-updated` part 3: boot health check that needs no login (SDDM up, NetworkManager running, no failed critical units) with boot-counting fallback (try greenboot first); first-login shell check that offers to go back (ADR 0002).
 - [ ] **5.7** `lumen-updated` part 4: history, rollback to signed tags; `lumen update`, `lumen rollback`.
 - [ ] **5.8** `lumen-health`: first 5 checks with fixes.
-- [ ] **5.9** `lumen-health`: last 5 checks with fixes; `lumen health [--fix]`.
+- [ ] ➕ **5.9** `lumen-health`: last 5 checks with fixes; `lumen health [--fix]`.
 - [ ] **5.10** `lumen-hwd`: report, driver status, NVIDIA image switch; `lumen hw report`.
 - [ ] **5.11** `lumen-backupd` (restic schedules) and `lumen backup`.
-- [ ] **5.12** CLI: `lumen app`, `lumen dev enable`, `lumen glass tier`.
+- [ ] ➕ **5.12** CLI: `lumen app`, `lumen dev enable`, `lumen glass tier`.
 - [ ] **5.13** Settings app frame: glass sidebar, search across pages, `lumen-settings://` deep links.
 - [ ] **5.14** Settings pages: Wi-Fi & Network (including OpenConnect VPN import), Bluetooth.
 - [ ] **5.15** Settings pages: Displays, Sound.
@@ -172,7 +172,7 @@ Claude reads CLAUDE.md automatically, does that one step, commits, updates this 
 - [ ] **6.9** "Previous versions" in Files via snapper.
 - [ ] **6.10** Installer theme (Anaconda WebUI in the live session from 1.8) and the three install modes; "Install alongside Windows" detects BitLocker and Fast Startup and never resizes a BitLocker volume.
 - [ ] **6.11** `hardware/hardware.json` and the `lumen-hwd` compare logic, including the Microsoft UEFI CA 2023 check.
-- [ ] **6.12** Hardware report app (green / amber / red) in the install USB's live session. If 1.8 had to fall back to `anaconda-iso`, ask the owner before dropping it (ADR 0002).
+- [ ] ➕ **6.12** Hardware report app (green / amber / red) in the install USB's live session. If 1.8 had to fall back to `anaconda-iso`, ask the owner before dropping it (ADR 0002).
 - [ ] **6.13** 👤 Phase 6 acceptance: install to usable desktop in < 15 min; a non-technical tester sets up, installs an app, restores a file and runs a backup unaided.
 
 ## Phase 7 — Switching from Windows (spec: "Spec: Windows apps and switching", Phase 7)
@@ -195,9 +195,9 @@ Claude reads CLAUDE.md automatically, does that one step, commits, updates this 
 - [ ] **8.1** Security review part 1 (boot, disk, image) → `docs/security.md`; fix gaps.
 - [ ] **8.2** Security review part 2 (apps including Windows-app bottles and Lumen Setup, network, privilege, supply chain: SBOM, Renovate, pinned digests); fix gaps.
 - [ ] **8.3** Accessibility audit: shell surfaces.
-- [ ] **8.4** Accessibility audit: apps.
+- [ ] ➕ **8.4** Accessibility audit: apps.
 - [ ] **8.5** Performance: boot < 10 s on NVMe.
-- [ ] **8.6** Performance: idle RAM < 1.5 GB.
+- [ ] ➕ **8.6** Performance: idle RAM < 1.5 GB.
 - [ ] **8.7** Translations: string extraction, Weblate config, pseudo-locale.
 - [ ] **8.8** 👤 Phase 8 acceptance on a real laptop.
 
@@ -206,6 +206,6 @@ Claude reads CLAUDE.md automatically, does that one step, commits, updates this 
 - [ ] **9.1** Release train in CI: dev on every merge, weekly beta, stable every 2 weeks after 7 days in beta.
 - [ ] **9.2** Update test job: install previous, upgrade, reboot, roll back, reboot.
 - [ ] **9.3** Docs: user guide and install guide.
-- [ ] **9.4** Docs: FAQ (including what won't come over from Windows), hardware notes, contributing guide.
+- [ ] ➕ **9.4** Docs: FAQ (including what won't come over from Windows), hardware notes, contributing guide.
 - [ ] **9.5** 👤 Publish v0.1 (you approve): signed images, ISO, SBOM, checksums, plain-English changelog.
 - [ ] **9.6** 👤 Install and run v0.1 on two real machines, one of them alongside Windows through Lumen Setup.
