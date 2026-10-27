@@ -30,7 +30,7 @@ Most desktop Linux pain is not missing features but inconsistency, breakage and 
 | Inconsistent look between GTK, Qt, Electron and Flatpak apps | One design token set exported to Qt, GTK 4/libadwaita, GTK 3, and icon/cursor themes; portals for file pickers |
 | Hardware hit-and-miss: NVIDIA, Wi-Fi, fingerprint, printers, sleep | Hardware check on the live USB before install; NVIDIA drivers signed into the image; driver status page in Settings |
 | Fractional scaling and multi-monitor quirks | Wayland-only, per-monitor scale, HDR and VRR on by default where supported |
-| Battery life worse than Windows/macOS | power-profiles-daemon tuned per device class, reliable suspend with a safe shutdown at critical battery, per-app energy view. No hibernation while Secure Boot lockdown blocks it (ADR 0001) |
+| Battery life worse than Windows/macOS | power profiles (tuned-ppd) tuned per device class, reliable suspend with a safe shutdown at critical battery, per-app energy view. No hibernation while Secure Boot lockdown blocks it (ADR 0001) |
 | Gaming setup is fiddly | Steam, Proton, Gamescope and MangoHud preinstalled; a Game Mode toggle; Heroic and Lutris for other launchers; anti-cheat status shown before install |
 | Windows apps don't run, and nobody tells you which will | A plain-English compatibility rating before every install; double-click an `.exe` to install it with a tested recipe into its own sandboxed bottle (Wine via Bottles); web apps and named alternatives when an app won't run |
 | No honest answer about what will come with you | Hardware check and "Your Windows apps" report before and during setup: what works, what needs an alternative, what won't |
@@ -188,7 +188,7 @@ The OS is a single OCI container image built from a Containerfile, so the whole 
 
 1. `FROM quay.io/fedora-ostree-desktops/kinoite:<current Fedora release>`: Fedora's KDE atomic image, which already carries KWin, Qt 6 and the Plasma libraries we reuse.
 1. Layer Lumen packages (RPMs built in our COPR repo) and remove unwanted defaults.
-1. Copy config overlays from `/image/overlay` into `/usr` (never `/etc` directly; defaults go in `/usr/etc` and `/usr/share`).
+1. Copy config overlays from `image/overlay` into the image. Vendor defaults go in `/usr/lib` and `/usr/share` wherever the software reads them there (systemd, polkit, sysctl, udev, XDG data directories). Config that only exists in `/etc` goes in the image's `/etc`, which bootc treats as the default and 3-way merges with local changes on every update. Never create `/usr/etc`: it is a bootc implementation detail and `bootc container lint` rejects it (ADR 0002).
 1. Run `bootc container lint` to catch image mistakes.
 1. Push to `ghcr.io/<org>/lumen:<channel>` signed with cosign; build ISO and qcow2 with `bootc-image-builder`.
 
@@ -206,7 +206,7 @@ The OS is a single OCI container image built from a Containerfile, so the whole 
 | Area | Included | Removed from Kinoite |
 | --- | --- | --- |
 | Desktop | KWin, Plasma libraries, LayerShellQt, KRunner, xdg-desktop-portal-kde, lumen-shell, lumen-glass | Stock Plasma panels and default plasmoids |
-| System | bootc, flatpak, distrobox, podman, snapper, btrfs-progs, fwupd, power-profiles-daemon, tuned-ppd, ntsync autoload (Wine) | discover (replaced by Lumen Store) |
+| System | bootc, flatpak, distrobox, podman, snapper, btrfs-progs, fwupd, tuned-ppd (power profiles; it conflicts with power-profiles-daemon, so only one can ship), ntsync autoload (Wine) | discover (replaced by Lumen Store) |
 | Hardware | Mesa, Intel/AMD firmware, sof-firmware, fprintd, iio-sensor-proxy, cups + ipp-usb, sane-airscan, bluez, device rules for OpenRGB and libratbag (ratbagd) | none |
 | Media | PipeWire, WirePlumber, ffmpeg-free plus codecs via Flatpak runtime; system codecs and hardware video decoding per the codecs ADR (step 1.14) | none |
 | Network | NetworkManager-openconnect (Cisco, GlobalProtect, Fortinet VPNs) | none |
@@ -235,7 +235,8 @@ One daemon, `lumen-updated`, owns every kind of update so the user sees one queu
 1. Downloads run at low I/O and CPU priority, pause on metered networks and below 20% battery unless plugged in.
 1. The OS image is staged with `bootc upgrade`; Flatpaks apply immediately when the app is not running; firmware waits for user consent.
 1. One notification: "Update ready: restart when convenient" with Restart Now, Tonight, or Later.
-1. After reboot, a health check runs within 2 minutes (shell started, network up, no failed critical units). If it fails twice, the boot loader automatically falls back to the previous deployment and Settings shows what happened.
+1. After reboot, a boot health check runs within 2 minutes without waiting for anyone to log in: the login screen is up, NetworkManager is running (not necessarily connected, since a laptop may be offline), and no critical units failed. If it fails on two boots in a row, the boot loader automatically falls back to the previous deployment and Settings shows what happened.
+1. At the first login after an update, a session check confirms the shell started. If it didn't, the user is offered "Go back to the previous version"; this is not automatic, because one user's broken session shouldn't roll back the whole machine (ADR 0002).
 
 ### Rollback
 
@@ -255,7 +256,8 @@ lumen-glass is a KWin 6 effect plugin, started as a fork of KWin's built-in blur
 
 ### How surfaces ask for glass
 
-- Wayland clients: `org_kde_kwin_blur` region (Qt apps via `KWindowEffects::enableBlurBehind`; GTK apps via our small GTK module). Add `ext-background-effect-v1` support when it lands in KWin.
+- Wayland clients: `org_kde_kwin_blur` region (Qt apps via `KWindowEffects::enableBlurBehind`). Add `ext-background-effect-v1` support when it lands in KWin.
+- GTK apps: GTK 4 has no loadable modules and Flatpak apps can't load modules from the host, so GTK apps get glass from the compositor instead (ADR 0002). The GTK 4 and GTK 3 themes make header bars and sidebars translucent, and lumen-glass draws glass behind the whole window for GTK apps on an opt-in list of app IDs kept with the tokens. Glass shows only where the theme left the window translucent; content stays opaque.
 - Glass style per surface is set by a window property or shell role: `bar`, `dock`, `menu`, `popover`, `notification`, `sidebar`, `titlebar`. Each role maps to a preset in tokens.json.
 - Windows that request nothing get rounded corners and a soft shadow only.
 
@@ -330,7 +332,7 @@ Lumen Settings is a new QML app with a glass sidebar and search; it reuses KDE's
 | Appearance | Light/dark/auto, accent, wallpaper, glass on/off | Glass tier, corner radius, fonts, icon theme | tokens + lumen-glass |
 | Desktop & Dock | Dock size, auto-hide, hot corners | Tiling layouts, per-workspace rules | lumen-shell config |
 | Notifications | Per-app on/off, focus modes | Sound, priority, lock-screen content | Plasma notifications |
-| Power & Battery | Profile, battery health, usage per app | Charge limit (80%), suspend timing, critical-battery action (hibernate offered only where Secure Boot lockdown allows it) | power-profiles-daemon, UPower |
+| Power & Battery | Profile, battery health, usage per app | Charge limit (80%), suspend timing, critical-battery action (hibernate offered only where Secure Boot lockdown allows it) | tuned-ppd (power profiles), UPower |
 | Privacy & Security | Camera/mic/location per app, screen lock, firewall on/off | Firewall rules, Secure Boot and TPM status, Flatpak permissions | firewalld, Flatpak portals |
 | Users | Accounts, avatar, password, fingerprint | Groups, autologin | AccountsService |
 | Apps | Default apps, startup apps, uninstall, Windows apps (rating, remove, reset) | Flatpak permission overrides (like Flatseal) | Flatpak |
@@ -340,7 +342,7 @@ Lumen Settings is a new QML app with a glass sidebar and search; it reuses KDE's
 | Keyboard & Input | Layouts, shortcuts, touchpad, mouse | Remapping, compose key, input method | KWin input |
 | Accessibility | Screen reader, zoom, large text, contrast, reduce motion/transparency | Sticky/slow keys, colour filters | KWin + Orca |
 | Developer | Developer mode switch | Containers list, SSH server, kernel logs | distrobox, podman |
-| About & Health | Device name, specs, System Health, Get help from a friend (remote desktop with a one-time code and a visible indicator) | Logs export, Reset Lumen (keep files or erase everything) | lumen-health, Plasma remote desktop |
+| About & Health | Device name, specs, System Health, Get help from a friend: on the same network, remote desktop with a one-time code and a visible indicator; over the internet, RustDesk from the Store, with a plain note that its servers carry the connection (ADR 0002) | Logs export, Reset Lumen (keep files or erase everything) | lumen-health, Plasma remote desktop (KRdp) |
 
 ### System Health checks (each with a plain-English result and a Fix button)
 
@@ -390,7 +392,9 @@ These four are the user's first impression, so each must work without reading an
 
 ### Installer
 
-- Anaconda WebUI from `bootc-image-builder` (anaconda-iso target), themed with Lumen tokens.
+- Install media: a live ISO built from the Lumen image itself (try Universal Blue's Titanoboa first). It boots into a Lumen live session that runs the hardware report, then starts the installer (ADR 0002). bootc-image-builder's `anaconda-iso` can't do this: it boots straight into Anaconda with no live desktop, and by default installs unattended to the first disk.
+- Fallback, only if no live ISO works by Phase 6: `anaconda-iso` with a partial kickstart, so the user picks the disk and install mode. The hardware report then runs only in Lumen Setup for Windows and after install, which needs the owner's approval because it drops the live-USB report.
+- Anaconda WebUI, running in the live session, themed with Lumen tokens.
 - Three choices only: Erase disk (default, encrypted), Install alongside Windows, Custom (expert partitioning).
 - Install alongside Windows uses free space the user (or Lumen Setup for Windows) made by shrinking Windows from inside Windows. If the Windows partition is plain NTFS and there is no free space, it can resize NTFS, with a warning and a backup reminder. It never resizes a BitLocker volume from Linux, and it stops with a plain-English explanation if Windows Fast Startup or hibernation has left the drive locked.
 - Under 10 minutes on a typical SSD.
@@ -460,7 +464,7 @@ Lumen says these plainly in ratings, the Store and the FAQ, and offers the best 
 - 4K video in streaming services' browser players (DRM limits).
 - Windows Hello face unlock, iCloud desktop sync, and Windows-only drivers and vendor tools.
 
-After v0.1: Windows apps in a window through a Windows virtual machine with the user's own licence; an opt-in "Report how it went" button; parental controls; local-only dictation.
+After v0.1: Windows apps in a window through a Windows virtual machine with the user's own licence; an opt-in "Report how it went" button; parental controls; local-only dictation; help from a friend over the internet without a third-party app (a Lumen relay; needs the owner's approval for its running costs and privacy).
 
 ## Spec: lumen CLI and services
 
@@ -631,10 +635,10 @@ Acceptance: `just lint` passes; CI green; docs reviewed by me.
 
 ```text
 Build the base image per docs/spec.md "Spec: image build and layout".
-1. image/Containerfile: FROM kinoite (pinned by digest); install packages from image/packages.toml; remove the stock Plasma default layout and Discover; copy image/overlay into /usr; enable services (firewalld, fwupd-refresh.timer, snapper timers, power-profiles-daemon); SELinux enforcing; run `bootc container lint`.
+1. image/Containerfile: FROM kinoite (pinned by digest); install packages from image/packages.toml; remove the stock Plasma default layout and Discover; copy image/overlay into the image (vendor defaults in /usr/lib and /usr/share, /etc only where needed, never /usr/etc); enable services (firewalld, fwupd-refresh.timer, snapper timers, tuned-ppd); SELinux enforcing; run `bootc container lint`.
 2. Btrfs defaults and snapper config for /home (24 hourly, 7 daily, 4 weekly).
 3. Variants: lumen (default), lumen-nvidia (akmods-built signed kmods; MOK enrolment doc), lumen-gaming.
-4. CI: build all variants, push to ghcr.io with cosign signatures, generate SBOM (syft), build qcow2 + anaconda-iso with bootc-image-builder.
+4. CI: build all variants, push to ghcr.io with cosign signatures, generate SBOM (syft), build the qcow2 with bootc-image-builder and the live install ISO from the image (anaconda-iso only as the fallback in "Installer").
 5. tests/boot: boot the qcow2 in QEMU/KVM in CI, assert SDDM reached within 60 s and `systemctl --failed` is empty.
 6. Configure /etc/containers/policy.json so the system only accepts our signed images.
 7. Windows-app base: ntsync autoload, Bottles preinstalled on first boot, .exe and .msi open in Bottles until the Phase 7 dialog exists, metric-compatible fonts. Boot test checks /dev/ntsync exists and records whether kernel lockdown is on and hibernation is offered under Secure Boot.
@@ -666,7 +670,7 @@ Implement glass/ per the spec's "Spec: lumen-glass effect" section exactly.
 5. Rounded corners and soft shadows for all windows; glass titlebar role.
 6. Tiers Full/Lite/Solid; first-boot benchmark service (systemd oneshot) writing /var/lib/lumen/glass-tier; battery saver drops one tier; honour Reduce Transparency and Reduce Motion.
 7. Spring-based open/close/morph animations; smooth-min SDF merging for dock shapes.
-8. GTK clients: a small GTK module that requests the blur region for GTK 4/3 windows that declare glass.
+8. GTK clients: no GTK module (GTK 4 has none, and Flatpak apps can't load one). Draw whole-window glass for GTK apps on the opt-in list; the GTK themes make header bars and sidebars translucent.
 9. Tests: run kwin_wayland --virtual in CI, render the 12 reference scenes, compare to golden images (with tolerance), compute contrast; benchmark frame time.
 Acceptance: contrast >= 4.5:1 on all scenes; Full tier holds 60 fps with 8 glass surfaces on Intel Iris Xe class graphics; idle GPU use near zero; Solid tier correct with no backdrop sampling.
 ```
@@ -685,7 +689,7 @@ Acceptance: shell starts < 1.5 s, < 250 MB RAM, ~0% CPU idle; every shortcut wor
 ```text
 Implement services/ and cli/ per "Spec: lumen CLI and services", then apps/settings per "Spec: Lumen Settings and System Health".
 1. Rust services with zbus; systemd units with hardening (ProtectSystem=strict, NoNewPrivileges, etc.); polkit policies.
-2. lumen-updated: the full update flow in "Spec: updates, rollback and backup", including metered/battery rules, a single notification, post-boot health check with automatic fallback (greenboot-style boot counting), history and rollback to signed tags.
+2. lumen-updated: the full update flow in "Spec: updates, rollback and backup", including metered/battery rules, a single notification, a post-boot health check that needs no login with automatic fallback (greenboot-style boot counting), the first-login shell check, history and rollback to signed tags.
 3. lumen-health: every check in the System Health table with its Fix.
 4. lumen CLI: every command in the CLI table, --json, shell completions.
 5. Settings app: every page in the table with Basic and Advanced views; reuse KCM backends where solid; search across all pages and options; deep links (lumen-settings://page/option) used by the palette and Health fixes.
@@ -699,7 +703,7 @@ Implement per "Spec: Store, first run, installer, hardware report" and the backu
 1. Lumen Store (libflatpak + AppStream): collections, plain-English permissions, Windows/macOS name aliases (data file); Essentials adds a OneDrive client, OpenRGB, Piper and Solaar.
 2. Welcome: all 9 steps, including TPM2 enrolment with recovery key and Windows/macOS file import.
 3. Backup app over restic with external drive, SMB and S3 targets; "Previous versions" in Files via snapper.
-4. Installer: theme Anaconda WebUI; three install modes; "Install alongside Windows" detects BitLocker and Fast Startup and never resizes a BitLocker volume.
+4. Installer: theme Anaconda WebUI in the live session; three install modes; "Install alongside Windows" detects BitLocker and Fast Startup and never resizes a BitLocker volume.
 5. lumen-hwd report + hardware/hardware.json, including the Microsoft UEFI CA 2023 check; live-session hardware report app.
 Acceptance: fresh install to first usable desktop in under 15 minutes in a VM; a non-technical tester completes setup, installs an app, restores a file and runs a backup with no help.
 ```
