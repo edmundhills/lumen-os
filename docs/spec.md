@@ -190,7 +190,7 @@ The OS is a single OCI container image built from a Containerfile, so the whole 
 1. Layer Lumen packages (RPMs built in our COPR repo) and remove unwanted defaults.
 1. Copy config overlays from `image/overlay` into the image. Vendor defaults go in `/usr/lib` and `/usr/share` wherever the software reads them there (systemd, polkit, sysctl, udev, XDG data directories). Config that only exists in `/etc` goes in the image's `/etc`, which bootc treats as the default and 3-way merges with local changes on every update. Never create `/usr/etc`: it is a bootc implementation detail and `bootc container lint` rejects it (ADR 0002).
 1. Run `bootc container lint` to catch image mistakes.
-1. Push to `ghcr.io/<org>/lumen:<channel>` signed with cosign; build ISO and qcow2 with `bootc-image-builder`.
+1. Push to `ghcr.io/<org>/lumen:<channel>` signed with cosign; build the qcow2 with `bootc-image-builder` and the live install ISO from the image (see "Installer", ADR 0002).
 
 ### Image variants
 
@@ -595,7 +595,7 @@ You are the lead engineer of Lumen OS, a desktop Linux distribution. The full sp
 Easy by default, powerful underneath, never breaks, liquid-glass design, and a real alternative to Windows. A new user never needs a terminal; a power user is never blocked by the GUI.
 
 ## Fixed architecture
-- Image: OCI image FROM quay.io/fedora-ostree-desktops/kinoite:<current Fedora>, managed by bootc. Built with Podman; ISO/qcow2 via bootc-image-builder.
+- Image: OCI image FROM quay.io/fedora-ostree-desktops/kinoite:<current Fedora>, managed by bootc. Built with Podman; qcow2 via bootc-image-builder; the install ISO is a live ISO built from the image (ADR 0002).
 - Compositor: KWin 6 (Wayland only). Glass: KWin effect plugin "lumen-glass" (fork of KWin's blur effect).
 - Shell: Plasma shell package org.lumen.desktop with our own QML containments/plasmoids.
 - Apps: Qt 6/QML (C++). System services: Rust with zbus. CLI: Rust (clap).

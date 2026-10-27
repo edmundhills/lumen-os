@@ -79,3 +79,7 @@ Steps 1.3, 1.8, 3.14, 5.6, 5.22a, 6.10 and 6.12 reworded to match. No steps adde
 - Phase 1 takes on the riskiest of these: building a live ISO from a bootc image is newer and less proven than `anaconda-iso`. If it fails, the fallback keeps Phase 1 moving and the owner decides about the live report.
 - GTK apps get glass in more places than the module would have reached (every Flatpak GTK app on the list), at some extra GPU cost.
 - Remote help is honest about its limit in v0.1 instead of failing silently across the internet.
+
+## Follow-up
+
+- 2026-10-27, step 0.2: two places still had bootc-image-builder making the ISO, against decision 4: the spec's "Base and build chain" list, and the "Fixed architecture" line in CLAUDE.md and its copy in the spec. All three now say the qcow2 comes from bootc-image-builder and the install ISO is a live ISO built from the image.
