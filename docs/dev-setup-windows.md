@@ -158,6 +158,17 @@ What it checks:
 | Memory | WSL has at least 7 GiB | recommended |
 | Virtualization | `/dev/kvm` exists, your user can open it, and qemu starts with KVM | recommended: without it local VMs won't run, but CI boot tests still do |
 
+## Lint and test the repository
+
+From the checkout, in Fedora:
+
+```bash
+just lint
+just test
+```
+
+`just lint` checks licences, formatting and the links between documents; `just test` runs the tests that work on this PC. Both run their tools in a container (`tests/lint/Containerfile`), so nothing else needs installing, and WSL gets the same results as CI. The first run downloads Fedora and the tools and builds the container, which takes a few minutes and about 420 MB of disk; after that each run takes a few seconds. Run `just` to list the other recipes.
+
 ## Where the code lives
 
 There is one checkout: the Windows folder `C:\Users\edmun\Downloads\Lumen OS`, which Claude Code works in. Inside Fedora the same folder is `/mnt/c/Users/edmun/Downloads/Lumen OS`. The path has a space, so always put it in quotes.
@@ -177,6 +188,7 @@ wsl -d FedoraLinux-43 --cd "C:\Users\edmun\Downloads\Lumen OS" -- just lint
 
 - Set `$env:WSL_UTF8 = '1'` first, or `wsl.exe`'s own messages come out as UTF-16 with spaces between the letters.
 - From Git Bash, put `MSYS_NO_PATHCONV=1` in front of the command, or Git Bash rewrites Linux paths such as `/mnt/c/...` into Windows paths before WSL sees them.
+- After `--`, `wsl.exe` hands the command line to your login shell first, which expands any `$variable` in it. To pass a script through unchanged, use `--exec bash -c '...'` instead.
 
 ## Troubleshooting
 

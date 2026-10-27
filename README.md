@@ -46,7 +46,15 @@ Each folder's README says what goes in it and which step builds it.
 
 ## Building
 
-Development needs Linux, or Windows 11 with WSL 2 and Fedora: see the [Windows setup guide](docs/dev-setup-windows.md). The image and the install media are built in GitHub Actions.
+Development needs Linux, or Windows 11 with WSL 2 and Fedora: see the [Windows setup guide](docs/dev-setup-windows.md). The image and the install media are built in GitHub Actions. With [just](https://just.systems/) and Podman installed:
+
+```sh
+just        # list the recipes
+just lint   # check licences, formatting and the links between documents
+just test   # run the tests that work on this machine
+```
+
+The lint tools run in a container, so nothing else needs installing.
 
 ## Contributing
 

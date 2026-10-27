@@ -40,3 +40,7 @@ The spec named no licence, and step 0.4 creates the repository skeleton, so one 
 - Programs Lumen only runs or ships alongside, such as the kernel, the NVIDIA driver and Flatpak apps, keep their own licences; they aren't combined with Lumen's code.
 - With DCO and no contributor licence agreement, every contributor keeps their copyright, so Lumen's code can't later be relicensed under non-GPL terms without each contributor's agreement.
 - Step 0.4 adds the GPL-3.0 text as `LICENSE` (copied unchanged from gnu.org, not retyped), a licence section in the top-level README and a `CONTRIBUTING.md` with the DCO rule. Step 1.15 adds the ODbL licence file in `compat/`.
+
+## Follow-up
+
+- 2026-10-27, steps 0.4 and 0.5: items 4 and 5 are in place. `LICENSE` and `LICENSES/GPL-3.0-or-later.txt` hold the GPL-3.0 text copied unchanged from gnu.org. Every file has an SPDX header, or an entry in `REUSE.toml` if it can't hold one (the architecture image), and `just lint` runs `reuse lint`. `CONTRIBUTING.md` has the DCO rule, with one addition this ADR didn't cover, for the owner's review at step 0.8: only a person can certify the DCO, so an AI assistant never adds a `Signed-off-by:` line, and the person who submits its work signs off.

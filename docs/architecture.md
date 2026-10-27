@@ -653,12 +653,12 @@ If the boot test makes pull requests too slow, step 1.9 can move it to builds of
 
 ### 9.11 Building on the owner's PC
 
-Linux tooling runs in WSL (Fedora 44, 7.7 GiB of RAM, no nested virtualization), so the heavy work happens in CI. The `just` targets come at step 0.5:
+Linux tooling runs in WSL (Fedora 44, 7.7 GiB of RAM, no nested virtualization), so the heavy work happens in CI. The `justfile` at the top of the repository has these targets (step 0.5):
 
 | Target | In WSL | In CI |
 | --- | --- | --- |
-| `lint` | Yes | Yes |
-| `test` | Unit tests in the `devel` container | Every test layer |
+| `lint` | Yes, in the lint container (`tests/lint/`), so WSL and CI run the same tool versions | Yes, the same container |
+| `test` | The lint self-test now; from Phase 1, the unit tests in the `devel` container | Every test layer |
 | `build-image` | Yes, but slow, and it needs plenty of free disk | Yes |
 | `build-iso` | Not planned | Yes |
 | `run-vm` | No: there is no `/dev/kvm` | The boot and update tests |

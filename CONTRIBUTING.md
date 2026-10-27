@@ -20,6 +20,7 @@ Thank you for helping. Lumen is in early development ([PROGRESS.md](PROGRESS.md)
 - Never weaken a security default to make something work. Never turn off SELinux, Secure Boot or signature checks.
 - Every user-facing string is translatable (Qt `tr()` or gettext) and written in plain English.
 - Everything respects Reduce Motion and Reduce Transparency.
+- Run `just lint` and `just test` before you push. CI runs the same checks.
 
 ## Commits
 
@@ -56,4 +57,6 @@ Every file starts with a header that says who holds the copyright and which lice
 <!-- REUSE-IgnoreEnd -->
 
 - "Lumen OS contributors" means everyone who wrote part of the file; the git history records who wrote what.
+- A file that can't hold a comment, such as an image, gets an entry in `REUSE.toml` instead.
 - Files copied from other projects keep their original copyright and licence lines.
+- `just lint` runs `reuse lint`, which fails if any file is missing this information.
