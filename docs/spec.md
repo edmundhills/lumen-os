@@ -216,7 +216,7 @@ The variants are two independent choices: the driver (open or NVIDIA) and the ed
 
 | Area | Included | Removed from Kinoite |
 | --- | --- | --- |
-| Desktop | KWin, Plasma libraries, LayerShellQt, KRunner, xdg-desktop-portal-kde, lumen-shell, lumen-glass | Stock Plasma panels and default plasmoids |
+| Desktop | KWin, Plasma libraries, LayerShellQt, KRunner, xdg-desktop-portal-kde, Plasma Login Manager (the login screen, ADR 0005), lumen-shell, lumen-glass | Stock Plasma panels and default plasmoids |
 | System | bootc, flatpak, distrobox, podman, snapper, btrfs-progs, fwupd, tuned-ppd (power profiles; it conflicts with power-profiles-daemon, so only one can ship), ntsync autoload (Wine) | discover (replaced by Lumen Store) |
 | Hardware | Mesa, Intel/AMD firmware, sof-firmware, fprintd, iio-sensor-proxy, cups + ipp-usb, sane-airscan, bluez, device rules for OpenRGB and libratbag (ratbagd) | none |
 | Media | PipeWire, WirePlumber, ffmpeg-free plus codecs via Flatpak runtime; system codecs and hardware video decoding per the codecs ADR (step 1.14) | none |
@@ -325,7 +325,7 @@ lumen-shell is a Plasma shell package (`org.lumen.desktop`) with our own contain
 | Overview | 3-finger swipe up or Super: all windows + workspaces strip + search field | KWin Overview effect, restyled |
 | Tiling | Edge and corner snap, Super+arrows, saved layouts per monitor, optional auto-tile per workspace | KWin custom tiles + a KWin script for auto-tiling |
 | Lock screen | Glass card over blurred wallpaper, fingerprint or password, media controls, notifications count only | KScreenLocker theme |
-| Login screen | Matching glass theme, user avatars, accessibility menu | SDDM theme (Wayland greeter) |
+| Login screen | Matching glass theme, user avatars, accessibility menu | Plasma Login Manager's greeter, restyled (ADR 0005) |
 | OSDs | Volume, brightness, keyboard layout, caps lock pills at top centre | Plasma OSD service, restyled |
 
 The shell must start in under 1.5 seconds, use under 250 MB RAM, and redraw only when something changes.
@@ -566,7 +566,7 @@ No image reaches users unless it boots in a VM, passes the automated checks, and
 | --- | --- | --- |
 | Unit | Rust `cargo test`, Qt Test for C++/QML | Services and app logic |
 | Image lint | `bootc container lint`, package diff vs last release | Image is valid; no surprise package changes |
-| Boot test | QEMU + qcow2 from bootc-image-builder, run in CI with KVM | Boots to SDDM in under 60 s; no failed units |
+| Boot test | QEMU + qcow2 from bootc-image-builder, run in CI with KVM | Boots to the login screen in under 60 s; no failed units |
 | Session test | KWin virtual backend (`kwin_wayland --virtual`) + scripted D-Bus calls + screenshots | Shell starts, dock/bar/palette open, glass renders |
 | Glass visual test | Render 12 reference scenes (busy photo, white page, black, video frame); compare to golden images; compute text contrast | No visual regressions; contrast at least 4.5:1 on every scene |
 | Performance | Boot time (systemd-analyze), idle RAM, shell CPU, glass frame time on reference hardware | Budgets in Requirements are met |
@@ -650,7 +650,7 @@ Build the base image per docs/spec.md "Spec: image build and layout".
 2. Btrfs defaults and snapper config for /home (24 hourly, 7 daily, 4 weekly).
 3. Variants: lumen (default), lumen-nvidia (akmods-built signed kmods; MOK enrolment doc), lumen-gaming, and lumen-gaming-nvidia (lumen-nvidia plus the gaming additions).
 4. CI: build all variants, push to ghcr.io with cosign signatures, generate SBOM (syft), build the qcow2 with bootc-image-builder and the live install ISO from the image (anaconda-iso only as the fallback in "Installer").
-5. tests/boot: boot the qcow2 in QEMU/KVM in CI, assert SDDM reached within 60 s and `systemctl --failed` is empty.
+5. tests/boot: boot the qcow2 in QEMU/KVM in CI, assert the login screen is reached within 60 s and `systemctl --failed` is empty.
 6. Configure /etc/containers/policy.json so the system only accepts our signed images.
 7. Windows-app base: ntsync autoload, Bottles preinstalled on first boot, .exe and .msi open in Bottles until the Phase 7 dialog exists, metric-compatible fonts. Boot test checks /dev/ntsync exists and records whether kernel lockdown is on and hibernation is offered under Secure Boot.
 8. Codecs and hardware video decoding: write the options and their legal trade-offs as an ADR; the owner chooses; ship the choice.
@@ -689,7 +689,7 @@ Acceptance: contrast >= 4.5:1 on all scenes; Full tier holds 60 fps with 8 glass
 ### Phase 4: lumen-shell
 
 ```text
-Implement shell/ per the spec's "Spec: lumen-shell" table: top bar, dock, command palette (KRunner backends, new QML UI), quick settings, notification centre with focus modes, overview restyle, tiling (KWin custom tiles + auto-tile KWin script), lock screen, SDDM theme, OSDs. Apply every shortcut and gesture from the spec's shortcut table.
+Implement shell/ per the spec's "Spec: lumen-shell" table: top bar, dock, command palette (KRunner backends, new QML UI), quick settings, notification centre with focus modes, overview restyle, tiling (KWin custom tiles + auto-tile KWin script), lock screen, login screen, OSDs. Apply every shortcut and gesture from the spec's shortcut table.
 Every surface sets its glass role. Use org.lumen.style tokens only; no hard-coded colours or sizes.
 Tests: QML unit tests; session test that opens each surface via D-Bus/shortcut and screenshots it; keyboard-only navigation test.
 Acceptance: shell starts < 1.5 s, < 250 MB RAM, ~0% CPU idle; every shortcut works; every surface is reachable by keyboard and announced by Orca.

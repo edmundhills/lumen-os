@@ -189,7 +189,7 @@ Flatpak apps can't see host theme files. They get light/dark, accent and contras
 | Quick settings | NetworkManager, BlueZ (BluezQt), power profiles, KWin Night Light (`org.kde.KWin.NightLight`), PowerDevil for brightness (`org.kde.Solid.PowerManagement`), plasma-pa, lumen-settingsd (dark mode) |
 | Notification centre, focus modes | Plasma's notification server (it owns `org.freedesktop.Notifications`); focus-mode settings in lumen-settingsd |
 | Overview, tiling, auto-tile | KWin Overview effect (restyled), KWin custom tiles, KWin script `lumen-autotile` (configured through `kwinrc`) |
-| Lock screen, login screen, OSDs | KScreenLocker theme, SDDM theme, Plasma OSD service (`org.kde.osdService`) |
+| Lock screen, login screen, OSDs | KScreenLocker theme; Plasma Login Manager's greeter, which runs on its own KWin and Plasma ([ADR 0005](decisions/0005-plasma-login-manager.md)); Plasma OSD service (`org.kde.osdService`) |
 | Shortcuts | KGlobalAccel (`org.kde.kglobalaccel`); Super on its own is a KWin modifier-only shortcut |
 | Glass | `lumen_glass_manager_v1` to set each surface's role; `org.lumen.style` for tokens |
 
@@ -223,7 +223,7 @@ Owns OS image updates (bootc), Flatpaks in the system installation, firmware, co
 - **Compatibility database refresh.** lumen-updated downloads the newer database, checks its signature, and only then replaces `/var/lib/lumen/compat/windows-apps.json`. Readers trust that file because only lumen-updated (root) can write it, so they never verify, download or look anything up online. Where the file is published is decided at step 7.3.
 - **Going back to an older version** needs CI to keep immutable dated tags (for example `stable-44.20261027`, [section 9.7](#97-versions-tags-and-keys)) next to the moving `stable` tag (release train, step 9.1). After a user goes back, the version they left is "held" so the next check doesn't offer it straight away; the hold lifts when a newer version appears.
 - **Low priority:** downloads run in a transient unit with idle CPU and I/O scheduling.
-- **Post-boot health check** (ADR 0002): within 2 minutes of boot and without waiting for a login, it checks that SDDM is up, NetworkManager is running and no critical units failed. Two failed boots in a row fall back to the previous deployment; try greenboot for this before writing our own.
+- **Post-boot health check** (ADR 0002): within 2 minutes of boot and without waiting for a login, it checks that the login screen is up (`display-manager.service`, which is Plasma Login Manager, is active and its greeter is running), NetworkManager is running and no critical units failed. Two failed boots in a row fall back to the previous deployment; try greenboot for this before writing our own.
 - **First-login check.** A user unit started at login waits for the shell. If the shell hasn't started, the unit opens a small standalone dialog ("The desktop didn't start after the update. Go back to the previous version?") that calls `Rollback()`. It can't use a notification, because Plasma's notification server runs inside the shell that failed.
 
 #### lumen-health: `org.lumen.Health1`

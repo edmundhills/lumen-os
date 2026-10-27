@@ -31,6 +31,8 @@ keep = [
   # KRunner's unit converter, which the command palette uses (step 4.6)
   "kdeplasma-addons",
   "xdg-desktop-portal-kde",
+  # The login screen (ADR 0005)
+  "plasma-login-manager",
 ]
 # Kinoite's stock panels and default widgets aren't separate packages: they are
 # part of plasma-workspace, plasma-desktop and kdeplasma-addons, which Lumen

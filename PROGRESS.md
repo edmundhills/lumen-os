@@ -20,7 +20,7 @@ Claude reads CLAUDE.md automatically, does that step (plus any ➕ steps right a
 
 ## Current step
 
-**1.3** Overlay, then ➕ **1.4** Btrfs and snapper defaults. **Owner question first:** SDDM or Plasma Login Manager (see the 1.2 notes).
+**1.3** Overlay, then ➕ **1.4** Btrfs and snapper defaults.
 
 ## Notes for the next session
 
@@ -46,7 +46,7 @@ Claude reads CLAUDE.md automatically, does that step (plus any ➕ steps right a
 - 0.8 done 2026-10-27: `just lint` 10 of 10 and `just test` 12 of 12 pass in WSL; CI green on `d211f2d` (read from the public Actions API, because gh isn't on Windows). The owner reviewed the Phase 0 docs and accepted every proposal as written; [ADR 0004](docs/decisions/0004-phase-0-review.md) records them, and they are applied to the spec, CLAUDE.md (build rule, `apps/hwreport` in the layout), the architecture and the risk register, which are now marked accepted with no **Proposed** markers left. New for Phase 1: a fourth image, `lumen-gaming-nvidia` (step 1.12); the Kinoite pin bump and ghcr.io copy (1.5); no COPR. Phase 1 starts when the owner says "continue".
 - 1.1 done 2026-10-27 (Phase 1 started on the owner's "Do the next step"): `image/packages.toml`, one table per area of the spec's manifest with `keep` (Kinoite has it and Lumen relies on it), `install` and `remove` lists, read against Kinoite's own rpm database. Kinoite 44 already ships tuned-ppd instead of power-profiles-daemon, Liberation, Noto CJK and emoji, and NetworkManager-openconnect. Added: distrobox, snapper, `openrgb-udev-rules`, `libratbag-ratbagd`, Fcitx5 (Qt 6, GTK 3 and 4 modules, `kcm-fcitx5`, engines matching Kinoite's IBus ones), Inter (static `rsms-inter-fonts`: families "Inter" and "Inter Display"), JetBrains Mono, Carlito, Caladea. Removed: Discover (6 packages) and the unused font packs Adwaita Sans, Adwaita Mono and Open Sans; the other fonts cover scripts or other packages need them. Stock panels and plasmoids aren't separate packages, so 1.3 removes the default layout in the overlay. `image/packages.py` checks the file (`just lint`, now 11 checks; self-test 13) and applies it; `just test` also runs its 15 unit tests. It stops the build if a kept or removed package is missing from the base, an added one is already there, or dnf removes anything not listed. Weak dependencies are off.
 - 1.2 done 2026-10-27: `image/Containerfile` with the stages `base` and `lumen`; Kinoite pinned as `kinoite:44@sha256:9f71aa8e…5e18` (Fedora 45 still frozen). `just build-image` in WSL: the first pull of Kinoite took 11 min, the build about 9 min; 41 packages added (with dependencies), 9 removed, none changed version; `bootc container lint --fatal-warnings` passes 14 checks, 1 skipped, as bare Kinoite does. dnf leaves `/run/dnf` and files in `/var`, which the lint rejects, so the `base` stage deletes them (Kinoite's own `/var` holds only `/var/tmp`); any later stage that runs dnf needs the same. `localhost/lumen:dev` is 7.63 GB, Kinoite 7.38 GB.
-- **Question for the owner (found at 1.2): SDDM or Plasma Login Manager?** Kinoite 44 has no SDDM: Fedora 44 ships KDE's Plasma Login Manager (`plasma-login-manager` 6.7.5, `plasmalogin.service`), its successor. The spec names SDDM in the boot test (1.9), the boot health check (5.6), the login screen theme (4.15), in four places in the spec, and in architecture 4.4 and 4.5. Proposal: follow upstream, keep Plasma Login Manager, and say "login screen" / Plasma Login Manager in those places (an ADR plus spec edits). The alternative, adding SDDM back, goes against Fedora's KDE default. Decide before 1.9; 1.3 and 1.4 don't depend on it.
+- [ADR 0005](docs/decisions/0005-plasma-login-manager.md) accepted 2026-10-27: Kinoite 44 has no SDDM; Fedora 44 ships KDE's Plasma Login Manager (`plasma-login-manager` 6.7.5, `plasmalogin.service` as `display-manager.service`). The owner chose to keep it. The spec, the architecture (4.4, 4.5) and steps 1.9, 4.15 and 5.6 now say "login screen" or name Plasma Login Manager, and `packages.toml` keeps it. Its greeter has no SDDM-style theme folder: it runs on its own KWin and Plasma, which step 4.15 works with.
 - For later steps: os-release and the image labels (architecture 9.7) aren't named by any step; the Containerfile assigns them to 1.5. Solaar (6.4) needs `solaar-udev` on the host, which the spec's manifest doesn't list: add it at 6.4. Both IBus and Fcitx5 are installed; 1.3 should check which one starts by default on Plasma Wayland (Settings > Virtual Keyboard picks it).
 
 ---
@@ -79,7 +79,7 @@ Claude reads CLAUDE.md automatically, does that step (plus any ➕ steps right a
 - [ ] **1.6** 👤 cosign signing (you add the key as a repo secret) and SBOM with syft.
 - [ ] ➕ **1.7** `/etc/containers/policy.json` and sigstore config so the system accepts only our signed images.
 - [ ] **1.8** ⚠️ CI: bootc-image-builder builds the qcow2; build the install ISO as a live ISO from our image (try Titanoboa first) that runs a live session and starts Anaconda WebUI (ADR 0002). Record the tool in an ADR. If no live ISO works, fall back to `anaconda-iso` with a partial kickstart and tell the owner.
-- [ ] **1.9** `tests/boot`: QEMU/KVM boot test in CI; SDDM within 60 s; `systemctl --failed` empty. Also boot once with Secure Boot (OVMF) and record whether kernel lockdown is on and hibernation is offered (`/sys/kernel/security/lockdown`, `/sys/power/state`) in ADR 0001's follow-up.
+- [ ] **1.9** `tests/boot`: QEMU/KVM boot test in CI; the login screen within 60 s (`display-manager.service`, Plasma Login Manager, active and its greeter running; ADR 0005); `systemctl --failed` empty. Also boot once with Secure Boot (OVMF) and record whether kernel lockdown is on and hibernation is offered (`/sys/kernel/security/lockdown`, `/sys/power/state`) in ADR 0001's follow-up.
 - [ ] **1.10** Variant `lumen-gaming`: Steam, Gamescope session, MangoHud, controller udev rules, as a layer that 1.12 also puts on `lumen-nvidia`.
 - [ ] **1.11** ⚠️ Variant `lumen-nvidia`: akmods-built, signed kmods in CI.
 - [ ] **1.12** NVIDIA MOK enrolment doc; variant `lumen-gaming-nvidia` (`lumen-nvidia` plus the gaming layer, ADR 0004); CI matrix builds all four images.
@@ -142,7 +142,7 @@ Claude reads CLAUDE.md automatically, does that step (plus any ➕ steps right a
 - [ ] **4.12** Tiling: custom tiles, Super+arrows, saved layouts per monitor.
 - [ ] ➕ **4.13** Auto-tile KWin script per workspace.
 - [ ] **4.14** Lock screen theme.
-- [ ] ➕ **4.15** SDDM theme (Wayland greeter).
+- [ ] ➕ **4.15** Login screen: restyle Plasma Login Manager's greeter (ADR 0005). It runs on its own KWin and Plasma, so find out which Lumen styles and settings it picks up, and whether lumen-glass can draw it.
 - [ ] ➕ **4.16** OSD restyle.
 - [ ] **4.17** Apply every shortcut and gesture; Super+/ cheat-sheet overlay.
 - [ ] **4.18** QML unit tests; session test that opens each surface and screenshots it.
@@ -156,7 +156,7 @@ Claude reads CLAUDE.md automatically, does that step (plus any ➕ steps right a
 - [ ] ➕ **5.3** `lumen` CLI skeleton (clap): `--json`, completions, `lumen settings`.
 - [ ] **5.4** `lumen-updated` part 1: timer, check order (bootc, Flatpak, fwupd), D-Bus API.
 - [ ] **5.5** `lumen-updated` part 2: low-priority downloads, metered/battery rules, staging, one notification.
-- [ ] **5.6** `lumen-updated` part 3: boot health check that needs no login (SDDM up, NetworkManager running, no failed critical units) with boot-counting fallback (try greenboot first); first-login shell check that offers to go back (ADR 0002).
+- [ ] **5.6** `lumen-updated` part 3: boot health check that needs no login (login screen up, NetworkManager running, no failed critical units) with boot-counting fallback (try greenboot first); first-login shell check that offers to go back (ADR 0002).
 - [ ] **5.7** `lumen-updated` part 4: history, rollback to signed tags; `lumen update`, `lumen rollback`.
 - [ ] **5.8** `lumen-health`: first 5 checks with fixes.
 - [ ] ➕ **5.9** `lumen-health`: last 5 checks with fixes; `lumen health [--fix]`.
