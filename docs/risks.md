@@ -376,6 +376,7 @@ Smaller risks, or ones already covered by a step. They move into the top 15 if t
 | Fedora drops 32-bit packages, which Steam and parts of Wine need on the host. A 2025 proposal to drop them was withdrawn | Fall back to Steam's Flatpak and Wine's WoW64 mode | 1.10 |
 | Losing a signing key or the GitHub account: one person holds every key | Protected environment for `main`, hardware-key 2FA, offline key backups, a written procedure to replace each key (architecture 9.7); consider keyless Sigstore signing for images at step 1.6 | 1.6, 8.2 |
 | Fedora's six-month cycle: each rebase moves KWin, Plasma, Qt, Mesa and the kernel at once, and each release is supported for about 13 months | Covered by risks 1 and 6, and Q14 | 9.1 |
+| Kinoite's dated builds expire from quay.io four weeks after they are built (label `quay.expires-after: 4w`, found at step 0.7), so a pinned base digest stops resolving and CI can no longer build an older commit | **Proposed:** bump the pin at least every two weeks, by Renovate or a scheduled job, from step 1.5 instead of 8.2; and copy each pinned base into Lumen's own registry on ghcr.io, so old builds stay reproducible ([versions](versions.md#things-to-know)) | 1.2, 1.5, 8.2 |
 
 Not ranked, because they aren't technical: one owner's time across about 170 steps, and the business gaps in the gap list (for example no shop preinstalls).
 
