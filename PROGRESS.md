@@ -14,7 +14,7 @@ Claude reads CLAUDE.md automatically, does that step (plus any ➕ steps right a
 
 ## Current step
 
-**0.4** (with ➕ 0.5)
+**0.5**
 
 ## Notes for the next session
 
@@ -31,6 +31,7 @@ Claude reads CLAUDE.md automatically, does that step (plus any ➕ steps right a
 - ADR 0002 follow-up (step 0.2): the spec's build chain and CLAUDE.md's fixed architecture now say the install ISO is a live ISO built from the image, not from bootc-image-builder.
 - ADR 0002 (2026-10-27): the owner confirmed that remote help is same-network in v0.1, with RustDesk offered for help over the internet. Building a live ISO from a bootc image (step 1.8) is the riskiest fix; the fallback is in the ADR.
 - 0.3 done 2026-10-27: `docs/risks.md`, 15 ranked risks with mitigations, a watch list, and sources checked that day. It is a living document: update a risk when it changes. It adds Q16 (what "match" means for Flatpak theming, before 2.1) and **Q17** (TPM unlock bound to PCR 7 without a PIN can be defeated by booting any Fedora-signed system, so the spec's "a stolen laptop reveals nothing" doesn't hold; owner chooses PIN by default or more PCRs via systemd-pcrlock) for the 0.8 review. Q17 changes the spec's security table once decided.
+- 0.4 done 2026-10-27: a README in every folder of the CLAUDE.md layout, plus `docs/README.md` and `docs/decisions/README.md` (ADR index and format); top-level `README.md` with the licence section; `CONTRIBUTING.md` with the DCO rule; `LICENSE` copied from gnu.org (sha256 `3972dc97…6986`, the same file Fedora ships in coreutils). `image/overlay/` doesn't exist yet: everything in it is copied into the image root, so it can't hold a README (step 1.3 creates it). The hardware report has no `apps/hwreport` folder yet, because that name is still a proposal for the 0.8 review. **For the 0.8 review:** CONTRIBUTING.md says an AI assistant never adds a `Signed-off-by:` line, so the commits Claude makes carry no sign-off until the owner decides how to sign them off; and copyright lines say "Lumen OS contributors".
 
 ---
 
@@ -46,7 +47,7 @@ Claude reads CLAUDE.md automatically, does that step (plus any ➕ steps right a
 - [x] **0.1** `docs/architecture.md` part 1: components and how they talk (D-Bus names, files, protocols).
 - [x] **0.2** `docs/architecture.md` part 2: build flow and a Mermaid dependency graph.
 - [x] **0.3** `docs/risks.md`: top 15 technical risks with mitigations. Must include: the Secure Boot UEFI CA 2023 transition, hibernation under kernel lockdown, codec patents, BitLocker on Windows drives, Windows code signing for Lumen Setup, and the licences of compatibility data.
-- [ ] **0.4** Repo skeleton from the CLAUDE.md layout, with a README in each folder.
+- [x] **0.4** Repo skeleton from the CLAUDE.md layout, with a README in each folder.
 - [ ] ➕ **0.5** `justfile` (build-image, build-iso, run-vm, test, lint) and lint tooling. *Done when:* `just lint` passes in WSL.
 - [ ] **0.6** GitHub Actions: lint job and a placeholder build job. *Done when:* CI is green.
 - [ ] ➕ **0.7** `docs/versions.md`: current Fedora release, KWin version and Kinoite image digest (read via skopeo/podman, in CI or WSL).
