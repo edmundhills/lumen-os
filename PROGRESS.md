@@ -25,6 +25,7 @@ Claude reads CLAUDE.md automatically, does that one step, commits, updates this 
 - A4 done 2026-10-27: Fedora 44 in WSL as `FedoraLinux-44` (on D:, user `User`), default distro. Check passes (18 pass). Nested virtualization does NOT work (`/dev/kvm` missing; maybe SVM off in BIOS), so no local VMs: run boot tests in CI. WSL has 7.7 GiB RAM. Fedora WSL has no awk; scripts must not assume it.
 - ADR 0001 accepted 2026-10-27: Lumen is built to compete with Windows. Applied to the spec, this file and CLAUDE.md (new Phase 7 "Switching from Windows"; old Phases 7–8 are now 8–9). The gap list `docs/competing-with-windows.md` is a living document: update it when a gap changes. The owner deferred a Windows-style "Familiar" layout and a built-in AI assistant; don't add either without asking.
 - Machine facts (2026-10-27): Ryzen 7 5800X, 16 GB RAM, virtualization on in firmware, Windows 11 Home build 26200, gh not installed on Windows. Claude reaches WSL from Windows with `wsl -d <distro> --cd "<repo>" -- <cmd>`; set `WSL_UTF8=1` (else UTF-16 output), and from Git Bash prefix `MSYS_NO_PATHCONV=1`.
+- 0.1 done 2026-10-27: `docs/architecture.md` part 1. Its section 8 lists four ⚠️ spec errors. Raise each one with the owner before the step it affects, and don't build on the spec's version: Q1 GTK module can't load into GTK 4 or Flatpak apps (3.14); Q2 `power-profiles-daemon` and `tuned-ppd` conflict, so keep tuned-ppd (1.1, 1.3); Q3 the post-update "shell started" check fails whenever nobody logs in (5.6); Q4 `anaconda-iso` has no live session for the hardware report and is unattended by default (1.8, 6.10, 6.12). Q5–Q8 are proposals waiting for the owner's review at 0.8. Step 0.2 fills the "Part 2" heading at the end of the same file; section 6.1 already gives the service call direction for the graph.
 - Spec issue to raise at step 1.3: the spec puts image defaults in `/usr/etc`, but `bootc container lint` rejects images that contain `/usr/etc`. The likely fix is to write defaults to `/etc` in the Containerfile (bootc 3-way merges it) or to `/usr/lib` / `/usr/share`. Verify, ask the owner, record an ADR.
 
 ---
@@ -38,7 +39,7 @@ Claude reads CLAUDE.md automatically, does that one step, commits, updates this 
 
 ## Phase 0 — Plan and skeleton (spec: "Claude Code prompt → Phase 0")
 
-- [ ] **0.1** `docs/architecture.md` part 1: components and how they talk (D-Bus names, files, protocols).
+- [x] **0.1** `docs/architecture.md` part 1: components and how they talk (D-Bus names, files, protocols).
 - [ ] **0.2** `docs/architecture.md` part 2: build flow and a Mermaid dependency graph.
 - [ ] **0.3** `docs/risks.md`: top 15 technical risks with mitigations. Must include: the Secure Boot UEFI CA 2023 transition, hibernation under kernel lockdown, codec patents, BitLocker on Windows drives, Windows code signing for Lumen Setup, and the licences of compatibility data.
 - [ ] **0.4** Repo skeleton from the CLAUDE.md layout, with a README in each folder.
