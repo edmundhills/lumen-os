@@ -1,6 +1,6 @@
 # Lumen OS architecture
 
-Status: part 1 of 2, draft for the owner's review (2026-10-27). Part 1 covers the components and how they talk to each other. Part 2 (build flow and dependency graph) is step 0.2.
+Status: part 1 of 2, draft for the owner's review (2026-10-27), written against the spec as amended by [ADR 0001](decisions/0001-compete-with-windows.md). Part 1 covers the components and how they talk to each other. Part 2 (build flow and dependency graph) is step 0.2.
 
 [docs/spec.md](spec.md) is the source of truth. This document turns it into concrete names, paths and interfaces. Where the spec leaves something open, this document proposes an answer and marks it **Proposed**. Each proposal gets an ADR in `docs/decisions/` when the step that builds it starts. Where the spec looks technically wrong, it is marked ⚠️ and listed in [section 8](#8-spec-problems-and-open-questions).
 
@@ -12,14 +12,14 @@ The interface sketches below (methods, properties, signals) show intent, not the
 
 | Layer | Contents | Made by |
 | --- | --- | --- |
-| Apps | Settings, Store, Welcome, Backup, hardware report; Flatpak apps | Lumen; Flathub |
+| Apps | Settings, Store, Welcome, Backup, hardware report, "Open Windows app"; Flatpak apps, including Bottles for Windows apps | Lumen; Flathub |
 | Shell | lumen-shell (Plasma shell package `org.lumen.desktop`) | Lumen, on Plasma backends |
 | Compositor | KWin 6 + the lumen-glass effect | KDE + Lumen |
 | Services | lumen-updated, lumen-health, lumen-hwd, lumen-settingsd, lumen-backupd | Lumen |
 | Base image | systemd, SELinux, NetworkManager, PipeWire, Flatpak, bootc; read-only `/usr` | Fedora (Kinoite) |
 | Kernel and firmware | Linux, Mesa, firmware, Secure Boot, LUKS2 + TPM2 | Fedora |
 
-Two things cut across the layers: the **design tokens** (one `tokens.json`, exported at build time to every toolkit and to the glass shader) and the **`lumen` CLI** (it calls the same D-Bus services as the GUI).
+Three things cut across the layers: the **design tokens** (one `tokens.json`, exported at build time to every toolkit and to the glass shader), the **`lumen` CLI** (it calls the same D-Bus services as the GUI) and the **compatibility database** (one signed file of Windows app ratings, read offline through the `lumen-compat` crate by the Store, the "Open Windows app" dialog, Welcome and the CLI).
 
 Three rules shape every interface in this document:
 
@@ -51,16 +51,16 @@ Three rules shape every interface in this document:
 | --- | --- | --- | --- |
 | `/usr/bin/lumen` | No | image | The CLI |
 | `/usr/libexec/lumen-*` | No | image | Service binaries |
-| `/usr/share/lumen/` | No | image | Data that ships with the image: `tokens/tokens.json`, `settings/schema.toml`, `hardware.json`, `app-aliases.json` |
+| `/usr/share/lumen/` | No | image | Data that ships with the image: `tokens/tokens.json`, `settings/schema.toml`, `hardware.json`, `app-aliases.json`, `compat/windows-apps.json` |
 | Image defaults for `/etc` | No | image | ⚠️ The spec says `/usr/etc`, which `bootc container lint` rejects. Decided at step 1.3 |
-| `/etc/lumen/` | Yes | system services | **Proposed:** machine-wide Lumen settings (see [Q6](#8-spec-problems-and-open-questions)) |
-| `/var/lib/lumen/` | Yes | system services | `glass-tier`, `updates/` (history, held versions), `health/` (logs) |
+| `/etc/lumen/` | Yes | system services | **Proposed:** machine-wide Lumen settings (see [Q7](#8-spec-problems-and-open-questions)) |
+| `/var/lib/lumen/` | Yes | system services | `glass-tier`, `updates/` (history, held versions), `health/` (logs), `compat/` (newer signed compatibility database) |
 | `~/.config/lumen/*.toml` | Yes | lumen-settingsd | The user's Lumen settings |
 | `~/.local/state/lumen/` | Yes | session services | Per-user state, such as backup results |
 
 ### App IDs
 
-Lumen's apps use `org.lumen.Settings`, `org.lumen.Store`, `org.lumen.Welcome`, `org.lumen.Backup` and `org.lumen.HardwareReport`. On Wayland the app ID is how KWin and the dock match a window to its app, so it must equal the desktop file name.
+Lumen's apps use `org.lumen.Settings`, `org.lumen.Store`, `org.lumen.Welcome`, `org.lumen.Backup`, `org.lumen.HardwareReport` and `org.lumen.WindowsApp`. On Wayland the app ID is how KWin and the dock match a window to its app, so it must equal the desktop file name.
 
 ## 3. Component catalogue
 
@@ -80,11 +80,15 @@ Lumen's apps use `org.lumen.Settings`, `org.lumen.Store`, `org.lumen.Welcome`, `
 | Store | `apps/store` | C++/QML | User | RPM |
 | Welcome | `apps/welcome` | C++/QML | First-boot session, then user | RPM |
 | Backup | `apps/backup` | C++/QML | User | RPM |
+| "Open Windows app" dialog | `apps/windows-app` | C++/QML | User | RPM |
 | Hardware report | Not in the CLAUDE.md layout yet; **Proposed** `apps/hwreport` | C++/QML | Live session | RPM |
+| Compatibility database | `compat/` | JSON, JSON schema | Data | `/usr/share/lumen/compat/`, refreshed by lumen-updated |
+| lumen-compat | `compat/` | Rust library | Inside its callers | RPM |
+| Lumen Setup for Windows | `windows-setup/` | C++/Qt (fork of Fedora Media Writer) | Windows | Code-signed Windows program, built in CI |
 | Installer | `installer/` | Kickstart, theme | Install media | Part of the ISO |
 | Hardware database | `hardware/hardware.json` | JSON | Data | `/usr/share/lumen/hardware.json` |
 
-Lumen's own apps ship as RPMs in the image, not as Flatpaks. They are part of the OS: they need the system services and must match the image version, like KDE's System Settings does today. Third-party apps are Flatpaks only.
+Lumen's own apps ship as RPMs in the image, not as Flatpaks. They are part of the OS: they need the system services and must match the image version, like KDE's System Settings does today. Third-party apps are Flatpaks only, including Bottles, which runs Windows apps.
 
 Where each RPM gets built (COPR, CI or a Containerfile stage) is part 2.
 
@@ -114,7 +118,7 @@ A KWin effect plugin loaded by `kwin_wayland` in the user's session. Built again
 
 - Wayland:
   - `org_kde_kwin_blur_manager`: the blur region, inherited from the stock blur effect. Qt apps reach it with `KWindowEffects::enableBlurBehind`.
-  - `lumen_glass_manager_v1`: **Proposed** small Lumen protocol that lets a surface name its glass role (`bar`, `dock`, `menu`, `popover`, `notification`, `sidebar`, `titlebar`). See [Q5](#8-spec-problems-and-open-questions).
+  - `lumen_glass_manager_v1`: **Proposed** small Lumen protocol that lets a surface name its glass role (`bar`, `dock`, `menu`, `popover`, `notification`, `sidebar`, `titlebar`). See [Q6](#8-spec-problems-and-open-questions).
   - `ext_background_effect_manager_v1`: later, once KWin supports it (spec).
 - D-Bus, **Proposed**: `org.lumen.Glass1` on the session bus, owned by the KWin process, path `/org/lumen/Glass1`.
   - Properties: `ActiveTier`, `BenchmarkTier`, `TierReason` (for example "Battery saver is on").
@@ -200,7 +204,7 @@ Whether lumen-health and lumen-hwd can really run as their own unprivileged user
 
 #### lumen-updated: `org.lumen.Updates1`
 
-Owns OS image updates (bootc), Flatpaks in the system installation, firmware, rollback, the post-boot health check and the update history.
+Owns OS image updates (bootc), Flatpaks in the system installation, firmware, compatibility database refreshes, rollback, the post-boot health check and the update history.
 
 - **Uses:** the `bootc` command (`status --json`, `upgrade --check`, `upgrade`, `rollback`, `switch`; bootc has no D-Bus API); libflatpak; fwupd (`org.freedesktop.fwupd`); NetworkManager (`Metered`, state changes); UPower (`OnBattery`, charge level); systemd (`org.freedesktop.systemd1`); logind (`org.freedesktop.login1`) for restarts.
 - **Started by:** the timer every 6 hours, and a NetworkManager "connected" signal when the last check is over 24 hours old.
@@ -209,7 +213,8 @@ Owns OS image updates (bootc), Flatpaks in the system installation, firmware, ro
   - Methods: `Check()`, `Apply()`, `ScheduleRestart(when)` (now, tonight or later), `ListHistory()`, `Rollback()`, `SwitchTo(version)`, `SwitchVariant(variant)`, `SetChannel(channel)`, `InstallFirmware(devices)`.
   - Signals: `UpdateReady(version, needsRestart)`, `BootHealthResult(ok, details)`.
 - **History:** bootc keeps only the booted, staged and rollback deployments, but Settings > Updates > History lists every installed version. So lumen-updated keeps its own log in `/var/lib/lumen/updates/`.
-- **Proposed: going back to an older version** needs CI to keep immutable dated tags (for example `stable-20261027`) next to the moving `stable` tag (release train, step 8.1). After a user goes back, the version they left is "held" so the next check doesn't offer it straight away; the hold lifts when a newer version appears.
+- **Proposed: compatibility database refresh.** lumen-updated downloads the newer database, checks its signature, and only then replaces `/var/lib/lumen/compat/windows-apps.json`. Readers trust that file because only lumen-updated (root) can write it, so they never verify, download or look anything up online. Where the file is published is decided at step 7.3.
+- **Proposed: going back to an older version** needs CI to keep immutable dated tags (for example `stable-20261027`) next to the moving `stable` tag (release train, step 9.1). After a user goes back, the version they left is "held" so the next check doesn't offer it straight away; the hold lifts when a newer version appears.
 - **Low priority:** downloads run in a transient unit with idle CPU and I/O scheduling.
 - **Post-boot health check:** ⚠️ see [Q3](#8-spec-problems-and-open-questions).
 
@@ -227,13 +232,19 @@ Owns OS image updates (bootc), Flatpaks in the system installation, firmware, ro
 | Broken Flatpak or permissions | `flatpak repair --dry-run` |
 | Backup not run in 7 days | `org.lumen.Backup1` (per user, see below) |
 | Time not synced | timedated (`org.freedesktop.timedate1`, `NTPSynchronized`) |
+| Windows Fast Startup left the Windows drive locked | The Windows partition's hibernation state (UDisks2) |
+| Clock differs from Windows | timedated (`LocalRTC`) and the Windows clock setting, read from the Windows drive |
+| Lumen boot entry missing | EFI boot entries and boot order (EFI variables) |
+| Firmware lacks the Microsoft UEFI CA 2023 | `org.lumen.Hardware1` |
 
-- **Sketch:** `RunChecks()` returns a list of (check, status, plain-English message, fix); `ApplyFix(fix)`; property `LastResults`; signal `ResultsChanged`.
+The last four are the dual-boot checks (step 7.10); they only run when a Windows install is present.
+
+- **Sketch:** `RunChecks()` returns a list of (check, status, plain-English message, fix); `ApplyFix(fix)`; `Reset(mode)` for "Reset Lumen" (keep files or erase everything; how "erase everything" works on a bootc system is worked out at step 5.22); property `LastResults`; signal `ResultsChanged`.
 - **Proposed: per-user checks run in the session.** Two checks are about one user's things: backup age, and caches and rootless containers in the storage cleaner. A system service can't see a user's session bus or (with `ProtectHome`) their home folder. So lumen-health runs the system checks, and the Settings app and `lumen health` add the per-user ones from lumen-backupd and the user's own disk use.
 
 #### lumen-hwd: `org.lumen.Hardware1`
 
-- **Uses:** sysfs and the hwdata ID lists (what `lspci` and `lsusb` read), fwupd, EFI variables (Secure Boot state), the TPM (`/sys/class/tpm`), fprintd (`net.reactivated.Fprint`), NetworkManager (Wi-Fi), V4L2 (webcam), ALSA (audio devices), `/sys/power` (sleep support), UPower.
+- **Uses:** sysfs and the hwdata ID lists (what `lspci` and `lsusb` read), fwupd, EFI variables (Secure Boot state, and the `db` certificate list for the Microsoft UEFI CA 2023 check), the TPM (`/sys/class/tpm`), fprintd (`net.reactivated.Fprint`), NetworkManager (Wi-Fi), V4L2 (webcam), ALSA (audio devices), `/sys/power` (sleep support), UPower.
 - **Compares with** `/usr/share/lumen/hardware.json`: known good, known issues with workarounds, known broken.
 - **Sketch:** `Report()` returns JSON with the same schema as `lumen hw report --json`; `DriverStatus()`; `SwitchToNvidiaImage()` explains MOK enrolment, then calls `org.lumen.Updates1.SwitchVariant("nvidia")`, because only lumen-updated runs bootc. Signal: `DevicesChanged`.
 - Also runs in the live session for the hardware report. ⚠️ See [Q4](#8-spec-problems-and-open-questions).
@@ -251,9 +262,9 @@ Owns OS image updates (bootc), Flatpaks in the system installation, firmware, ro
 | `appearance.theme`, `appearance.accent` | KDE colour scheme and accent in `kdeglobals` (xdg-desktop-portal-kde then tells Flatpak and GTK apps); regenerates `~/.config/gtk-4.0/gtk.css`; GTK 3 settings |
 | `accessibility.reduce_motion` | KDE animation speed, GTK `gtk-enable-animations` |
 | `dock.*`, `shell.*`, `glass.*` | Nothing: Lumen components read them directly |
-| `updates.*` | Forwarded to `org.lumen.Updates1` (machine-wide, see [Q6](#8-spec-problems-and-open-questions)) |
+| `updates.*` | Forwarded to `org.lumen.Updates1` (machine-wide, see [Q7](#8-spec-problems-and-open-questions)) |
 
-Settings that already have an upstream owner (Wi-Fi networks, displays, Bluetooth pairings) stay with that owner, and the Settings app talks to it directly. Whether `lumen settings` should also wrap them is [Q8](#8-spec-problems-and-open-questions).
+Settings that already have an upstream owner (Wi-Fi networks, displays, Bluetooth pairings) stay with that owner, and the Settings app talks to it directly. Whether `lumen settings` should also wrap them is [Q9](#8-spec-problems-and-open-questions).
 
 #### lumen-backupd: `org.lumen.Backup1`
 
@@ -276,7 +287,8 @@ Settings that already have an upstream owner (Wi-Fi networks, displays, Bluetoot
 | `lumen settings` | `org.lumen.Settings1` |
 | `lumen health` | `org.lumen.Health1`, plus `org.lumen.Backup1` for the per-user checks |
 | `lumen hw report` | `org.lumen.Hardware1` |
-| `lumen app` | libflatpak and `app-aliases.json`, the same as the Store (see 4.7) |
+| `lumen app install / remove / list / search` | libflatpak and `app-aliases.json`, the same as the Store (see 4.7) |
+| `lumen app check <file>`, `lumen app list --windows` | lumen-compat and Bottles, the same as the "Open Windows app" dialog (see 4.9) |
 | `lumen dev enable` | toolbox and distrobox as the user; turning on SSH goes through `org.freedesktop.systemd1` and firewalld, under polkit |
 | `lumen backup` | `org.lumen.Backup1` |
 | `lumen glass tier` | `org.lumen.Settings1`, key `glass.tier` (lumen-glass reacts to the change) |
@@ -289,17 +301,39 @@ Settings that already have an upstream owner (Wi-Fi networks, displays, Bluetoot
 
 | App | Talks to |
 | --- | --- |
-| Settings | lumen-settingsd, all system services, `org.lumen.Glass1`, KDE settings backends (KScreen, plasma-nm, BlueZ, plasma-pa, PowerDevil), AccountsService, firewalld, the Flatpak permission store. Opens on deep links `lumen-settings://<page>[/<section>]` (a URL scheme handler in its desktop file); the palette and Health fixes use them |
-| Store | libflatpak (system installation; Flatpak's own system helper does the privileged part under polkit), AppStream metadata, Flathub, `app-aliases.json`. Also opens `.exe` files and starts the Bottles flow (step 6.4) |
-| Welcome | First-boot part: localed (`org.freedesktop.locale1`), NetworkManager, AccountsService, TPM2 enrolment (see [Q7](#8-spec-problems-and-open-questions)). User part: lumen-settingsd, the Store backend, UDisks2 (import drive), lumen-backupd (offer backup when a second drive exists) |
+| Settings | lumen-settingsd, all system services, `org.lumen.Glass1`, KDE settings backends (KScreen, plasma-nm, BlueZ, plasma-pa, PowerDevil), AccountsService, firewalld, the Flatpak permission store, Bottles (Apps → Windows apps), Plasma's remote desktop server KRdp ("Get help from a friend", ⚠️ [Q5](#8-spec-problems-and-open-questions)). Opens on deep links `lumen-settings://<page>[/<section>]` (a URL scheme handler in its desktop file); the palette and Health fixes use them |
+| Store | libflatpak (system installation; Flatpak's own system helper does the privileged part under polkit), AppStream metadata, Flathub, `app-aliases.json`, lumen-compat (ratings next to Windows-name searches, the Windows alternatives collection, anti-cheat status). Installs websites as apps ([Q11](#8-spec-problems-and-open-questions)) |
+| Welcome | First-boot part: localed (`org.freedesktop.locale1`), NetworkManager, AccountsService, TPM2 enrolment (see [Q8](#8-spec-problems-and-open-questions)). User part: lumen-settingsd, the Store backend, UDisks2 (import drive; unlocks a BitLocker drive with its recovery key), lumen-compat ("Your Windows apps"), lumen-backupd (offer backup when a second drive exists) |
 | Backup | lumen-backupd |
 | Hardware report | lumen-hwd |
+| "Open Windows app" | lumen-compat, Bottles (see 4.9) |
 
 There is no Lumen app daemon. Flatpak's system helper already is the service, so the Store and `lumen app` stay in step by both using libflatpak and the same alias file. Once an app is installed, lumen-updated keeps it up to date.
 
 ### 4.8 Installer
 
-Anaconda from bootc-image-builder's `anaconda-iso`, with Lumen's kickstart and theme from `installer/`. bootc-image-builder adds the `ostreecontainer` kickstart command that writes the image to disk. After install, the system must track `ghcr.io/<org>/lumen:<channel>` and enforce the signature policy from its first update. ⚠️ See [Q4](#8-spec-problems-and-open-questions) for what this ISO can't do.
+Anaconda from bootc-image-builder's `anaconda-iso`, with Lumen's kickstart and theme from `installer/`. bootc-image-builder adds the `ostreecontainer` kickstart command that writes the image to disk. After install, the system must track `ghcr.io/<org>/lumen:<channel>` and enforce the signature policy from its first update. "Install alongside Windows" uses free space made from inside Windows and never resizes a BitLocker volume (spec). ⚠️ See [Q4](#8-spec-problems-and-open-questions) for what this ISO can't do.
+
+### 4.9 Windows apps and switching
+
+**Compatibility database.** `compat/windows-apps.json` (checked against its JSON schema in CI, published under ODbL 1.0). It ships in the image at `/usr/share/lumen/compat/`, and lumen-updated keeps a newer signed copy in `/var/lib/lumen/compat/` between image updates. Readers use whichever copy is newer. A lookup never touches the network.
+
+**lumen-compat.** A Rust crate that identifies a file (PE version info, installer type, SHA-256, Steam App ID) and looks it up. The spec makes it the only lookup path for the Store, the dialog, Welcome and the CLI, so they can't disagree. The CLI links it directly. **Proposed:** the C++ apps call it through a small C interface rather than through a daemon. A lookup is a local file read, so a service would only add a moving part ([Q10](#8-spec-problems-and-open-questions)).
+
+**"Open Windows app" dialog** (`org.lumen.WindowsApp`):
+
+- It is the default app for `.exe` and `.msi` files. Until it ships (step 7.5), those files open in Bottles directly (step 1.13).
+- It reads the file through lumen-compat and shows the rating, the reason, alternatives and anti-cheat status.
+- Install creates the app's own bottle with its recipe and runs the installer, by driving Bottles through its command-line tool (`bottles-cli`, run inside the Bottles Flatpak). The installer file reaches the sandbox through the document portal, so Bottles' permissions never widen. Whether `bottles-cli` can apply every recipe field (dependencies, DLL overrides, environment variables) is checked at step 7.5.
+- Nothing installs until the user presses a button (spec).
+
+**Bottles** (Flathub) runs each Windows app in its own bottle inside its Flatpak sandbox, with Bottles' default permissions (no home folder beyond Downloads). Settings → Apps → Windows apps and `lumen app list --windows` list the bottles; removing an app deletes its bottle. Games use Steam with Proton, Heroic or Lutris instead.
+
+**Lumen Setup for Windows** runs on Windows before Lumen is on the machine, so it shares data with Lumen, not D-Bus:
+
+- `hardware.json`, the same file lumen-hwd uses. **Proposed:** the matching rules live in one Rust crate that both lumen-hwd and Setup link, for the same reason as lumen-compat ([Q10](#8-spec-problems-and-open-questions)).
+- Windows' own tools and APIs for BitLocker, Fast Startup, Secure Boot and the UEFI CA 2023 check, shrinking the Windows partition and setting the Windows clock to UTC. Every change to Windows has its own confirm button (spec).
+- Lumen's release files: it downloads the ISO with its checksum and signature over HTTPS, verifies them and writes the USB drive.
 
 ## 5. Key flows
 
@@ -328,6 +362,14 @@ Anaconda from bootc-image-builder's `anaconda-iso`, with Lumen's kickstart and t
 4. The app's desktop file appears; the dock and palette pick it up through KService.
 5. lumen-updated keeps it up to date from then on.
 
+### 5.4 Opening a Windows program
+
+1. The user double-clicks `setup.exe`. The "Open Windows app" dialog opens, because it is the default app for `.exe` files.
+2. lumen-compat identifies the file and looks it up in the local database. No network request is made.
+3. The dialog shows the rating, the reason, alternatives and, for games, anti-cheat status.
+4. When the user presses Install (or Try it for an untested app), the dialog creates a bottle with the app's recipe and runs the installer inside it through Bottles.
+5. The app appears in the app menu and runs in its own bottle inside the Bottles sandbox. Removing it deletes the bottle.
+
 ## 6. Interface index
 
 ### 6.1 D-Bus services Lumen provides
@@ -341,7 +383,7 @@ Anaconda from bootc-image-builder's `anaconda-iso`, with Lumen's kickstart and t
 | `org.lumen.Backup1` | session | lumen-backupd | Backup app, Settings, CLI, shell, Welcome |
 | `org.lumen.Glass1` (**Proposed**) | session | `kwin_wayland` (lumen-glass) | Settings, session tests |
 
-Lumen services call each other in one direction only: lumen-health and lumen-hwd call lumen-updated, and lumen-updated calls no other Lumen service. Part 2 draws this as a graph.
+Lumen services call each other in one direction only: lumen-health and lumen-hwd call lumen-updated, and lumen-updated calls no other Lumen service. Part 2 draws this as a graph. The Windows-app parts add no D-Bus service: lumen-compat is a library.
 
 ### 6.2 Upstream D-Bus services Lumen uses
 
@@ -360,7 +402,7 @@ Lumen services call each other in one direction only: lumen-health and lumen-hwd
 | `org.freedesktop.Flatpak.SystemHelper` (through libflatpak) | system | Store, CLI, lumen-updated |
 | `org.freedesktop.Notifications` | session | shell (serves it), apps |
 | `org.freedesktop.secrets` | session | lumen-backupd |
-| `org.freedesktop.portal.*` | session | Flatpak apps |
+| `org.freedesktop.portal.*` | session | Flatpak apps; the "Open Windows app" dialog (document portal) |
 | `org.kde.KWin`, `org.kde.KWin.NightLight`, `org.kde.kglobalaccel`, `org.kde.krunner1`, `org.kde.osdService`, `org.kde.Solid.PowerManagement` | session | shell, Settings |
 | `org.kde.StatusNotifierWatcher`, `org.mpris.MediaPlayer2.*`, `com.canonical.Unity.LauncherEntry` | session | shell |
 
@@ -382,14 +424,18 @@ Lumen services call each other in one direction only: lumen-health and lumen-hwd
 | `ghcr.io` | OCI registry over HTTPS, cosign signatures | bootc, through lumen-updated | Verified before staging |
 | Flathub | HTTPS, signed by Flathub | Flatpak, through the Store and lumen-updated | Metadata fetched anonymously (spec) |
 | LVFS | HTTPS, signed metadata | fwupd, through lumen-updated | Firmware waits for consent |
+| Compatibility database | HTTPS, signed file | lumen-updated | The same file for everyone. Lookups stay on the machine, so nothing reveals which app a user installs |
+| Lumen release files | HTTPS, checksums and signatures | Lumen Setup for Windows | Verified before writing the USB drive |
 | Backup destinations | Local disk, SMB, NFS, S3 over HTTPS | restic, through lumen-backupd | Encrypted before it leaves the machine |
-| NetworkManager connectivity check | HTTP to Fedora's check URL | NetworkManager | Needed for captive portals. Keep Fedora's or host our own: step 7.2 |
+| Remote help | RDP | KRdp | Off until the user starts a session; ⚠️ [Q5](#8-spec-problems-and-open-questions) |
+| NetworkManager connectivity check | HTTP to Fedora's check URL | NetworkManager | Needed for captive portals. Keep Fedora's or host our own: step 8.2 |
 | Crash reports | HTTPS to KDE's crash tracker | DrKonqi | Off unless the user opts in at Welcome |
 | Telemetry | None | n/a | `rpm-ostree-countme` masked; KDE's user feedback stays off |
 
 ## 7. Trust boundaries
 
 - **Flatpak apps** run in the Flatpak sandbox and get only portals and the permissions they declare. They can't reach Lumen's D-Bus services.
+- **Windows programs** run under Wine inside the Bottles Flatpak sandbox, one bottle per app, with no access to the home folder by default.
 - **Session components** (shell, apps, CLI, lumen-settingsd, lumen-backupd, lumen-glass inside KWin) run as the user. They ask system services for privileged work; polkit decides.
 - **System services** run hardened. Only lumen-updated runs as root. They never call into a user's session.
 - **The image** is read-only and signed. Nothing at run time can change `/usr`; changes arrive only as a new signed image.
@@ -403,18 +449,21 @@ Lumen services call each other in one direction only: lumen-health and lumen-hwd
 | Q1 | GTK apps get glass "via our small GTK module" (lumen-glass spec; step 3.14) | GTK 4 dropped general-purpose loadable modules, so a module can't load into GTK 4 apps at all. Flatpak apps can't load modules from the host either, and the spec makes Flatpak the only way to install apps. In practice the module would only reach GTK 3 apps that ship in the image | Our GTK CSS makes headerbars and sidebars translucent, and lumen-glass puts glass behind the whole window for opted-in GTK app IDs (only the translucent parts show it). A GTK 3 module stays optional for host apps | Step 3.14, Phase 2 visual test |
 | Q2 | The package manifest includes both `power-profiles-daemon` and `tuned-ppd` | They can't be installed together. Both provide `ppd-service` and conflict on it (checked in the Fedora 44 repos). Fedora has been moving its desktops to tuned-ppd since Fedora 41 | Keep `tuned-ppd`, drop `power-profiles-daemon`. Both serve the same D-Bus API, so nothing else changes. Confirm which one Kinoite ships at step 1.1 | Steps 1.1, 1.3 |
 | Q3 | After an update, the health check must see "shell started" within 2 minutes, and two failures roll back | The shell only starts when someone logs in. After a "Tonight" restart nobody does, so every good update would fail the check and roll back | Mark the boot good on system checks only: SDDM up, network up, no failed critical units. Check the shell at the first login after an update; if it fails, offer to go back instead of doing it automatically. Look at greenboot (Fedora's boot health checks with GRUB fallback) before writing our own | Step 5.6 |
-| Q4 | The hardware report runs on the live USB, and the installer is Anaconda WebUI from `anaconda-iso` | bootc-image-builder's `anaconda-iso` boots straight into Anaconda, with no live desktop, so there's nowhere to run the hardware report app. By default it is also an unattended installer that wipes the first disk; interactive choices need a partial kickstart. Which Anaconda UI it uses must be checked | Check at step 1.8. Options: a live ISO built from our image (for example Universal Blue's Titanoboa), or running the hardware check from Windows (ADR 0001's Lumen Setup proposal) | Steps 1.8, 6.10, 6.12 |
+| Q4 | The hardware report runs on the live USB, and the installer is Anaconda WebUI from `anaconda-iso` | bootc-image-builder's `anaconda-iso` boots straight into Anaconda, with no live desktop, so there's nowhere to run the hardware report app. By default it is also an unattended installer that wipes the first disk; interactive choices need a partial kickstart. Which Anaconda UI it uses must be checked | Check at step 1.8. Lumen Setup for Windows already runs the hardware check from Windows (step 7.9), which covers people coming from Windows. For everyone else: a live ISO built from our image (for example Universal Blue's Titanoboa), or drop the live report | Steps 1.8, 6.10, 6.12 |
+| Q5 | "Get help from a friend": Plasma remote desktop behind a one-time code (step 5.22a) | KRdp is a plain RDP server with no relay. A friend on another network can't reach it unless the user forwards a port on their router. Windows' Quick Assist works because Microsoft runs a relay | For v0.1, say plainly that it works on the same network. For help across the internet, either Lumen runs a relay (a server to pay for and keep private), or the Store offers RustDesk, which has its own relay network. Your decision | Step 5.22a |
 
-Already known and tracked elsewhere: `/usr/etc` (step 1.3), and suspend-then-hibernate and BitLocker resizing (ADR 0001).
+Already known and tracked elsewhere: `/usr/etc` (step 1.3). ADR 0001 fixed suspend-then-hibernate and BitLocker resizing in the spec.
 
 ### Open design questions
 
 | # | Question | Proposal | Decide at |
 | --- | --- | --- | --- |
-| Q5 | The spec sets the glass role "by a window property or shell role". Wayland has no window properties, so how does a surface name its role? | A small Lumen Wayland protocol, `lumen_glass_manager_v1`, served by lumen-glass the same way the stock blur effect serves its protocol. Windows that don't use it get a role from their window type (section 4.2) | Step 3.8 |
-| Q6 | The spec keeps all settings in `~/.config/lumen/`, but some are machine-wide: update channel, automatic updates, firewall. Whose file wins when two users differ? | lumen-settingsd stays the one front door. Machine-wide keys are forwarded to the system service that owns them and stored in `/etc/lumen/`; changing them asks for the admin password | Step 5.2 |
-| Q7 | Welcome creates the account and enrols the TPM before any user exists. Both need root. Who does it? | Welcome's first part runs in a first-boot session as a locked-down system user, as GNOME Initial Setup does. It creates the account through AccountsService, and enrols the TPM through a polkit-guarded method on `org.lumen.Hardware1`. First check whether KDE's own first-run project (plasma-setup) is ready to reuse | Steps 6.5, 6.6 |
-| Q8 | "Every setting is also a config file and a CLI command." Does `lumen settings` also cover settings owned upstream (Wi-Fi, displays, Bluetooth)? | Not in v0.1. Those already have config files and CLIs (`nmcli`, `kscreen-doctor`, `bluetoothctl`); the Advanced section of each Settings page shows the matching command | Step 5.2 |
+| Q6 | The spec sets the glass role "by a window property or shell role". Wayland has no window properties, so how does a surface name its role? | A small Lumen Wayland protocol, `lumen_glass_manager_v1`, served by lumen-glass the same way the stock blur effect serves its protocol. Windows that don't use it get a role from their window type (section 4.2) | Step 3.8 |
+| Q7 | The spec keeps all settings in `~/.config/lumen/`, but some are machine-wide: update channel, automatic updates, firewall. Whose file wins when two users differ? | lumen-settingsd stays the one front door. Machine-wide keys are forwarded to the system service that owns them and stored in `/etc/lumen/`; changing them asks for the admin password | Step 5.2 |
+| Q8 | Welcome creates the account and enrols the TPM before any user exists. Both need root. Who does it? | Welcome's first part runs in a first-boot session as a locked-down system user, as GNOME Initial Setup does. It creates the account through AccountsService, and enrols the TPM through a polkit-guarded method on `org.lumen.Hardware1`. First check whether KDE's own first-run project (plasma-setup) is ready to reuse | Steps 6.5, 6.6 |
+| Q9 | "Every setting is also a config file and a CLI command." Does `lumen settings` also cover settings owned upstream (Wi-Fi, displays, Bluetooth)? | Not in v0.1. Those already have config files and CLIs (`nmcli`, `kscreen-doctor`, `bluetoothctl`); the Advanced section of each Settings page shows the matching command | Step 5.2 |
+| Q10 | lumen-compat is Rust, but the Store, the dialog and Welcome are C++, and Lumen Setup for Windows (C++ on Windows) needs the same `hardware.json` rules as lumen-hwd. How do they share code? | Each shared Rust crate gets a small C interface (generated with cbindgen) that the C++ programs link, on Linux and on Windows. No extra daemon | Steps 7.4, 7.9 |
+| Q11 | The Store installs websites as apps. What runs them? | Use the user's browser where it can open a site in its own app window (Chromium-based browsers can; Firefox on Linux can't), else GNOME Web, a Flatpak with web apps built in. Create the launchers through the dynamic launcher portal, after checking that xdg-desktop-portal-kde implements it | Step 7.7 |
 
 ## Part 2
 
