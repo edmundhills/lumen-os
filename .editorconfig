@@ -1,0 +1,23 @@
+# SPDX-FileCopyrightText: 2026 Lumen OS contributors
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Editor settings for the repository (https://editorconfig.org). shfmt reads the
+# [*.sh] section, so `just lint` checks shell scripts against it.
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{json,md,toml,yaml,yml}]
+indent_size = 2
+
+[*.sh]
+indent_size = 2
+switch_case_indent = true
