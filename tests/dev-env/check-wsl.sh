@@ -62,7 +62,9 @@ have() { command -v -- "$1" >/dev/null 2>&1; }
 
 # Free space in whole GB (rounded down) on the filesystem that holds PATH; empty if unknown.
 free_gb() {
-  df -BM --output=avail -- "$1" 2>/dev/null | awk 'NR == 2 { sub(/M$/, "", $1); print int($1 / 1024) }'
+  local mib
+  mib=$(df -BM --output=avail -- "$1" 2>/dev/null | tail -n 1 | tr -dc '0-9')
+  [[ -n $mib ]] && printf '%d\n' $((mib / 1024))
 }
 
 # Windows folder that holds this distribution's virtual disk, e.g. D:\WSL\FedoraLinux-43.
@@ -247,8 +249,9 @@ else
   fail "$linux_free GB free inside WSL; need $MIN_FREE_GB GB" "$disk_fix"
 fi
 
-mem_kib=$(awk '/^MemTotal:/ { print $2 }' /proc/meminfo 2>/dev/null)
-mem_gib=$(awk -v k="${mem_kib:-0}" 'BEGIN { printf "%.1f", k / 1048576 }')
+mem_kib=$(grep -m 1 '^MemTotal:' /proc/meminfo 2>/dev/null | tr -dc '0-9')
+mem_tenths=$((${mem_kib:-0} * 10 / 1048576))
+mem_gib="$((mem_tenths / 10)).$((mem_tenths % 10))"
 cpus=$(nproc 2>/dev/null || echo '?')
 if ((${mem_kib:-0} >= MIN_MEM_GIB * 1048576)); then
   pass "WSL has $mem_gib GiB of memory and $cpus CPU threads"
