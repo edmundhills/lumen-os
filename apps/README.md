@@ -15,9 +15,9 @@ Lumen's own apps. They are part of the OS, so they ship as RPMs in the image, no
 | [welcome/](welcome/) | Welcome, the first-run setup | `org.lumen.Welcome` | 6.5 to 6.7, 7.8 |
 | [backup/](backup/) | Backup | `org.lumen.Backup` | 6.8 |
 | [windows-app/](windows-app/) | The "Open Windows app" dialog | `org.lumen.WindowsApp` | 7.5, 7.6 |
+| [hwreport/](hwreport/) | The hardware report, in the install USB's live session | `org.lumen.HardwareReport` | 6.11, 6.12 |
 
 - All of them are C++ and QML (Qt 6), built in the image's `build-apps` stage.
 - On Wayland the app ID is how KWin and the dock match a window to its app, so it must equal the name of the app's desktop file.
-- The hardware report (`org.lumen.HardwareReport`, step 6.12) has no folder yet. The architecture proposes `apps/hwreport`, which the owner reviews at step 0.8.
 
 Architecture: [4.7 Apps](../docs/architecture.md#47-apps).

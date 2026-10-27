@@ -15,10 +15,10 @@ set -u
 
 # The folders of the repository layout in CLAUDE.md; each needs a README.md.
 readonly LAYOUT_DIRS=(
-  apps apps/backup apps/settings apps/store apps/welcome apps/windows-app
-  cli compat design design/tokens docs docs/decisions glass hardware image
-  installer services services/backupd services/health services/hwd
-  services/settingsd services/updated shell tests windows-setup
+  apps apps/backup apps/hwreport apps/settings apps/store apps/welcome
+  apps/windows-app cli compat design design/tokens docs docs/decisions glass
+  hardware image installer services services/backupd services/health
+  services/hwd services/settingsd services/updated shell tests windows-setup
 )
 
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." || exit 2
