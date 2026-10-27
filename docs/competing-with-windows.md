@@ -70,7 +70,7 @@ This is a living list. Each gap is either covered by the spec, partly covered, a
 | iCloud and iPhone | No official client; KDE Connect is limited on iPhone | Web access; KDE Connect for Android | ⛔ |
 | Work VPNs (Cisco, GlobalProtect, Fortinet) | Need extra NetworkManager plugins | Ship OpenConnect plugins; Settings imports these alongside WireGuard and OpenVPN | ➕ |
 | "Reset this PC" | No equivalent | Settings: "Reset Lumen", either keeping files or erasing everything | 🟡 spec has "reset to defaults"; ➕ |
-| Remote help from a friend (like Quick Assist) | Possible but technical | "Get help from a friend" using Plasma's built-in remote desktop, behind a visible indicator and a one-time code. It only reaches a friend on the same network, because it has no relay like Quick Assist's; for help over the internet, the page offers RustDesk from the Store (ADR 0002). A Lumen relay after v0.1 if the owner approves it | 🟡 same network; ➕ relay later |
+| Remote help from a friend (like Quick Assist) | Possible but technical | "Get help from a friend" using Plasma's built-in remote desktop, behind a visible indicator and a one-time code. It only reaches a friend on the same network, because it has no relay like Quick Assist's; for help over the internet, the page offers RustDesk from the Store (ADR 0002). A Lumen relay after v0.1 if the owner approves it | ✅ same network; ➕ relay after v0.1 |
 | Parental controls | Little on KDE | Age-rated app filtering and per-user app limits | ➕ after v0.1 |
 | Voice typing | Not built in | Local-only dictation (no cloud, no telemetry) | ➕ after v0.1 |
 | Work and school sign-in (Active Directory, Entra ID), device management | Possible but uncommon | Consumer focus for v1; revisit later | ⛔ for v1 |
