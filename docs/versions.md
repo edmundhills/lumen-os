@@ -44,7 +44,7 @@ The Fedora 45 Kinoite build of the same day (`45.20261027.0`, a pre-release) has
 
 ## Things to know
 
-- **A pinned digest stops working after about four weeks.** Every dated Kinoite build carries the label `quay.expires-after: 4w`, so quay.io deletes its tag four weeks after the build: on 2026-10-27 the oldest dated Fedora 44 tag was `44.20260930.0`. Once the moving `44` tag has moved on as well, no tag refers to the image, and quay.io can delete it, after which it can't be pulled by its digest. The pin must be bumped often, and old builds need their own copy of the base ([risks, watch list](risks.md#watch-list)).
+- **A pinned digest stops working after about four weeks.** Every dated Kinoite build carries the label `quay.expires-after: 4w`, so quay.io deletes its tag four weeks after the build: on 2026-10-27 the oldest dated Fedora 44 tag was `44.20260930.0`. Once the moving `44` tag has moved on as well, no tag refers to the image, and quay.io can delete it, after which it can't be pulled by its digest. The pin must be bumped often, and old builds need their own copy of the base ([risks, watch list](risks.md#watch-list)). From step 1.5 the pin is bumped at least every two weeks, and each pinned base is copied to ghcr.io ([ADR 0004](decisions/0004-phase-0-review.md)).
 - Fedora's mirrors keep only the release-day build and the newest update of each package, so the `-devel` packages for an older pin may have to come from Koji ([architecture 9.4](architecture.md#94-matching-the-base-image-exactly)).
 - Other pinned versions live next to the code that uses them: the lint container's base and tools in `tests/lint/Containerfile`, and the CI actions and tools in `.github/workflows/`.
 

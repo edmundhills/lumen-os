@@ -6,11 +6,11 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 # Lumen OS technical risks
 
-Status: draft for the owner's review at step 0.8 (2026-10-27). Written at step 0.3 against [docs/spec.md](spec.md) as amended by [ADR 0001](decisions/0001-compete-with-windows.md) and [ADR 0002](decisions/0002-fix-spec-errors-from-architecture-review.md), and against [docs/architecture.md](architecture.md).
+Status: accepted by the owner at step 0.8 (2026-10-27, [ADR 0004](decisions/0004-phase-0-review.md)). Written at step 0.3 against [docs/spec.md](spec.md) as amended by [ADR 0001](decisions/0001-compete-with-windows.md) and [ADR 0002](decisions/0002-fix-spec-errors-from-architecture-review.md), and against [docs/architecture.md](architecture.md).
 
 This is a living document, like the [gap list](competing-with-windows.md). Update a risk when it changes, and close it when its mitigation has shipped and been tested. Facts that move (dates, upstream patches, rules for certificates) were checked on 2026-10-27; the sources are at the end.
 
-**How to read it.** *Likelihood* is how likely the risk is to hurt Lumen before v0.1 if we do nothing beyond the plan. *Impact* is how bad it is when it happens: **High** means users lose data or can't boot or install, or a promise in the spec fails; **Medium** means a feature degrades or work is delayed. Each risk says what can go wrong, what we do about it, how we'll notice early, and which steps in [PROGRESS.md](../PROGRESS.md) act on it. **Proposed** marks mitigations that need a decision at the step named.
+**How to read it.** *Likelihood* is how likely the risk is to hurt Lumen before v0.1 if we do nothing beyond the plan. *Impact* is how bad it is when it happens: **High** means users lose data or can't boot or install, or a promise in the spec fails; **Medium** means a feature degrades or work is delayed. Each risk says what can go wrong, what we do about it, how we'll notice early, and which steps in [PROGRESS.md](../PROGRESS.md) act on it. The owner accepted every proposed mitigation at step 0.8; the step named builds it, or checks it first where the mitigation says so.
 
 ## Summary
 
@@ -47,8 +47,8 @@ Likelihood **High** (it happens every release). Impact **High**.
 **Mitigation**
 
 - Exact-version `-devel` packages, with Koji as the fallback, and the guard check at the end of `devel` (architecture 9.4). Each plugin is built in a stage derived from the stage it ships in.
-- **Proposed** (step 3.1): keep the fork easy to rebase. lumen-glass keeps the upstream effect's file layout, puts Lumen's own work in separate files, and records the KWin commit it forked from in `glass/UPSTREAM`. A rebase then means re-applying one known diff.
-- **Proposed** (step 3.1): a weekly canary job builds lumen-glass, the decoration and lumen-shell against the KWin and Plasma in Fedora's `updates-testing` and Rawhide. Breakage then shows up weeks before Renovate's pull request for the new base digest. The canary is never shipped, so the build rule still holds for what users get.
+- **Step 3.1:** keep the fork easy to rebase. lumen-glass keeps the upstream effect's file layout, puts Lumen's own work in separate files, and records the KWin commit it forked from in `glass/UPSTREAM`. A rebase then means re-applying one known diff.
+- **Step 3.1:** a weekly canary job builds lumen-glass, the decoration and lumen-shell against the KWin and Plasma in Fedora's `updates-testing` and Rawhide. Breakage then shows up weeks before Renovate's pull request for the new base digest. The canary is never shipped, so the build rule still holds for what users get.
 - The Renovate pull request for a new Kinoite digest stays red until the rebase is done, so users stay on the previous base and untested code can't reach them. That also delays the rest of the base's updates, so each Plasma release month has rebase time planned in.
 - If lumen-glass fails to load, KWin runs without it. A session test (step 3.15) checks that the shell is still usable with the effect turned off.
 - Upstream what we can. Generic hooks, such as support for `ext_background_effect_manager_v1`, belong in KWin, so the fork shrinks over time.
@@ -96,9 +96,9 @@ Likelihood **High**. Impact **High** (the user can lose Windows and its files).
 **Mitigation**
 
 - Lumen Setup for Windows detects BitLocker, shows where the recovery key is (the Microsoft account's recovery key page, or `manage-bde -protectors -get`), and doesn't continue with "alongside Windows" until the user confirms the key is saved somewhere off the PC (step 7.9).
-- **Proposed** (decide at 7.9 with the owner): Setup offers to suspend BitLocker for the next two Windows restarts (`Suspend-BitLocker -RebootCount 2`), as Microsoft advises before firmware updates. This lowers protection for a short time, so it gets its own confirm button and a plain explanation, and is never done silently.
+- **Step 7.9:** Setup offers to suspend BitLocker for the next two Windows restarts (`Suspend-BitLocker -RebootCount 2`), as Microsoft advises before firmware updates. This lowers protection for a short time, so it gets its own confirm button and a plain explanation, and is never done silently.
 - Setup shrinks Windows with Windows' own tools, and says how much space it could free before the user commits.
-- **Proposed** (step 6.10): Lumen's boot menu starts Windows by asking the firmware to boot the Windows boot manager next (the EFI `BootNext` variable), not by chainloading it from GRUB. The dual-boot tests check on a real BitLocker PC that this avoids the recovery prompt.
+- **Step 6.10:** Lumen's boot menu starts Windows by asking the firmware to boot the Windows boot manager next (the EFI `BootNext` variable), not by chainloading it from GRUB. The dual-boot tests check on a real BitLocker PC that this avoids the recovery prompt.
 - The installer never resizes, formats or writes a BitLocker volume; "Install alongside Windows" uses only free space (6.10). Welcome's import opens the Windows drive read-only with the recovery key the user types, and refuses a hibernated drive with the Fast Startup explanation (7.8).
 - Test on a real Windows 11 install with device encryption on, not only in a VM (6.13, 7.12, 9.6).
 
@@ -121,9 +121,9 @@ Likelihood **High**. Impact **High** (lost keys mean lost data).
 
 - Welcome makes the recovery key hard to lose: it shows the key, lets the user save it to a USB drive, print it or scan it as a QR code, and asks them to type back part of it (step 6.6).
 - Before lumen-updated applies a Secure Boot or firmware update that changes PCR 7, it says plainly that the next start will ask for the recovery key once. After that start, the TPM is enrolled again (`systemd-cryptenroll`), so later starts are automatic again (5.5, 6.6).
-- **Proposed** (step 6.6): evaluate systemd-pcrlock, which can predict the new PCR values before the restart, so the prompt isn't needed at all.
+- **Step 6.6:** systemd-pcrlock predicts the new PCR values before the restart, so the prompt isn't needed at all ([Q17](#questions-for-the-owner)). The warning above stays for changes pcrlock can't predict.
 - A Health check notices when unlock has fallen back to the passphrase and offers to enrol again (5.8).
-- Strength: [Q17](#questions-for-the-owner) asks the owner to choose between a PIN by default and binding to more of Lumen's own boot measurements. Either way, measure the volume key into a PCR (systemd's `tpm2-measure-pcr=`), which blocks attacks that swap in a fake root partition.
+- Strength ([Q17](#questions-for-the-owner), decided at step 0.8): no PIN by default, but the unlock is also bound to Lumen's own boot measurements, predicted with systemd-pcrlock. If step 6.6 can't make that reliable, a PIN becomes the default instead. Either way, measure the volume key into a PCR (systemd's `tpm2-measure-pcr=`), which blocks attacks that swap in a fake root partition.
 
 **Early warning:** recovery prompts in the update test after a `db` update (OVMF with swtpm in CI).
 
@@ -164,7 +164,7 @@ Likelihood **Medium**. Impact **High** (the "never breaks" promise depends on ro
 
 **Mitigation**
 
-- **Proposed** (step 5.1): Lumen's state files carry a format version. Each release reads the previous release's format, and a service never deletes data it doesn't understand. Each service has a unit test for this.
+- **Step 5.1:** Lumen's state files carry a format version. Each release reads the previous release's format, and a service never deletes data it doesn't understand. Each service has a unit test for this.
 - The update test (step 9.2) logs into a real session on the new version before rolling back, so the config migrations actually run. It then logs into the old version and runs the session test, not just a boot check.
 - Keep image changes out of `/etc` wherever possible (ADR 0002); the image lint lists every file the image ships in `/etc`.
 - Snapper's hourly `/home` snapshots give users a way back for config files ("Previous versions", step 6.9).
@@ -298,7 +298,7 @@ Likelihood **Medium**. Impact **Medium** (data we can't publish has to be remove
 
 **Mitigation**
 
-- Every entry lists its sources (spec). **Proposed** (step 1.15): `compat/SOURCES.md` lists each source with its confirmed licence, and a CI check rejects an entry that cites a source not on that list.
+- Every entry lists its sources (spec). **Step 1.15:** `compat/SOURCES.md` lists each source with its confirmed licence, and a CI check rejects an entry that cites a source not on that list.
 - Write our own recipes. Never copy another project's scripts or text, and never scrape (spec).
 - Confirm at step 7.1: that ProtonDB's export is still updated, AreWeAntiCheatYet's LICENSE file, and WineHQ AppDB's terms (ask WineHQ if they're unclear).
 - Take only facts from stores (names, Steam App IDs). Icons and descriptions for alternatives come from Flathub's AppStream data under its own metadata licences.
@@ -340,7 +340,7 @@ Likelihood **Medium**. Impact **Medium**.
 **Mitigation**
 
 - Re-chunk the image after the build, so each layer holds a stable group of packages (rpm-ostree's chunked image build, or the re-chunker Universal Blue uses). Step 1.5 picks the tool.
-- **Proposed** (step 1.5): CI measures the download from the current `stable` to each candidate and fails above a budget set at that step.
+- **Step 1.5:** CI measures the download from the current `stable` to each candidate and fails above a budget set at that step.
 - lumen-updated's metered-network and battery rules (step 5.5).
 
 **Steps:** 1.5, 5.5, 9.2.
@@ -359,7 +359,7 @@ Likelihood **High**. Impact **Medium**.
 
 **Mitigation**
 
-- Define "match" as a baseline every app gets: light or dark, accent, contrast and fonts. Lumen's apps and host apps get the full style; GTK 3 Flatpaks get it through a Flathub theme extension; libadwaita apps keep their own shapes ([Q16](#questions-for-the-owner)).
+- Phase 2's acceptance defines "match" as a baseline every app gets: light or dark, accent, contrast and fonts. Lumen's apps and host apps get the full style; GTK 3 Flatpaks get it through a Flathub theme extension; libadwaita apps keep their own shapes ([Q16](#questions-for-the-owner)).
 - Never add filesystem overrides to Flatpak apps silently (sandbox rule).
 - The visual test at step 2.13 includes a Flatpak app of each toolkit.
 
@@ -376,18 +376,18 @@ Smaller risks, or ones already covered by a step. They move into the top 15 if t
 | Fedora drops 32-bit packages, which Steam and parts of Wine need on the host. A 2025 proposal to drop them was withdrawn | Fall back to Steam's Flatpak and Wine's WoW64 mode | 1.10 |
 | Losing a signing key or the GitHub account: one person holds every key | Protected environment for `main`, hardware-key 2FA, offline key backups, a written procedure to replace each key (architecture 9.7); consider keyless Sigstore signing for images at step 1.6 | 1.6, 8.2 |
 | Fedora's six-month cycle: each rebase moves KWin, Plasma, Qt, Mesa and the kernel at once, and each release is supported for about 13 months | Covered by risks 1 and 6, and Q14 | 9.1 |
-| Kinoite's dated builds expire from quay.io four weeks after they are built (label `quay.expires-after: 4w`, found at step 0.7), so a pinned base digest stops resolving and CI can no longer build an older commit | **Proposed:** bump the pin at least every two weeks, by Renovate or a scheduled job, from step 1.5 instead of 8.2; and copy each pinned base into Lumen's own registry on ghcr.io, so old builds stay reproducible ([versions](versions.md#things-to-know)) | 1.2, 1.5, 8.2 |
+| Kinoite's dated builds expire from quay.io four weeks after they are built (label `quay.expires-after: 4w`, found at step 0.7), so a pinned base digest stops resolving and CI can no longer build an older commit | Bump the pin at least every two weeks (decided at step 0.8), by Renovate or a scheduled job, from step 1.5 instead of 8.2; and copy each pinned base into Lumen's own registry on ghcr.io, so old builds stay reproducible ([versions](versions.md#things-to-know)) | 1.2, 1.5, 8.2 |
 
 Not ranked, because they aren't technical: one owner's time across about 170 steps, and the business gaps in the gap list (for example no shop preinstalls).
 
 ## Questions for the owner
 
-For the review at step 0.8. They continue the numbering of [architecture section 8](architecture.md#8-spec-problems-and-open-questions).
+Decided at step 0.8: the owner accepted both proposals, with option (b) for Q17 and (a) as its fallback ([ADR 0004](decisions/0004-phase-0-review.md)). They continue the numbering of [architecture section 8](architecture.md#8-spec-problems-and-open-questions).
 
-| # | Question | Proposal | Decide at |
+| # | Question | Decision | Steps |
 | --- | --- | --- | --- |
-| Q16 | Phase 2's acceptance says all four app types "match in both modes". Flatpak apps, libadwaita ones above all, can't take the full theme without overrides ([risk 15](#15-flatpak-apps-dont-match-the-lumen-look)). What does "match" mean? | Every app gets the same light or dark, accent, contrast and fonts. Lumen's apps and host apps get the full style, GTK 3 Flatpaks get it through a Flathub theme extension, and libadwaita apps keep their own shapes. If you agree, the Phase 2 acceptance line in the spec changes to say so | Step 0.8, before 2.1 |
-| Q17 | The spec unlocks the disk with the TPM bound to PCR 7, with an optional PIN, and promises that "a stolen laptop reveals nothing". Without a PIN, any Fedora-signed system booted on the stolen laptop gets the same PCR 7 and can ask the TPM for the key ([risk 4](#4-tpm2-automatic-unlock-recovery-enrolment-and-strength)). Which do you want? | Either (a) a PIN by default, with automatic unlock as the opt-in, or (b) no PIN, but also bind to measurements of Lumen's own boot files, predicted with systemd-pcrlock so updates don't prompt for the key. Measure the volume key in both cases. (b) is closer to how Windows behaves; step 6.6 checks it can be done. The spec's security table changes to match | Step 0.8; built at 6.6 |
+| Q16 | Phase 2's acceptance says all four app types "match in both modes". Flatpak apps, libadwaita ones above all, can't take the full theme without overrides ([risk 15](#15-flatpak-apps-dont-match-the-lumen-look)). What does "match" mean? | Every app gets the same light or dark, accent, contrast and fonts. Lumen's apps and host apps get the full style, GTK 3 Flatpaks get it through a Flathub theme extension, and libadwaita apps keep their own shapes. The Phase 2 acceptance line in the spec now says so | 2.1 to 2.14 |
+| Q17 | The spec unlocks the disk with the TPM bound to PCR 7, with an optional PIN, and promises that "a stolen laptop reveals nothing". Without a PIN, any Fedora-signed system booted on the stolen laptop gets the same PCR 7 and can ask the TPM for the key ([risk 4](#4-tpm2-automatic-unlock-recovery-enrolment-and-strength)). Which do you want? | (b): no PIN, but also bind to measurements of Lumen's own boot files, predicted with systemd-pcrlock so updates don't prompt for the key. This is closer to how Windows behaves. If step 6.6 can't make it reliable, (a): a PIN by default, with automatic unlock as the opt-in. Measure the volume key in both cases. The spec's security table and Welcome step now say so | 6.6 |
 
 ## Sources
 
