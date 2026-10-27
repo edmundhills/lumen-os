@@ -1,0 +1,155 @@
+# SPDX-FileCopyrightText: 2026 Lumen OS contributors
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# The package manifest: the Fedora packages in the Lumen image. One table per
+# area of the spec's manifest (docs/spec.md, "Package manifest (system
+# layer)"), each with up to three lists:
+#
+#   keep      Kinoite already has it, and Lumen relies on it.
+#   install   Lumen adds it to Kinoite.
+#   remove    Lumen removes it from Kinoite.
+#
+# packages.py applies the file in the image build and stops the build when the
+# file doesn't match the base image: a kept or removed package that Kinoite no
+# longer has, an added one that Kinoite now has, or a package that dnf removed
+# without being asked. Weak dependencies aren't installed, so everything Lumen
+# wants is listed here. Packages built from this repository (lumen-shell,
+# lumen-glass and the rest) aren't: they come from the image's build stages
+# (docs/architecture.md, section 9.2).
+#
+# Checked against Kinoite 44.20261027.0 (docs/versions.md).
+
+[desktop]
+keep = [
+  "kwin",
+  "libplasma",
+  # Runs the Plasma shell, which loads Lumen's shell package (Phase 4)
+  "plasma-workspace",
+  "layer-shell-qt",
+  "kf6-krunner",
+  # KRunner's unit converter, which the command palette uses (step 4.6)
+  "kdeplasma-addons",
+  "xdg-desktop-portal-kde",
+]
+# Kinoite's stock panels and default widgets aren't separate packages: they are
+# part of plasma-workspace, plasma-desktop and kdeplasma-addons, which Lumen
+# keeps for Plasma's settings modules and KRunner. Step 1.3 replaces the default
+# layout in the overlay instead.
+
+[system]
+keep = [
+  "bootc",
+  "flatpak",
+  "podman",
+  # toolbx; distrobox below is the other developer-container tool (CLAUDE.md)
+  "toolbox",
+  "btrfs-progs",
+  "fwupd",
+  # Power profiles through tuned. Kinoite already ships it in place of
+  # power-profiles-daemon; the two conflict, so only one can ship
+  "tuned-ppd",
+  # The firewall, turned on by step 1.3 (spec, "Spec: security model")
+  "firewalld",
+]
+install = [
+  "distrobox",
+  # Hourly snapshots of /home (step 1.4)
+  "snapper",
+]
+# Discover, replaced by the Lumen Store (Phase 6), with its update notifier
+# and its back ends
+remove = [
+  "plasma-discover",
+  "plasma-discover-flatpak",
+  "plasma-discover-kns",
+  "plasma-discover-libs",
+  "plasma-discover-notifier",
+  "plasma-discover-rpm-ostree",
+]
+
+[hardware]
+keep = [
+  "mesa-dri-drivers",
+  "mesa-vulkan-drivers",
+  "linux-firmware",
+  "amd-gpu-firmware",
+  "amd-ucode-firmware",
+  "intel-gpu-firmware",
+  "microcode_ctl",
+  "alsa-sof-firmware",
+  "fprintd",
+  "fprintd-pam",
+  "iio-sensor-proxy",
+  "cups",
+  "ipp-usb",
+  "sane-airscan",
+  "bluez",
+]
+install = [
+  # Lets OpenRGB, a Flatpak, reach RGB controllers without root
+  "openrgb-udev-rules",
+  # The service Piper, a Flatpak, uses to set up gaming mice
+  "libratbag-ratbagd",
+]
+
+# System codecs and hardware video decoding follow the codecs ADR (step 1.14),
+# which may change this table.
+[media]
+keep = [
+  "pipewire",
+  "pipewire-pulseaudio",
+  "wireplumber",
+  "ffmpeg-free",
+]
+
+[network]
+keep = [
+  "NetworkManager",
+  # Cisco AnyConnect, GlobalProtect and Fortinet VPNs, and their Plasma plugin
+  "NetworkManager-openconnect",
+  "plasma-nm-openconnect",
+]
+
+[input]
+keep = [
+  # IBus, with the engines Kinoite ships with it
+  "ibus",
+  "google-noto-sans-cjk-vf-fonts",
+  "google-noto-serif-cjk-vf-fonts",
+  "google-noto-color-emoji-fonts",
+  # Metric-compatible with Arial, Times New Roman and Courier New
+  "liberation-sans-fonts",
+  "liberation-serif-fonts",
+  "liberation-mono-fonts",
+]
+install = [
+  # Fcitx5 with modules for Qt 6, GTK 3 and GTK 4 apps, its Plasma settings
+  # page, and engines for the languages Kinoite's IBus engines cover: Chinese
+  # (Pinyin and Chewing), Japanese (Anthy), Korean (Hangul) and m17n
+  "fcitx5",
+  "fcitx5-qt6",
+  "fcitx5-gtk3",
+  "fcitx5-gtk4",
+  "kcm-fcitx5",
+  "fcitx5-chinese-addons",
+  "fcitx5-chewing",
+  "fcitx5-anthy",
+  "fcitx5-hangul",
+  "fcitx5-m17n",
+  # Inter (the interface font) and Inter Display, as static fonts
+  "rsms-inter-fonts",
+  "jetbrains-mono-fonts",
+  # Metric-compatible with Calibri and Cambria, for Office documents
+  "google-carlito-fonts",
+  "google-crosextra-caladea-fonts",
+]
+# Unused font packs: GNOME's interface fonts and Open Sans, which nothing in
+# the image needs. Kinoite's other fonts cover scripts and languages, or other
+# packages need them (Cantarell for the boot splash, Droid Sans for Ghostscript,
+# Hack for Plasma), so they stay.
+remove = [
+  "adwaita-mono-fonts",
+  "adwaita-sans-fonts",
+  "open-sans-fonts",
+]

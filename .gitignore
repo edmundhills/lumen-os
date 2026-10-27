@@ -1,0 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lumen OS contributors
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Python's bytecode cache, written when a test imports a script
+__pycache__/

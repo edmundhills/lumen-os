@@ -25,6 +25,7 @@ lint: _lint-image
 # Run the tests that work on this machine
 test: _lint-image
     {{ lint_container }} bash tests/lint/selftest.sh
+    {{ lint_container }} python3 -m unittest discover --start-directory image
 
 # Build the OS image with Podman
 build-image:

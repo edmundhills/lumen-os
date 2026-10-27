@@ -65,6 +65,7 @@ printf '\nfault:\n  echo "a recipe indented by 2 spaces, not 4"\n' >>justfile
 printf 'key: 1\nkey: 2\n' >fault.yaml
 printf 'on: push\njobs:\n  fault:\n    needs: no-such-job\n    runs-on: ubuntu-24.04\n    steps:\n      - run: "true"\n' >.github/workflows/fault.yml
 rm -- glass/README.md
+printf '\n[fault]\ninstall = ["kwin"]\n' >>image/packages.toml
 git add -A
 
 faults=(
@@ -78,6 +79,7 @@ faults=(
   "just:a badly indented justfile recipe"
   "Whitespace:a line that ends in a space"
   "layout:a missing README"
+  "manifest:a package listed twice in the image's package manifest"
 )
 if out=$(bash tests/lint/run.sh 2>&1); then
   fail "Lint should fail on a copy with a fault for every check" "$out"
