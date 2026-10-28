@@ -17,8 +17,9 @@ permissions: {}
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  # A new push cancels the older run of a branch or pull request, but every run
-  # on main finishes, so each commit there gets a result.
+  # A new push cancels the older run of a branch or pull request. A run on main
+  # is never cancelled once it has started; GitHub still lets a newer push
+  # replace one that is waiting to start.
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:

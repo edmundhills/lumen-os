@@ -2,9 +2,12 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# The image workflow. For now its build job is a placeholder: step 1.5 makes it
-# build image/Containerfile (`just build-image` builds it in WSL) and push the
-# image to ghcr.io. docs/architecture.md, section 9.8.
+# The image workflow: build image/Containerfile and check it on every push and
+# pull request. Builds of main also push the image to ghcr.io as `dev`.
+# docs/architecture.md, section 9.8.
+#
+# The build itself is in build-image.yml. It is called from two jobs so that
+# only builds of main get a token that can write to ghcr.io.
 
 name: image
 
@@ -17,24 +20,27 @@ permissions: {}
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  # A new push cancels the older run of a branch or pull request, but every run
-  # on main finishes, so each commit there gets a result.
+  # A new push cancels the older run of a branch or pull request. A run on main
+  # is never cancelled once it has started, so a push to ghcr.io is never cut
+  # off; GitHub still lets a newer push replace one that is waiting to start.
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
-  build:
-    name: Build the image
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
+  check:
+    name: Check
+    if: github.event_name != 'push' || github.ref != 'refs/heads/main'
     permissions:
       contents: read
-    steps:
-      - name: Check out the repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          persist-credentials: false
+    uses: ./.github/workflows/build-image.yml
+    with:
+      publish: false
 
-      - name: Build (placeholder)
-        run: |
-          echo "::notice title=Not built in CI yet::Step 1.5 makes this job build" \
-            "image/Containerfile and push the image to ghcr.io."
+  publish:
+    name: Publish
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/build-image.yml
+    with:
+      publish: true

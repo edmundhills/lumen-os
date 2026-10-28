@@ -1,0 +1,144 @@
+# SPDX-FileCopyrightText: 2026 Lumen OS contributors
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Build image/Containerfile, the way `just build-image` does in WSL, and, when
+# asked, push the image to ghcr.io. image.yml calls this for every push and
+# pull request; only its job for main asks for the push.
+# docs/architecture.md, section 9.8.
+#
+# Pushed tags (docs/architecture.md, section 9.7):
+#   dev-<build version>   never moves, for example dev-44.20261028
+#   sha-<commit>          never moves
+#   dev                   the newest build of main
+
+name: build-image
+
+on:
+  workflow_call:
+    inputs:
+      publish:
+        description: Push the image to ghcr.io. Only builds of main do.
+        type: boolean
+        required: true
+
+# No permissions here: the job gets exactly those its caller in image.yml
+# grants, and only the caller for main can write packages.
+
+jobs:
+  build:
+    name: Build the image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      # The image as Podman stores it on the runner, and where it is pushed.
+      # Registry names must be lower case, and the owner's is.
+      LOCAL_IMAGE: localhost/lumen:ci
+      REGISTRY_IMAGE: ghcr.io/${{ github.repository_owner }}/lumen
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Kinoite is 7.4 GB unpacked, and the build needs room for it, the image
+      # made from it and the compressed layers of a push (risk 13 in
+      # docs/risks.md). The runner's disk is mostly full of language tools
+      # Lumen doesn't use, and the runner may have a second disk on /mnt.
+      - name: Free disk space
+        run: |
+          df -h / /mnt
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /usr/local/.ghcup /opt/hostedtoolcache /usr/share/swift \
+            /usr/local/share/powershell /usr/local/share/chromium /opt/microsoft \
+            /opt/google /opt/az /usr/lib/jvm
+          sudo docker system prune --all --force >/dev/null
+          # Rootful Podman keeps its images in /var/lib/containers. Put that
+          # on the second disk when it has more room than /.
+          avail() { df --output=avail -- "$1" | tail -n 1; }
+          if mountpoint -q /mnt && (($(avail /mnt) > $(avail /))); then
+            sudo mkdir -p /mnt/containers /var/lib/containers
+            sudo mount --bind /mnt/containers /var/lib/containers
+          fi
+          df -h / /var/lib/containers
+
+      # The build runs as root: bootc images hold files of many owners, and
+      # rootful Podman keeps them exactly.
+      - name: Log in to ghcr.io
+        if: inputs.publish
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s\n' "$TOKEN" | sudo podman login --username "$GITHUB_ACTOR" --password-stdin ghcr.io
+
+      - name: Work out the build version
+        id: version
+        env:
+          PUBLISH: ${{ inputs.publish }}
+        run: |
+          tags=$RUNNER_TEMP/tags.json log=$RUNNER_TEMP/list-tags.log
+          printf '{"Tags": []}\n' >"$tags"
+          if [[ $PUBLISH == true ]]; then
+            # The tags already on ghcr.io, so a second build on the same day
+            # gets the next suffix. Until the first push the repository doesn't
+            # exist, and the registry says its name is unknown. Root has the
+            # login, and the runner writes the files.
+            # shellcheck disable=SC2024
+            if ! sudo skopeo list-tags "docker://$REGISTRY_IMAGE" >"$tags" 2>"$log"; then
+              if grep -qiE 'name unknown|not known to registry' "$log"; then
+                printf '{"Tags": []}\n' >"$tags"
+              else
+                cat "$log" >&2
+                exit 1
+              fi
+            fi
+            # A commit is published once. Pushing it again would move its
+            # sha- tag, which never moves.
+            if grep -qF "\"sha-$GITHUB_SHA\"" "$tags"; then
+              printf '::error::%s is already published as %s:sha-%s.\n' \
+                "$GITHUB_SHA" "$REGISTRY_IMAGE" "$GITHUB_SHA"
+              exit 1
+            fi
+          fi
+          version=$(python3 image/build_version.py image/Containerfile "$tags")
+          printf 'version=%s\n' "$version" >>"$GITHUB_OUTPUT"
+          printf 'Build version: %s\n' "$version"
+
+      # The Containerfile's own checks run in the build: image/check-image.sh
+      # and bootc container lint.
+      - name: Build
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          sudo podman build --file image/Containerfile --target lumen \
+            --build-arg LUMEN_BUILD_VERSION="$VERSION" \
+            --build-arg LUMEN_COMMIT="$GITHUB_SHA" \
+            --tag "$LOCAL_IMAGE" .
+          label=$(sudo podman image inspect \
+            --format '{{index .Labels "org.opencontainers.image.version"}}' "$LOCAL_IMAGE")
+          if [[ $label != "$VERSION" ]]; then
+            printf '::error::The image says it is version "%s", not %s.\n' "$label" "$VERSION"
+            exit 1
+          fi
+          sudo podman image ls "$LOCAL_IMAGE"
+          df -h /
+
+      # The tags that never move come first, so dev only moves to an image
+      # that already has them.
+      - name: Push to ghcr.io
+        if: inputs.publish
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          digestfile=$RUNNER_TEMP/digest
+          sudo podman push --digestfile "$digestfile" "$LOCAL_IMAGE" "docker://$REGISTRY_IMAGE:dev-$VERSION"
+          digest=$(<"$digestfile")
+          for tag in "sha-$GITHUB_SHA" dev; do
+            sudo skopeo copy --preserve-digests "docker://$REGISTRY_IMAGE@$digest" "docker://$REGISTRY_IMAGE:$tag"
+          done
+          # The backticks are Markdown, for the run's summary page.
+          # shellcheck disable=SC2016
+          {
+            printf '### Pushed %s\n\n' "$REGISTRY_IMAGE"
+            printf -- '- Digest: `%s`\n' "$digest"
+            printf -- '- Tags: `dev-%s`, `sha-%s`, `dev`\n' "$VERSION" "$GITHUB_SHA"
+          } >>"$GITHUB_STEP_SUMMARY"

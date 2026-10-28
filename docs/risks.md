@@ -339,8 +339,8 @@ Likelihood **Medium**. Impact **Medium**.
 
 **Mitigation**
 
-- Re-chunk the image after the build, so each layer holds a stable group of packages (rpm-ostree's chunked image build, or the re-chunker Universal Blue uses). Step 1.5 picks the tool.
-- **Step 1.5:** CI measures the download from the current `stable` to each candidate and fails above a budget set at that step.
+- Re-chunk the image after the build, so each layer holds a stable group of packages (rpm-ostree's chunked image build, or the re-chunker Universal Blue uses). Step 1.5c picks the tool.
+- **Step 1.5c:** CI measures the download from the current `stable` (until there is one, from the previous `dev`) to each candidate and fails above a budget set at that step.
 - lumen-updated's metered-network and battery rules (step 5.5).
 
 **Steps:** 1.5, 5.5, 9.2.
