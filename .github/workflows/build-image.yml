@@ -85,6 +85,7 @@ jobs:
             # shellcheck disable=SC2024
             if ! sudo skopeo list-tags "docker://$REGISTRY_IMAGE" >"$tags" 2>"$log"; then
               if grep -qiE 'name unknown|not known to registry' "$log"; then
+                printf '%s has no tags yet.\n' "$REGISTRY_IMAGE"
                 printf '{"Tags": []}\n' >"$tags"
               else
                 cat "$log" >&2
