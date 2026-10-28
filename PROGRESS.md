@@ -20,7 +20,13 @@ Claude reads CLAUDE.md automatically, does that step (plus any ➕ steps right a
 
 ## Current step
 
-**1.5b** Bump the Kinoite pin and copy each pinned base to ghcr.io (see the design idea in the 1.5a notes). It must land before today's pinned build expires from quay.io, about 2026-11-24, and Fedora 45 is due 2026-11-03.
+**1.5b** (finishing) The base workflow is written and passes every local check (commits `be6d218`, `366eac2`, `ba33ffc`); nothing has run in CI yet. What's left, in order:
+
+1. 👤 The owner ticks **"Allow GitHub Actions to create and approve pull requests"** (repository Settings > Actions > General > Workflow permissions; it was off on 2026-10-28), signs off and pushes.
+2. Check the push's runs: lint and image green, and the image log shows Podman trying `ghcr.io/edmundhills/kinoite@sha256:9f71…` first. The base workflow's `copy` job (started by the push, because the Containerfiles changed) copies `kinoite:44-9f71aa8ed152` and `fedora:44-e34bf2671371`. If it says a copy needs a login, the owner makes that package public at the link it prints.
+3. Run the base workflow by hand (Actions > base > Run workflow, on main). Check that it pushes `bump-bases`, copies the new bases, opens a pull request, and that the lint and image runs it starts show on that pull request and go green. The owner merges it. Then tick 1.5b.
+
+It must land before the pinned build expires from quay.io, about 2026-11-24. Fedora 45 is due 2026-11-03: the first Monday run after Bodhi lists it as current moves the image to it.
 
 ## Notes for the next session
 
@@ -89,6 +95,23 @@ Claude reads CLAUDE.md automatically, does that step (plus any ➕ steps right a
   - **1.5b design idea:** keep the `FROM` line on quay.io (CLAUDE.md's fixed architecture names it) and copy each pinned base with `skopeo copy --all --preserve-digests` to `ghcr.io/edmundhills/kinoite:<build>`, so the digest stays the same. CI then lists the copy as a digest-only mirror in `/etc/containers/registries.conf.d/` (`pull-from-mirror = "digest-only"`), which also makes pulls faster. Renovate can't copy the base before it bumps the pin, so a scheduled job fits better. It should bump the lint container's `fedora:44` pin too (see above).
   - **1.5c:** Fedora's documented tool is `rpm-ostree compose build-chunked-oci --bootc --from=<image> --output containers-storage:<image>`, run as root with `/var/lib/containers` mounted (the image has rpm-ostree 2026.3). A CentOS Stream bug report about a missing `org.opencontainers.image.version` label suspects it, so check the labels after re-chunking. Fedora's `bootc-base-imagectl rechunk --chunkah` keeps them, but Kinoite doesn't ship it.
   - **1.8:** bootc-image-builder picks its distro definitions from the image's os-release. Check that it builds a qcow2 with `ID=lumen` and `VERSION_ID=0.1`. Its source couldn't be read this session. If it can't, record the fix in an ADR, for example keeping `VERSION_ID` at the Fedora release.
+- 1.5b written 2026-10-28; waiting for the push and the first runs (see "Current step"). [versions, "How the pins move"](docs/versions.md#how-the-pins-move) describes the whole flow.
+  - A scheduled job, not Renovate, because Renovate can't copy a base before it bumps the pin. `.github/workflows/base.yml` has two jobs. `copy` runs on main: on pushes that change a pin, on Mondays and by hand. `bump` runs on Mondays at 05:17 UTC and by hand. `image/bump_bases.py` reads and rewrites the pins (`list`, `mirrors`, `bump`), and `image/copy-bases.sh` copies them. 26 new unit tests; `just lint` 11 of 11, `just test` passes (58 unit tests).
+  - The lint container's base is bumped and copied too, but stays on Fedora 44: moving it to 45 by hand also means checking the `nodejs24-full-i18n` name.
+  - Each Containerfile pin now has a `# Pinned:` line above its `FROM` line, which the job rewrites. It names the build and, for Kinoite, its KWin, Plasma and Qt, read from the names rpm-ostree gives the layers (for example `kwin-common-6.7.5-1.fc44.x86_64`).
+  - The bump copies its new bases at once, not only on merge. A bump that waits more than four weeks, for example while lumen-glass is rebased onto a new KWin, would otherwise lose its base before anyone copied it.
+  - Pull requests opened with the workflow's token start no other workflow, so the job runs `gh workflow run` for lint and image on `bump-bases`. **Not yet seen:** that those runs show on the pull request (they belong to its head commit, so they should). Once a person adds a commit to the open pull request (`gh pr view --json commits`, author emails), runs leave it alone.
+  - CI pulls from the copies first: `bump_bases.py mirrors` writes `/etc/containers/registries.conf.d/50-lumen-bases.conf` with `pull-from-mirror = "digest-only"`.
+  - Checked in WSL with Ubuntu 24.04's Podman 4.9.3 and skopeo 1.13.3:
+    - The drop-in parses. Ubuntu has no `registries.conf` at all, only `registries.conf.d/shortnames.conf`.
+    - A `FROM name:tag@digest` build tries the mirror first.
+    - A digest the mirror lacks falls back to the original registry, and a tag pull never uses the mirror.
+    - `copy --all --preserve-digests` keeps the index digest.
+    - `--no-creds`, `--no-tags` and `--retry-times` exist.
+  - A live `bump` on scratch copies (2026-10-28) would move Kinoite to 44.20261028.0 (`93139a85…`) and `fedora:44` to `a3299035…`, with KWin and Plasma 6.7.5 and Qt 6.11.2 unchanged. Bodhi listed F43 and F44 as current and F45 as frozen. The Kinoite index holds amd64 and arm64 with zstd layers, about 2.9 GiB each, so a copy is about 5.8 GiB.
+  - **Owner to confirm:** CONTRIBUTING.md now says the workflow's own commits carry no sign-off, and whoever merges the pull request reviews it. That is the DCO rule's first exception besides AI assistants.
+  - **Not known until the first run:** whether the new ghcr.io packages `kinoite` and `fedora` are public from their first push, as `lumen` was. `copy-bases.sh` fails and prints the settings link if not.
+  - GitHub turns off scheduled workflows in a public repository after 60 days with no activity (in versions.md and the risk register's watch list).
 
 ---
 
