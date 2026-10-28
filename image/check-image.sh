@@ -176,6 +176,29 @@ global_theme() {
   return "$status"
 }
 
+# os-release names Lumen and its build, still says it is like Fedora, and
+# /etc/os-release leads to it (image/os-release.sh).
+os_release() {
+  local fedora want status=0 line
+  fedora=$(rpm --eval '%{fedora}') || return 1
+  for want in 'ID=lumen' 'ID_LIKE=fedora' 'IMAGE_ID=lumen' 'NAME="Lumen OS"'; do
+    if ! grep -qxF -- "$want" /usr/lib/os-release; then
+      printf '/usr/lib/os-release has no line %s\n' "$want"
+      status=1
+    fi
+  done
+  line=$(grep -E '^IMAGE_VERSION=' /usr/lib/os-release)
+  if [[ ! $line =~ ^IMAGE_VERSION=${fedora}\.[0-9]{8}(\.[1-9][0-9]*)?$ ]]; then
+    printf 'IMAGE_VERSION is not a build version for Fedora %s: %s\n' "$fedora" "${line:-missing}"
+    status=1
+  fi
+  if ! cmp -s /etc/os-release /usr/lib/os-release; then
+    printf '/etc/os-release is not the same file as /usr/lib/os-release\n'
+    status=1
+  fi
+  return "$status"
+}
+
 printf 'Lumen image checks\n'
 check "Overlay files are in place, owned and writable only by root" overlay_files
 check "Units that Lumen's presets enable are enabled" enabled_units
@@ -185,6 +208,7 @@ check "bootc installs to a Btrfs root" btrfs_root
 check "SELinux is enforcing" selinux
 check "Discover is removed" no_discover
 check "Lumen's global theme (interim top bar) is the default" global_theme
+check "os-release names Lumen and its build version" os_release
 
 printf '\nPassed: %d   Failed: %d\n' "$passes" "$failures"
 ((failures == 0))

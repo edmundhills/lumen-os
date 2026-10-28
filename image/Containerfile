@@ -10,7 +10,9 @@
 #   lumen   The image users get. It ends with `bootc container lint`.
 #
 # Build it from the top of the repository with `just build-image`, which runs
-#   podman build --file image/Containerfile --target lumen .
+#   podman build --file image/Containerfile --target lumen \
+#     --build-arg LUMEN_BUILD_VERSION=<version> --build-arg LUMEN_COMMIT=<commit> .
+# CI builds it the same way (.github/workflows/build-image.yml).
 
 # Fedora Kinoite 44, build 44.20261027.0, with KWin and Plasma 6.7.5
 # (docs/versions.md). The digest is the multi-architecture index's. quay.io
@@ -36,8 +38,7 @@ RUN --mount=type=bind,source=image/packages.py,target=/run/lumen/packages.py \
 
 FROM base AS lumen
 
-# Later steps add here: the Lumen RPMs from the build stages (Phases 2 to 7),
-# os-release and the image labels (step 1.5).
+# Later steps add here: the Lumen RPMs from the build stages (Phases 2 to 7).
 
 # Copy image/overlay into the image. cp sets the modes itself rather than
 # keeping the checkout's, which aren't the same on every machine (in WSL, a
@@ -60,6 +61,17 @@ RUN --mount=type=bind,source=image/overlay,target=/run/lumen/overlay \
     && systemctl mask rpm-ostreed-automatic.timer bootc-fetch-apply-updates.timer \
         rpm-ostree-countme.timer
 
+# The build version: <Fedora release>.<build date>, with .1, .2 for further
+# builds on the same day (docs/architecture.md, section 9.7). image/build_version.py
+# works it out for CI and `just build-image`. It changes with every build, so
+# the steps from here on always run again; they take seconds.
+ARG LUMEN_BUILD_VERSION
+
+# Say in os-release that this is Lumen, with ID_LIKE=fedora for the tools that
+# look for Fedora (image/os-release.sh).
+RUN --mount=type=bind,source=image/os-release.sh,target=/run/lumen/os-release.sh \
+    bash /run/lumen/os-release.sh "$LUMEN_BUILD_VERSION"
+
 # Check what the overlay and the steps above set up (image/check-image.sh).
 RUN --mount=type=bind,source=image,target=/run/lumen/image \
     bash /run/lumen/image/check-image.sh /run/lumen/image/overlay
@@ -67,3 +79,14 @@ RUN --mount=type=bind,source=image,target=/run/lumen/image \
 # Catch image mistakes, such as content in /usr/etc or a missing kernel. A
 # warning fails the build too, so none can pile up unnoticed.
 RUN bootc container lint --fatal-warnings
+
+# The image labels. bootc status and Settings > Updates show the version; the
+# source links the package on ghcr.io to the repository. Kinoite's other labels
+# stay, among them the ostree.* labels that bootc reads when it imports the image.
+ARG LUMEN_COMMIT
+LABEL org.opencontainers.image.title="Lumen OS" \
+      org.opencontainers.image.description="Lumen OS, a desktop Linux system built on Fedora Kinoite" \
+      org.opencontainers.image.version="$LUMEN_BUILD_VERSION" \
+      org.opencontainers.image.revision="$LUMEN_COMMIT" \
+      org.opencontainers.image.source="https://github.com/edmundhills/lumen-os" \
+      org.opencontainers.image.url="https://github.com/edmundhills/lumen-os"

@@ -29,7 +29,11 @@ test: _lint-image
 
 # Build the OS image with Podman. The first build downloads Kinoite (2.9 GiB)
 build-image:
-    podman build --file image/Containerfile --target lumen --tag localhost/lumen:dev .
+    version=$(python3 image/build_version.py image/Containerfile) \
+    && podman build --file image/Containerfile --target lumen \
+        --build-arg LUMEN_BUILD_VERSION="$version" \
+        --build-arg LUMEN_COMMIT="$(git rev-parse HEAD)" \
+        --tag localhost/lumen:dev .
 
 # Build the install ISO
 build-iso:
