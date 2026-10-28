@@ -17,6 +17,8 @@ The Lumen OS image: an OCI container image built `FROM` Fedora Kinoite and manag
 | `check-image.sh` | Checks the built image: the overlay's files and their modes, the units Lumen turns on and masks, Lumen's units valid, a Btrfs root for `bootc install`, SELinux enforcing, Discover gone, Lumen's global theme the default, and os-release. The `lumen` stage runs it before `bootc container lint` | 1.3, 1.4, 1.5a |
 | `build_version.py` | Works out the build version, `<Fedora release>.<build date>` with `.1`, `.2` for further builds on the same day ([architecture 9.7](../docs/architecture.md#97-versions-tags-and-keys)), for `just build-image` and CI. `test_build_version.py` holds its unit tests | 1.5a |
 | `os-release.sh` | Writes Lumen's `/usr/lib/os-release` in the `lumen` stage: `ID=lumen`, `ID_LIKE=fedora`, the product version as `VERSION_ID` and the build version as `IMAGE_VERSION`. The stage also sets the image labels, among them `org.opencontainers.image.version` | 1.5a |
+| `bump_bases.py` | Reads and moves the pinned base images: lists them with the names of their copies on ghcr.io, writes the Podman settings that make CI pull them from those copies, and moves each pin to its newest build, and Kinoite to a new Fedora release once Bodhi lists it as current ([versions](../docs/versions.md#how-the-pins-move)). `test_bump_bases.py` holds its unit tests | 1.5b |
+| `copy-bases.sh` | Copies each pinned base to ghcr.io with its digest, and checks that anyone can pull the copy. `test_copy_bases.py` tests it with a stand-in for skopeo | 1.5b |
 | `test_home_snapshots.py` | Unit tests for the snapshots of `/home`: the setup script's choices, with stand-ins for `stat`, `snapper` and `restorecon`, and the template's limits against the spec (`just test`) | 1.4 |
 
 What the overlay sets up so far:
@@ -30,7 +32,7 @@ What the overlay sets up so far:
 | `/usr/share/snapper/config-templates/lumen-home` | The snapshot settings: 24 hourly, 7 daily and 4 weekly (spec, "Snapshots and backup"); everything else is snapper's default | 1.4 |
 | `/usr/lib/bootc/install/20-lumen.toml` | `bootc install`, and bootc-image-builder with it, make a Btrfs root. Compression is a mount option the installer sets ([`installer/anaconda/lumen.conf`](../installer/anaconda/lumen.conf)); bootc has no setting for it, so disks bootc makes itself aren't compressed | 1.4 |
 
-- Kinoite is pinned by digest. Every Lumen package that links KWin or Plasma is built in a stage of this Containerfile against that exact base (CLAUDE.md, "Critical build rule").
+- Kinoite is pinned by digest. Every Lumen package that links KWin or Plasma is built in a stage of this Containerfile against that exact base (CLAUDE.md, "Critical build rule"). The base workflow (`.github/workflows/base.yml`) moves the pin every week through a pull request and keeps a copy of each pinned base on ghcr.io. Leave the `# Pinned:` line above the `FROM` line in place: the workflow rewrites it.
 - Everything in `overlay/` lands in the image's root folder, so `overlay/` holds only files meant for the image, and no README.
 - The build copies the overlay with modes it sets itself: 0644 for files and 0755 for new folders, and 0755 for Lumen's programs in `/usr/libexec`. A Windows checkout seen from WSL shows every file as 0777, and the image must not inherit that.
 - Variants: `lumen` (the default), `lumen-gaming` (step 1.10), `lumen-nvidia` (step 1.11) and `lumen-gaming-nvidia` (step 1.12, ADR 0004).

@@ -3,12 +3,15 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # The lint tools, so that `just lint` gives the same result in WSL and in CI.
-# All but actionlint come from Fedora's own repositories. The base and
-# actionlint are pinned (2026-10-27); Renovate will bump them from step 8.2.
+# All but actionlint come from Fedora's own repositories.
+#
 # The base comes from Fedora's own registry: quay.io/fedora/fedora deletes an
-# image within about a day of a newer one taking its tag, and this one still
-# has it.
-
+# image within about a day of a newer one taking its tag, and this one keeps it
+# longer. The base workflow (.github/workflows/base.yml) moves the pin to the
+# newest build of its tag every week and keeps a copy on ghcr.io, as it does for
+# Kinoite (step 1.5b). Moving to a newer Fedora is done by hand, because the
+# nodejs package below names Node's major version.
+# Pinned: Fedora 44, built 2026-10-27.
 FROM registry.fedoraproject.org/fedora:44@sha256:e34bf26713717aed250ebb18b959df39bca38a0e4a5cb9eb024b8e19c41162e2
 
 RUN dnf install -y --setopt=install_weak_deps=False \
@@ -34,7 +37,8 @@ RUN dnf install -y --setopt=install_weak_deps=False \
 # actionlint checks the GitHub Actions workflows, and runs ShellCheck on their
 # scripts. Fedora doesn't package it, so this is the x86_64 binary from its
 # release page, checked against the checksum published there. It is linked
-# statically, so it runs on Fedora.
+# statically, so it runs on Fedora. It is pinned (2026-10-27); Renovate will
+# bump it from step 8.2.
 ARG ACTIONLINT_VERSION=1.7.12
 ARG ACTIONLINT_SHA256=8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
 RUN curl --fail --silent --show-error --location --output /tmp/actionlint.tar.gz \

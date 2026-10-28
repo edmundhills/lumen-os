@@ -14,10 +14,12 @@
 #     --build-arg LUMEN_BUILD_VERSION=<version> --build-arg LUMEN_COMMIT=<commit> .
 # CI builds it the same way (.github/workflows/build-image.yml).
 
-# Fedora Kinoite 44, build 44.20261027.0, with KWin and Plasma 6.7.5
-# (docs/versions.md). The digest is the multi-architecture index's. quay.io
-# deletes dated builds after four weeks, so the pin must be bumped at least
-# every two weeks (step 1.5, ADR 0004).
+# Fedora Kinoite, pinned by the digest of its multi-architecture index
+# (docs/versions.md). quay.io deletes dated builds four weeks after they are
+# made, so the base workflow (.github/workflows/base.yml) moves the pin to the
+# newest build every week through a pull request, rewriting the "Pinned:" line,
+# and keeps a copy of each pinned base on ghcr.io (step 1.5b, ADR 0004).
+# Pinned: Kinoite 44.20261027.0, built 2026-10-27, with KWin 6.7.5, Plasma 6.7.5 and Qt 6.11.2.
 FROM quay.io/fedora-ostree-desktops/kinoite:44@sha256:9f71aa8ed1520cde0d09514cc46c54d01d69af79948de17ea988155dfe0e5e18 AS base
 
 # Install and remove packages. packages.py stops the build if the manifest
