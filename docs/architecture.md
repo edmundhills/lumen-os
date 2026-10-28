@@ -559,7 +559,7 @@ The base image is pinned by digest, but Fedora's mirrors carry only the release-
 - The `devel` stage installs each `-devel` package at the exact version and release of the matching package in `base`. When the mirrors no longer have that build, it downloads it from Koji, Fedora's build system, which keeps past builds.
 - A guard check at the end of `devel` compares its package list with `base`'s. Adding packages is fine; changing or removing one fails the build. The `lumen` stage can't drift: it derives from `base` and installs with the repositories turned off.
 - `base` may itself update a few Kinoite packages when something in `packages.toml` needs a newer version. That is safe, because `devel` and `lumen` both derive from `base`, not from the bare digest. This is why rule 2 says "the stage it ships in", which is stricter than CLAUDE.md's "the same base image digest".
-- From step 1.5, the Kinoite pin is bumped at least every two weeks through a pull request, opened by Renovate or by a scheduled job. quay.io deletes dated Kinoite builds four weeks after they are built ([versions](versions.md#things-to-know)), so each pinned base is also copied to Lumen's registry on ghcr.io, and older commits stay buildable. The frequent bumps keep the gap to the mirrors small, so Koji is the exception. CI rebuilds lumen-glass and lumen-shell against the new KWin and Plasma and runs every test. If the new KWin breaks lumen-glass, the pull request stays red and users stay on the previous base, so an upstream change can't reach users untested.
+- From step 1.5b, the base workflow bumps the Kinoite pin every week through a pull request, and moves it to a new Fedora release once Bodhi lists it as current. quay.io deletes dated Kinoite builds four weeks after they are built ([versions](versions.md#things-to-know)), so each pinned base is also copied, with its digest, to Lumen's registry on ghcr.io, which CI pulls from first, and older commits stay buildable ([versions](versions.md#how-the-pins-move)). The frequent bumps keep the gap to the mirrors small, so Koji is the exception. CI rebuilds lumen-glass and lumen-shell against the new KWin and Plasma and runs every test. If the new KWin breaks lumen-glass, the pull request stays red and users stay on the previous base, so an upstream change can't reach users untested.
 - Plasma has three feature releases a year, and Fedora ships each one as an update to its current release, so each arrives through an ordinary digest bump. A feature release usually changes KWin's blur effect, so rebasing lumen-glass onto it is planned work every time ([risk 1](risks.md#1-kwin-and-plasma-change-their-internals-every-release)).
 
 ### 9.5 Variants
@@ -611,7 +611,7 @@ Every pushed image gets an SPDX SBOM from syft, attached to the image as a signe
 ```mermaid
 flowchart LR
   change["Change:<br/>push or pull request"] --> test["image workflow:<br/>build, lint, unit, boot,<br/>session and glass tests"]
-  renovate["Renovate:<br/>new Kinoite digest"] --> change
+  bump["base workflow, weekly:<br/>new Kinoite digest"] --> change
   nightly["Nightly compatibility job"] -->|"new results"| change
   test -->|"on main, green"| sign["Re-chunk, sign,<br/>SBOM, push"]
   sign --> dev[("dev")]
@@ -629,7 +629,8 @@ A red build of `main` is never signed or pushed. Promotion only moves tags to te
 | `promote` | Weekly for beta, every 2 weeks for stable, or on demand | Runs the update test on the candidate, moves the channel tag to its digest, and builds the ISO and qcow2 for the release | 9.1, 9.2 |
 | `compat` | Nightly | The Windows compatibility test, plus (from Phase 7) the ProtonDB and AreWeAntiCheatYet imports; opens a pull request with the results | 1.16, 7.2 |
 | `windows-setup` | Changes to `windows-setup/`, `hardware/` or the hardware-matching crate; releases | Builds Lumen Setup for Windows on a Windows runner; signs it for releases | 7.9 |
-| Renovate | When upstream changes | Pull requests for the Kinoite digest (at least every two weeks, from step 1.5, by Renovate or a scheduled job), the pinned tool images (bootc-image-builder, Titanoboa), GitHub Actions and Cargo dependencies | 1.5, 8.2 |
+| `base` | Mondays; merges that change a pin | A pull request that moves the Kinoite pin and the lint container's Fedora pin to their newest builds, and Kinoite's to a new Fedora release once it is current. Copies each pinned base to ghcr.io with its digest ([versions](versions.md#how-the-pins-move)) | 1.5b |
+| Renovate | When upstream changes | Pull requests for the pinned tool images (bootc-image-builder, Titanoboa), GitHub Actions, the lint tools and Cargo dependencies | 8.2 |
 
 Until `promote` exists, the ISO is built on demand (step 1.8). GitHub's hosted runners have limited disk (step 1.5 frees space first) and a 6-hour limit per job; whether they expose KVM for the boot test is checked at step 1.9.
 
