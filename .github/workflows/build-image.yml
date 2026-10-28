@@ -312,8 +312,8 @@ jobs:
           sudo skopeo inspect --raw "oci:$RUNNER_TEMP/rechunked2:latest" >"$new/manifest.json"
           # shellcheck disable=SC2024
           sudo skopeo inspect --config "oci:$RUNNER_TEMP/rechunked2:latest" >"$new/config.json"
-          python3 image/rechunk.py download 1 "$new/manifest.json" "$new/config.json" \
-            "$old/manifest.json" "$old/config.json" | tee -a "$GITHUB_STEP_SUMMARY" || true
+          python3 image/rechunk.py download "$DOWNLOAD_BUDGET_MIB" "$new/manifest.json" "$new/config.json" \
+            "$old/manifest.json" "$old/config.json" | tee -a "$GITHUB_STEP_SUMMARY"
           df -h /
 
       # The tags that never move come first, so dev only moves to an image
