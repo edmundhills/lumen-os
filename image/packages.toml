@@ -139,8 +139,11 @@ install = [
   "fcitx5-anthy",
   "fcitx5-hangul",
   "fcitx5-m17n",
-  # Inter (the interface font) and Inter Display, as static fonts
-  "rsms-inter-fonts",
+  # Lumen's fonts (ADR 0006), as static fonts: Source Sans 3 for interface
+  # text, Red Hat Display for display text (Latin only, so display text falls
+  # back to Source Sans 3 in other scripts), JetBrains Mono for code
+  "adobe-source-sans-pro-fonts",
+  "redhat-display-fonts",
   "jetbrains-mono-fonts",
   # Metric-compatible with Calibri and Cambria, for Office documents
   "google-carlito-fonts",
