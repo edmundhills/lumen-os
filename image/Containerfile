@@ -31,8 +31,32 @@ RUN --mount=type=bind,source=image,target=/run/lumen/image \
 
 FROM base AS lumen
 
-# Later steps add here: image/overlay (step 1.3), the Lumen RPMs from the build
-# stages (Phases 2 to 7), os-release and the image labels (step 1.5).
+# Later steps add here: the Lumen RPMs from the build stages (Phases 2 to 7),
+# os-release and the image labels (step 1.5).
+
+# Copy image/overlay into the image. cp sets the modes itself rather than
+# keeping the checkout's, which aren't the same on every machine (in WSL, a
+# Windows checkout shows every file as 0777): files get 0644 and new folders
+# 0755.
+#
+# Then turn units on and off. systemctl applies the presets the way systemd
+# does on a new machine's first boot, which turns on only what a preset
+# enables. And it masks three timers Lumen replaces, so nothing can start them
+# (docs/architecture.md, section 4.1):
+#   rpm-ostreed-automatic.timer, bootc-fetch-apply-updates.timer
+#       Fedora's updaters. The bootc one applies updates and reboots without
+#       asking. lumen-updated (Phase 5) owns updates.
+#   rpm-ostree-countme.timer
+#       Sends Fedora a weekly anonymous count. Lumen has no telemetry (spec).
+RUN --mount=type=bind,source=image/overlay,target=/run/lumen/overlay \
+    cp --recursive --no-preserve=mode,ownership /run/lumen/overlay/. / \
+    && systemctl preset-all --preset-mode=enable-only \
+    && systemctl mask rpm-ostreed-automatic.timer bootc-fetch-apply-updates.timer \
+        rpm-ostree-countme.timer
+
+# Check what the overlay and the steps above set up (image/check-image.sh).
+RUN --mount=type=bind,source=image,target=/run/lumen/image \
+    bash /run/lumen/image/check-image.sh /run/lumen/image/overlay
 
 # Catch image mistakes, such as content in /usr/etc or a missing kernel. A
 # warning fails the build too, so none can pile up unnoticed.

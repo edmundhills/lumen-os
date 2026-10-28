@@ -1,0 +1,16 @@
+{
+    "KPackageStructure": "Plasma/LookAndFeel",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "Lumen OS contributors"
+            }
+        ],
+        "Category": "",
+        "Description": "Lumen's look while Lumen's own theme and shell are being built",
+        "Id": "org.lumen.desktop",
+        "License": "GPL-3.0-or-later",
+        "Name": "Lumen",
+        "Website": "https://github.com/edmundhills/lumen-os"
+    }
+}

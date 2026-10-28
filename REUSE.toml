@@ -12,3 +12,10 @@ version = 1
 path = "docs/images/**"
 SPDX-FileCopyrightText = "2026 Lumen OS contributors"
 SPDX-License-Identifier = "GPL-3.0-or-later"
+
+# Plasma package metadata is JSON, which has no comments. A .license file next
+# to it would be copied into the image with the rest of image/overlay.
+[[annotations]]
+path = "image/overlay/**/metadata.json"
+SPDX-FileCopyrightText = "2026 Lumen OS contributors"
+SPDX-License-Identifier = "GPL-3.0-or-later"

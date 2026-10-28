@@ -1,0 +1,34 @@
+# SPDX-FileCopyrightText: 2026 Lumen OS contributors
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# The settings this global theme sets, copied from Fedora's own global theme
+# (org.fedoraproject.fedora.desktop), so Lumen looks like Kinoite apart from
+# its layout until step 2.11 replaces this package with Lumen's real global
+# theme. Plasma takes the parts this package doesn't have (splash screen, lock
+# screen, logout screen) from Breeze.
+
+[kdeglobals][KDE]
+widgetStyle=Breeze
+
+[kdeglobals][General]
+ColorScheme=BreezeLight
+
+[kdeglobals][Icons]
+Theme=breeze
+
+[plasmarc][Theme]
+name=breeze-dark
+
+[Wallpaper]
+Image=Fedora
+
+[kcminputrc][Mouse]
+cursorTheme=breeze_cursors
+
+[kwinrc][org.kde.kdecoration2]
+library=org.kde.breeze
+theme=Breeze
+
+[ksplashrc][KSplash]
+Theme=org.kde.breeze.desktop

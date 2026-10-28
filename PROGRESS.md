@@ -101,7 +101,7 @@ Claude reads CLAUDE.md automatically, does that step (plus any ➕ steps right a
 - [ ] **2.8** KDecoration plugin scaffold, built in a Containerfile stage.
 - [ ] ➕ **2.9** Decoration: rounded corners and glass titlebar role.
 - [ ] **2.10** Cursor and icon theme config (open icon set with accent recolouring).
-- [ ] ➕ **2.11** Global theme (look-and-feel package) `org.lumen.desktop`.
+- [ ] ➕ **2.11** Global theme (look-and-feel package) `org.lumen.desktop`. It replaces the interim theme from 1.3 in `image/overlay`; keep its layout script (the interim top bar) until 4.2.
 - [ ] ➕ **2.12** Run all exporters during the image build.
 - [ ] **2.13** Visual test: Qt, GTK 4, GTK 3 and Flatpak apps in light and dark; store golden images.
 - [ ] **2.14** 👤 Phase 2 acceptance: all four app types match in both modes (the same light or dark mode, accent, contrast and fonts; libadwaita apps keep their own shapes, ADR 0004); one accent change updates all of them.
@@ -129,7 +129,7 @@ Claude reads CLAUDE.md automatically, does that step (plus any ➕ steps right a
 ## Phase 4 — lumen-shell (spec: "Spec: lumen-shell", "Default shortcuts and gestures", Phase 4)
 
 - [ ] **4.1** Shell package `org.lumen.desktop` skeleton; builds and loads in the image.
-- [ ] **4.2** Top bar layout (left / centre / right), glass role bar, 32 px.
+- [ ] **4.2** Top bar layout (left / centre / right), glass role bar, 32 px. It replaces the interim top bar from 1.3 (the layout script in Lumen's global theme).
 - [ ] ➕ **4.3** Top bar indicators: tray, network, sound, battery, user; camera/mic/location indicators.
 - [ ] **4.4** Dock: pinned and running apps (TaskManager), running dot.
 - [ ] ➕ **4.5** Dock: progress bars, badges, recent files on right-click, auto-hide.

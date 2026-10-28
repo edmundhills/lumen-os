@@ -114,6 +114,8 @@ Some stock parts compete with a Lumen owner, so the image turns them off:
 | KWin's `blur` and `contrast` effects | lumen-glass serves the same Wayland global (`org_kde_kwin_blur_manager`). Two effects can't both own it | lumen-glass |
 | Stock Plasma panels and default plasmoids | Spec | lumen-shell |
 
+How the image does it (step 1.3): Discover's packages are removed in `image/packages.toml`; the three timers are masked in the Containerfile; the stock layout gives way to Lumen's global theme `org.lumen.desktop`, made the default in `/etc/xdg/kdeglobals`. Its layout script starts new users with an interim 32 px top bar of stock widgets (app menu, open windows, system tray, clock) where lumen-shell's top bar will go, so Wi-Fi, sound and notifications work until lumen-shell replaces it at step 4.2 (the owner's choice over a bare desktop, 2026-10-27). The theme otherwise copies Fedora's settings until step 2.11 replaces it.
+
 Talks to: the image registry (`ghcr.io`) through bootc, with signatures checked against `/etc/containers/policy.json` and the sigstore settings in `/etc/containers/registries.d/` (step 1.7).
 
 ### 4.2 lumen-glass (compositor effect)

@@ -1,0 +1,13 @@
+# SPDX-FileCopyrightText: 2026 Lumen OS contributors
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Makes Lumen's global theme the default, which replaces Kinoite's stock panel
+# with Lumen's interim top bar. A user's own choice in System Settings still
+# wins, because ~/.config comes first.
+#
+# This lives in the image's /etc because KDE reads system-wide defaults only
+# from its config directories: /etc/xdg, then Fedora's kde-settings profile in
+# /usr/share, whose kdeglobals names Fedora's theme. /etc/xdg comes first.
+[KDE]
+LookAndFeelPackage=org.lumen.desktop
