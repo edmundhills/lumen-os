@@ -12,7 +12,8 @@
 # Build it from the top of the repository with `just build-image`, which runs
 #   podman build --file image/Containerfile --target lumen \
 #     --build-arg LUMEN_BUILD_VERSION=<version> --build-arg LUMEN_COMMIT=<commit> .
-# CI builds it the same way (.github/workflows/build-image.yml).
+# CI builds it the same way (.github/workflows/build-image.yml), then re-chunks
+# it into the layers users download (image/rechunk.sh, ADR 0007).
 
 # Fedora Kinoite, pinned by the digest of its multi-architecture index
 # (docs/versions.md). quay.io deletes dated builds four weeks after they are
@@ -73,6 +74,11 @@ ARG LUMEN_BUILD_VERSION
 # look for Fedora (image/os-release.sh).
 RUN --mount=type=bind,source=image/os-release.sh,target=/run/lumen/os-release.sh \
     bash /run/lumen/os-release.sh "$LUMEN_BUILD_VERSION"
+
+# Mark the files that need a layer of their own when CI re-chunks the image,
+# such as the initramfs and os-release (image/layer_hints.py, ADR 0007).
+RUN --mount=type=bind,source=image/layer_hints.py,target=/run/lumen/layer_hints.py \
+    python3 /run/lumen/layer_hints.py
 
 # Check what the overlay and the steps above set up (image/check-image.sh).
 RUN --mount=type=bind,source=image,target=/run/lumen/image \
