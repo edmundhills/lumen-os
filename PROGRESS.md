@@ -20,7 +20,7 @@ Claude reads CLAUDE.md automatically, does that step (plus any ➕ steps right a
 
 ## Current step
 
-**1.3** Overlay, then ➕ **1.4** Btrfs and snapper defaults.
+**1.5** CI: build the default image and push it to ghcr.io; bump the Kinoite pin every two weeks and copy each pinned base to ghcr.io.
 
 ## Notes for the next session
 
@@ -54,7 +54,21 @@ Claude reads CLAUDE.md automatically, does that step (plus any ➕ steps right a
   - Fonts: the owner first chose the Red Hat family, but Fedora's Red Hat fonts cover Latin-script languages only (no Cyrillic, Greek or Vietnamese; checked with `fc-query`). So it is Red Hat Display for display text only, Source Sans 3 (`adobe-source-sans-pro-fonts`) for interface text, and JetBrains Mono for code. Inter is gone from `packages.toml`.
   - Applied to the spec ("Lumen's look", shell, manifest, Phase 2–4 prompts), `design/README.md` and steps 2.1, 2.9, 2.10, 2.11, 3.9, 4.2, 4.4 and 4.5.
   - The clickable mockup is an artifact in the owner's claude.ai account, not in the repo.
-- For later steps: os-release and the image labels (architecture 9.7) aren't named by any step; the Containerfile assigns them to 1.5. Solaar (6.4) needs `solaar-udev` on the host, which the spec's manifest doesn't list: add it at 6.4. Both IBus and Fcitx5 are installed; 1.3 should check which one starts by default on Plasma Wayland (Settings > Virtual Keyboard picks it).
+- For later steps: os-release and the image labels (architecture 9.7) aren't named by any step; the Containerfile assigns them to 1.5. Solaar (6.4) needs `solaar-udev` on the host, which the spec's manifest doesn't list: add it at 6.4.
+- 1.3 done 2026-10-28: `image/overlay/` and `image/check-image.sh`, which the `lumen` stage runs before `bootc container lint` (8 checks with 1.4's; each was seen to fail on a planted fault). The image is 7.62 GB.
+  - Kinoite already had firewalld, tuned and tuned-ppd on and SELinux enforcing. `fwupd-refresh.timer` and snapper's timers were off, and `rpm-ostree-countme.timer` was on. The Containerfile now masks it, with Fedora's two updaters.
+  - `40-lumen.preset` lists what Lumen turns on. The build runs `systemctl preset-all --preset-mode=enable-only`, which is what systemd does on a first boot (the image's `/etc/machine-id` is empty); on Kinoite it changes nothing else. Masks are `systemctl mask` in the Containerfile: a preset can't mask, and the Windows checkout can't hold the symlinks.
+  - The stock layout: the owner chose an interim top bar over a bare desktop (2026-10-27). Lumen's global theme `org.lumen.desktop` copies Fedora's theme settings and has its own layout script: one 32 px top bar with the app menu, open windows, system tray and clock. `/etc/xdg/kdeglobals` makes it the default; Fedora's `XDG_CONFIG_DIRS` is `/etc/xdg`, then its kde-settings profile in `/usr/share`, whose kdeglobals names Fedora's theme. Nobody has seen the bar yet: the boot test (1.9) stops at the login screen, so the first look is at 1.17. The bar has no input method widget (the stock panel adds one for some languages only).
+  - WSL shows the Windows checkout's files as 0777, so the overlay is copied with modes the build sets (0644, and 0755 for folders and `/usr/libexec/lumen-*`).
+  - The `base` stage now mounts only `packages.py` and `packages.toml`: Podman reruns a step when anything it mounts changes, so mounting all of `image/` reran dnf (about 9 min) after every overlay edit.
+  - Input methods: neither IBus nor Fcitx5 starts on Plasma Wayland by default. Fedora's kde-settings sets KWin's input method to Plasma's on-screen keyboard (`kwinrc`, `[Wayland] InputMethod=org.kde.plasma.keyboard.desktop`); users pick Fcitx5 or IBus in Settings > Keyboard > Virtual Keyboard. Installing Fcitx5 moved the `xinputrc` alternative to it, which only X11 sessions read. Step 5.21 should pick the default.
+  - Discover leftovers: `kde-mimeapps.list` still sends `appstream://` links and `.rpm` files to Discover, and Fedora's app-menu favourites list it; Plasma skips missing apps. The Store (Phase 6) should take `x-scheme-handler/appstream`.
+  - Kinoite 44 turns on `plasma-setup.service`, KDE's first-run setup that creates the first user. Welcome (6.5) must replace it or build on it.
+- 1.4 done 2026-10-28: Btrfs and snapper defaults.
+  - Compression is a mount option, which the installer sets, not the image. Anaconda picks its profile by os-release `ID`. Fedora's profiles give Btrfs with `zstd:1`, but once `ID=lumen` (step 1.5) none match, and Anaconda falls back to LVM with no compression. `installer/anaconda/lumen.conf` builds on Kinoite's profile and repeats Btrfs, `zstd:1` and the `/home` subvolume; Anaconda 44.30's own loader detects it for `ID=lumen` and gives those values. **1.8:** install it in the live stage's `/etc/anaconda/profile.d/`.
+  - `/usr/lib/bootc/install/20-lumen.toml` makes `bootc install` default to a Btrfs root, so bootc-image-builder's qcow2 gets one too, without compression (bootc has no mount-option setting). Whether that qcow2 makes `/var/home` a subvolume isn't known yet.
+  - `lumen-home-snapshots.service` runs `snapper --no-dbus create-config --template lumen-home /var/home` on the first boot, then `restorecon` (Fedora's policy labels `/var/home/.snapshots` `snapperd_data_t`). If `/var/home` isn't a Btrfs subvolume, it says so and exits 0. Unit tests use stand-ins; nothing has run it on a real disk yet. **1.9:** check that the unit succeeded, and start `snapper-timeline.service` and `snapper-cleanup.service` once before reading `systemctl --failed`: their timers first fire on the hour and after 10 min, outside the 60 s window.
+  - Open question for the owner: as snapper's documentation describes its cleanup (not tested here, and the Fedora man page doesn't spell it out), fixed limits (24 hourly, 7 daily, 4 weekly) stop the free-space limit from deleting snapshots below those counts. Space freed by deleting a big file in `/home` would then come back only when the last snapshot holding it expires, up to 4 weeks later. Ranges such as `2-24` would let snapper drop older snapshots when free space falls below 20%. The spec's numbers ship for now.
 
 ---
 
@@ -80,8 +94,8 @@ Claude reads CLAUDE.md automatically, does that step (plus any ➕ steps right a
 
 - [x] **1.1** `image/packages.toml` from the package manifest table (install and remove lists).
 - [x] ➕ **1.2** `image/Containerfile`: FROM Kinoite pinned by digest; install/remove packages; `bootc container lint`.
-- [ ] **1.3** Overlay: enable firewalld, fwupd-refresh.timer, snapper timers, tuned-ppd; SELinux enforcing; remove the stock Plasma layout and Discover. Defaults go in `/usr/lib` and `/usr/share`, or the image's `/etc` where they can only live there; never `/usr/etc` (ADR 0002).
-- [ ] ➕ **1.4** Btrfs zstd defaults and snapper config for /home (24 hourly, 7 daily, 4 weekly).
+- [x] **1.3** Overlay: enable firewalld, fwupd-refresh.timer, snapper timers, tuned-ppd; SELinux enforcing; remove the stock Plasma layout and Discover. Defaults go in `/usr/lib` and `/usr/share`, or the image's `/etc` where they can only live there; never `/usr/etc` (ADR 0002).
+- [x] ➕ **1.4** Btrfs zstd defaults and snapper config for /home (24 hourly, 7 daily, 4 weekly).
 - [ ] **1.5** CI: build the default image and push to ghcr.io (free runner disk space first; Kinoite images are large). Bump the Kinoite pin at least every two weeks (Renovate or a scheduled job) and copy each pinned base to ghcr.io (ADR 0004).
 - [ ] **1.6** 👤 cosign signing (you add the key as a repo secret) and SBOM with syft.
 - [ ] ➕ **1.7** `/etc/containers/policy.json` and sigstore config so the system accepts only our signed images.
