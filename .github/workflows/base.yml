@@ -74,7 +74,7 @@ jobs:
       contents: write  # push the branch
       packages: write  # copy the new bases
       pull-requests: write  # open its pull request
-      actions: write  # start lint and image on it
+      actions: write  # start lint and image on it, if GitHub doesn't
     env:
       REGISTRY: ghcr.io/${{ github.repository_owner }}
       BRANCH: bump-bases
@@ -141,24 +141,26 @@ jobs:
           printf '%s\n' "$GH_TOKEN" | skopeo login --username "$GITHUB_ACTOR" --password-stdin ghcr.io
           image/copy-bases.sh "$REGISTRY" image/Containerfile tests/lint/Containerfile
 
-      # A push or pull request made with the workflow's token starts no other
-      # workflow, so this starts lint and image on the branch itself. Their
-      # runs belong to the branch's commit, so the pull request shows them.
+      # The pull request's checks are its own lint and image runs. GitHub makes
+      # them even though the workflow's token opened it, but on 2026-10-28 it
+      # held them for approval, because github-actions[bot] had no merged
+      # contribution yet: the pull request then says "Approve workflows to run".
+      # It made no runs for the push to the branch. Runs started here with
+      # workflow_dispatch test the same commit but don't show on the pull
+      # request, so they are only the fallback when GitHub made no runs.
       - name: Open or update the pull request
         if: steps.push.outputs.pushed == 'true'
         env:
           NUMBER: ${{ steps.push.outputs.number }}
         run: |
-          gh workflow run lint.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"
-          gh workflow run image.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"
           title=$(head -n 1 "$RUNNER_TEMP/message")
           body=$RUNNER_TEMP/body
           {
             tail -n +3 "$RUNNER_TEMP/message"
             printf '\n%s %s %s\n' \
-              "Opened by the base workflow, which also started lint and image on this branch." \
-              "The commit is the workflow's and has no sign-off (CONTRIBUTING.md): whoever merges it reviews it." \
-              "Merging copies the new bases to ghcr.io."
+              "Opened by the base workflow, which has already copied the new bases to ghcr.io." \
+              "If GitHub holds this pull request's checks, press \"Approve workflows to run\" below." \
+              "The commit is the workflow's and has no sign-off (CONTRIBUTING.md): whoever merges it reviews it."
           } >"$body"
           if [[ -n $NUMBER ]]; then
             gh pr edit "$NUMBER" --repo "$GITHUB_REPOSITORY" --title "$title" --body-file "$body"
@@ -167,4 +169,14 @@ jobs:
             printf '::error::%s %s\n' "Could not open the pull request. If GitHub says Actions may not create them," \
               'tick "Allow GitHub Actions to create and approve pull requests" under Settings > Actions > General.'
             exit 1
+          fi
+          # GitHub makes the pull request's runs a few seconds after the push
+          # or the opening.
+          sha=$(git rev-parse HEAD)
+          sleep 30
+          count=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$sha&event=pull_request" --jq .total_count)
+          if ((count == 0)); then
+            printf 'GitHub made no pull request runs for %s, so this starts lint and image on the branch.\n' "$sha"
+            gh workflow run lint.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"
+            gh workflow run image.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"
           fi
