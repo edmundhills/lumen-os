@@ -76,9 +76,9 @@ RUN --mount=type=bind,source=image/os-release.sh,target=/run/lumen/os-release.sh
     bash /run/lumen/os-release.sh "$LUMEN_BUILD_VERSION"
 
 # Mark the files that need a layer of their own when CI re-chunks the image,
-# such as the initramfs and os-release (image/layer_hints.py, ADR 0007).
-RUN --mount=type=bind,source=image/layer_hints.py,target=/run/lumen/layer_hints.py \
-    python3 /run/lumen/layer_hints.py
+# such as os-release and the overlay's files (image/layer_hints.py, ADR 0007).
+RUN --mount=type=bind,source=image,target=/run/lumen/image \
+    python3 /run/lumen/image/layer_hints.py /run/lumen/image/overlay
 
 # Check what the overlay and the steps above set up (image/check-image.sh).
 RUN --mount=type=bind,source=image,target=/run/lumen/image \

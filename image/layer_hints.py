@@ -5,15 +5,20 @@
 #
 # Mark files that need a layer of their own when the image is re-chunked
 # (image/rechunk.sh, ADR 0007). rpm-ostree puts the files of each package in
-# that package's layer, and every file no package owns, with the initramfs, in
-# one shared layer. A file marked with the extended attribute user.component
-# goes instead into a layer for that component alone.
+# that package's layer, and every file no package owns in one shared layer,
+# together with the initramfs. A file marked with the extended attribute
+# user.component goes instead into a layer for that component alone.
 #
-# Usage: python3 image/layer_hints.py [ROOT]
+# The initramfs can't be marked: rpm-ostree files it before it reads the
+# marks. So the shared layer stays unchanged between builds on the same base
+# only if the files that do change are marked and moved out of it.
+#
+# Usage: python3 image/layer_hints.py OVERLAY [ROOT]
 #
 # The lumen stage of the Containerfile runs this inside the image it is
-# building, after os-release.sh. ROOT, / by default, is where the image's files
-# are. Exits 0 when every file in HINTS is marked, 1 if one is missing.
+# building, after os-release.sh, with the checkout's image/overlay as OVERLAY.
+# ROOT, / by default, is where the image's files are. Exits 0 when every file
+# is marked, or 1 if one is missing.
 
 import glob
 import os
@@ -23,44 +28,57 @@ ATTRIBUTE = "user.component"
 
 # Component name: the files in it, as patterns under ROOT.
 HINTS = {
-    # The initramfs changes only with Kinoite's, but the files no package owns
-    # change on every build. Sharing their layer, it would be downloaded again
-    # with each update.
-    "initramfs": ["usr/lib/modules/*/initramfs.img"],
     # Lumen's os-release names the build, so it changes on every build. It
     # replaces a file of a Fedora package, so it would otherwise go into that
     # package's layer and take the layer's other packages with it.
     "lumen-os-release": ["usr/lib/os-release"],
 }
+# Every file the overlay adds. No package owns them, and they change whenever
+# Lumen's defaults do.
+OVERLAY = "lumen-overlay"
 
 
-def plan(root):
-    """Return (path, component) for every file in HINTS under ROOT, and the patterns that match nothing.
+def is_file(path):
+    # Only regular files: a link can't carry a user attribute, and a folder's
+    # mark would also take the packages' files in it.
+    return os.path.isfile(path) and not os.path.islink(path)
 
-    Only regular files count: a link can't carry a user attribute.
-    """
+
+def plan(root, overlay):
+    """Return (path, component) for every file to mark under ROOT, and the paths that match nothing."""
     marks, missing = [], []
     for component, patterns in HINTS.items():
         for pattern in patterns:
-            paths = sorted(p for p in glob.glob(os.path.join(root, pattern))
-                           if os.path.isfile(p) and not os.path.islink(p))
+            paths = sorted(p for p in glob.glob(os.path.join(root, pattern)) if is_file(p))
             if not paths:
                 missing.append(pattern)
             marks += [(p, component) for p in paths]
+    for folder, _, names in sorted(os.walk(overlay)):
+        for name in sorted(names):
+            rel = os.path.relpath(os.path.join(folder, name), overlay)
+            path = os.path.join(root, rel)
+            if is_file(path):
+                marks.append((path, OVERLAY))
+            else:
+                missing.append(rel)
     return marks, missing
 
 
 def main(argv, setxattr=os.setxattr):
-    if len(argv) > 2:
-        print("Usage: layer_hints.py [ROOT]", file=sys.stderr)
+    if len(argv) not in (2, 3) or not os.path.isdir(argv[1]):
+        print("Usage: layer_hints.py OVERLAY [ROOT]", file=sys.stderr)
         return 2
-    marks, missing = plan(argv[1] if len(argv) == 2 else "/")
-    for pattern in missing:
-        print(f"layer_hints.py: nothing matches /{pattern}", file=sys.stderr)
+    marks, missing = plan(argv[2] if len(argv) == 3 else "/", argv[1])
+    for path in missing:
+        print(f"layer_hints.py: nothing matches /{path}", file=sys.stderr)
     for path, component in marks:
         # Don't follow a link: the mark belongs on the file in the image.
         setxattr(path, ATTRIBUTE, component.encode(), follow_symlinks=False)
-        print(f"{path}: {ATTRIBUTE}={component}")
+    counts = {}
+    for _, component in marks:
+        counts[component] = counts.get(component, 0) + 1
+    for component, count in counts.items():
+        print(f"{ATTRIBUTE}={component}: {count} file(s)")
     return 1 if missing else 0
 
 
