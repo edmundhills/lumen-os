@@ -25,8 +25,13 @@ FROM quay.io/fedora-ostree-desktops/kinoite:44@sha256:9f71aa8ed1520cde0d09514cc4
 # install, so the image keeps nothing there that systemd-tmpfiles doesn't
 # create, and bootc container lint warns about anything else. Kinoite's own
 # /var holds only /var/tmp.
-RUN --mount=type=bind,source=image,target=/run/lumen/image \
-    python3 /run/lumen/image/packages.py apply /run/lumen/image/packages.toml \
+#
+# Only the two files this step reads are mounted. Podman reuses a step only if
+# what it mounts is unchanged, so mounting all of image/ would rerun dnf (about
+# 9 minutes) after any change there, such as to the overlay.
+RUN --mount=type=bind,source=image/packages.py,target=/run/lumen/packages.py \
+    --mount=type=bind,source=image/packages.toml,target=/run/lumen/packages.toml \
+    python3 /run/lumen/packages.py apply /run/lumen/packages.toml \
     && rm -rf /run/dnf /var/cache/* /var/lib/dnf /var/log/*
 
 FROM base AS lumen
