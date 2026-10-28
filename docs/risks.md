@@ -340,8 +340,8 @@ Likelihood **Medium**. Impact **Medium**.
 
 **Mitigation**
 
-- Re-chunk the image after the build, so each layer holds a stable group of packages. Step 1.5c chose rpm-ostree's `build-chunked-oci`, run from the image itself, keeping the packing of the newest `dev` build, with the initramfs and os-release in layers of their own ([ADR 0007](decisions/0007-rechunking.md), `image/rechunk.sh`).
-- CI measures the download from the newest `dev` (from step 9.2, the current `stable`) to each build, and fails when a build on the same base image goes over the budget in `.github/workflows/build-image.yml`. A new base is reported, not held to the budget.
+- Re-chunk the image after the build, so each layer holds a stable group of packages. Step 1.5c chose rpm-ostree's `build-chunked-oci`, run from the image itself, keeping the packing of the newest `dev` build, with the files that change on every build in layers of their own ([ADR 0007](decisions/0007-rechunking.md), `image/rechunk.sh`). A rebuild of an unchanged commit now downloads 41 MiB.
+- CI measures the download from the newest `dev` (from step 9.2, the current `stable`) to each build, and fails when a build on the same base image goes over the budget of 100 MiB in `.github/workflows/build-image.yml`. A new base is reported, not held to the budget.
 - lumen-updated's metered-network and battery rules (step 5.5).
 
 **Steps:** 1.5, 5.5, 9.2.
