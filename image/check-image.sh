@@ -102,6 +102,30 @@ masked_units() {
   return "$status"
 }
 
+# systemd accepts Lumen's own units, and the programs they start exist.
+lumen_units() {
+  local units=(/usr/lib/systemd/system/lumen-*) status=0 had_stamp=0
+  # systemd-analyze leaves this file behind, and bootc container lint rejects
+  # files in /run.
+  local stamp=/run/systemd/systemd-units-load
+  [[ -e ${units[0]} ]] || return 0
+  [[ ! -e $stamp ]] || had_stamp=1
+  systemd-analyze verify --man=no -- "${units[@]}" || status=$?
+  ((had_stamp)) || rm -f -- "$stamp"
+  return "$status"
+}
+
+# bootc install, and bootc-image-builder with it, puts the root on Btrfs.
+btrfs_root() {
+  local fs
+  fs=$(bootc install print-configuration |
+    python3 -c 'import json, sys; print(json.load(sys.stdin).get("root-fs-type"))') || return 1
+  if [[ $fs != btrfs ]]; then
+    printf 'bootc install would make a %s root, not Btrfs\n' "$fs"
+    return 1
+  fi
+}
+
 # SELinux is enforcing, and no kernel argument the image adds turns it off.
 selinux() {
   local status=0
@@ -156,6 +180,8 @@ printf 'Lumen image checks\n'
 check "Overlay files are in place, owned and writable only by root" overlay_files
 check "Units that Lumen's presets enable are enabled" enabled_units
 check "Fedora's updaters and countme ping are masked" masked_units
+check "Lumen's systemd units are valid" lumen_units
+check "bootc installs to a Btrfs root" btrfs_root
 check "SELinux is enforcing" selinux
 check "Discover is removed" no_discover
 check "Lumen's global theme (interim top bar) is the default" global_theme

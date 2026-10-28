@@ -18,9 +18,11 @@ enable firewalld.service
 enable fwupd-refresh.timer
 
 # Snapper's hourly snapshots and their cleanup. With no snapper config they do
-# nothing; step 1.4 adds the config for /home
+# nothing. lumen-home-snapshots.service makes the config for /home on the
+# first boot (step 1.4)
 enable snapper-timeline.timer
 enable snapper-cleanup.timer
+enable lumen-home-snapshots.service
 
 # Power profiles through tuned (docs/architecture.md, Q2)
 enable tuned.service

@@ -21,3 +21,8 @@ indent_size = 2
 [*.sh]
 indent_size = 2
 switch_case_indent = true
+
+# Shell scripts the image installs as programs have no extension.
+[image/overlay/usr/libexec/*]
+indent_size = 2
+switch_case_indent = true

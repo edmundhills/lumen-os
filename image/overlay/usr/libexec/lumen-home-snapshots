@@ -1,0 +1,41 @@
+#!/usr/bin/bash
+# SPDX-FileCopyrightText: 2026 Lumen OS contributors
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Turn on snapper's hourly snapshots of /home. lumen-home-snapshots.service
+# runs this at boot until snapper has its "home" config.
+#
+# Usage: lumen-home-snapshots [HOME_DIR]
+#
+# HOME_DIR is /var/home, the folder /home points to on an atomic system; the
+# tests (image/test_home_snapshots.py) pass another. Snapper can snapshot only a
+# Btrfs subvolume. Lumen's installer makes /home one (installer/anaconda/
+# lumen.conf); on any other layout this says why there are no snapshots and
+# exits 0, so the boot doesn't count as failed.
+
+set -euo pipefail
+
+home=${1:-/var/home}
+
+if [[ $(stat --file-system --format=%T -- "$home") != btrfs ]]; then
+  printf '%s is not on Btrfs, so it gets no snapshots.\n' "$home"
+  exit 0
+fi
+# The top folder of every Btrfs subvolume has inode number 256.
+if [[ $(stat --format=%i -- "$home") != 256 ]]; then
+  printf '%s is not a Btrfs subvolume of its own, so it gets no snapshots.\n' "$home"
+  exit 0
+fi
+
+# This makes the subvolume $home/.snapshots, writes /etc/snapper/configs/home
+# from Lumen's template, and adds "home" to SNAPPER_CONFIGS in
+# /etc/sysconfig/snapper. It works without snapperd, which may not be running
+# yet.
+snapper --no-dbus --config home create-config --template lumen-home "$home"
+
+# New files and folders take their SELinux label from the folder they are made
+# in. Give them the labels snapperd, which is confined, is allowed to use.
+restorecon -R /etc/snapper /etc/sysconfig/snapper "$home/.snapshots"
+
+printf 'Snapshots of %s are on: 24 hourly, 7 daily and 4 weekly.\n' "$home"

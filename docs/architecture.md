@@ -573,7 +573,7 @@ The base image is pinned by digest, but Fedora's mirrors carry only the release-
 
 ### 9.6 Disk images and install media
 
-- **qcow2**, for the boot and update tests: bootc-image-builder makes it from the `lumen` image, and from each variant for the boot test.
+- **qcow2**, for the boot and update tests: bootc-image-builder makes it from the `lumen` image, and from each variant for the boot test. It gets a Btrfs root from the image's `bootc install` settings (step 1.4), but no zstd compression: that is a mount option, which only the installer sets (Lumen's Anaconda profile, `installer/anaconda/lumen.conf`).
 - **Live ISO**, for installing (ADR 0002). A `live` stage, derived from `lumen`, adds Anaconda WebUI and `lumen-installer` (kickstart and theme), starts the hardware report when the live session starts, and keeps Welcome from running. Titanoboa, tried first at step 1.8, turns it into an ISO.
 - The ISO also carries a copy of the `lumen` image for Anaconda to install, so installing needs no network and download speed can't push it past the spec's 10 minutes. The installed system then tracks `ghcr.io/<org>/lumen:<channel>` and accepts only signed images from its first update (section 4.8). How the copy reaches Anaconda is worked out at step 1.8.
 - **One ISO, made from the default image.** The live session runs on the open graphics drivers, which is enough for the installer. After install, the hardware report and lumen-hwd suggest the NVIDIA driver or the gaming edition, and `SwitchVariant` moves to it (section 4.5). That keeps one download and one install path to test; variant ISOs can come later if testers need them.

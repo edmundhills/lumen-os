@@ -1,0 +1,28 @@
+# SPDX-FileCopyrightText: 2026 Lumen OS contributors
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Turns on snapper's hourly snapshots of /home on a machine's first boot. It
+# runs at every boot until the snapper config exists, which on a /home that
+# can't have snapshots (not a Btrfs subvolume) costs one quick check.
+
+[Unit]
+Description=Set up hourly snapshots of /home
+Documentation=https://github.com/edmundhills/lumen-os/blob/main/image/README.md
+ConditionPathExists=!/etc/snapper/configs/home
+RequiresMountsFor=/var/home
+Before=snapper-timeline.service snapper-cleanup.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/lumen-home-snapshots
+PrivateNetwork=yes
+PrivateTmp=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictRealtime=yes
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target

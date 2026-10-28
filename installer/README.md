@@ -10,6 +10,10 @@ What the install USB adds to the Lumen image: Lumen's kickstart and its theme fo
 
 The install media is a live ISO built from the Lumen image ([ADR 0002](../docs/decisions/0002-fix-spec-errors-from-architecture-review.md)). It starts a Lumen live session that shows the hardware report, then starts Anaconda WebUI with the files from this folder. The installer offers three choices: Erase disk (the default, encrypted), Install alongside Windows, and Custom. Installing alongside Windows never resizes a BitLocker volume.
 
+| Path | What it is | Step |
+| --- | --- | --- |
+| `anaconda/lumen.conf` | Anaconda's install profile for Lumen, installed in the live stage's `/etc/anaconda/profile.d/`: Btrfs with zstd compression, and `/home` as a subvolume of its own for snapper's snapshots. Without it, a system whose os-release says `ID=lumen` gets Anaconda's built-in LVM layout. Checked with Anaconda 44.30's own config loader | 1.4 |
+
 - **Ships as:** RPM `lumen-installer`, used only by the image's `live` stage, which makes the install media.
 - **Steps:** 1.8 (the live ISO; the tool that builds it is recorded in an ADR) and 6.10 (the theme and the three choices).
 

@@ -14,7 +14,8 @@ The Lumen OS image: an OCI container image built `FROM` Fedora Kinoite and manag
 | `packages.py` | Checks the manifest (`just lint`) and applies it in the `base` stage. It stops the build if the manifest doesn't match Kinoite, or if dnf removes a package the manifest doesn't list. `test_packages.py` holds its unit tests (`just test`) | 1.1 |
 | `Containerfile` | The multi-stage build. Phase 1 has `base` (Kinoite plus the manifest) and `lumen` (the image users get, ending with `bootc container lint`); `devel`, the build stages, the variants and `live` come with their steps | 1.2 |
 | `overlay/` | Files copied into the image as they are: vendor defaults in `/usr/lib` and `/usr/share`, and the image's `/etc` only where a setting can live nowhere else. Never `/usr/etc` (ADR 0002) | 1.3 |
-| `check-image.sh` | Checks the built image: the overlay's files and their modes, the units Lumen turns on and masks, SELinux enforcing, Discover gone, Lumen's global theme the default. The `lumen` stage runs it before `bootc container lint` | 1.3 |
+| `check-image.sh` | Checks the built image: the overlay's files and their modes, the units Lumen turns on and masks, Lumen's units valid, a Btrfs root for `bootc install`, SELinux enforcing, Discover gone, Lumen's global theme the default. The `lumen` stage runs it before `bootc container lint` | 1.3, 1.4 |
+| `test_home_snapshots.py` | Unit tests for the snapshots of `/home`: the setup script's choices, with stand-ins for `stat`, `snapper` and `restorecon`, and the template's limits against the spec (`just test`) | 1.4 |
 
 What the overlay sets up so far:
 
@@ -23,10 +24,13 @@ What the overlay sets up so far:
 | `/usr/lib/systemd/system-preset/40-lumen.preset` | Turns on firewalld, `fwupd-refresh.timer`, snapper's timers, tuned and tuned-ppd. The build applies it, and so does systemd on a new machine's first boot. The Containerfile also masks Fedora's own updaters and its countme ping | 1.3 |
 | `/usr/share/plasma/look-and-feel/org.lumen.desktop/` | Lumen's interim global theme: Fedora's look, with an interim 32 px top bar (app menu, open windows, system tray, clock) in place of Kinoite's stock panel. Step 2.11 replaces the theme, step 4.2 the bar | 1.3 |
 | `/etc/xdg/kdeglobals` | Makes that theme the default. KDE reads system-wide defaults only from its config folders, and `/etc/xdg` is the first | 1.3 |
+| `/usr/lib/systemd/system/lumen-home-snapshots.service`, `/usr/libexec/lumen-home-snapshots` | On the first boot, makes snapper's `home` config for `/var/home` (where `/home` points) from Lumen's template, if `/var/home` is a Btrfs subvolume. Otherwise it says why there are no snapshots and exits without failing. It runs at each boot until the config exists | 1.4 |
+| `/usr/share/snapper/config-templates/lumen-home` | The snapshot settings: 24 hourly, 7 daily and 4 weekly (spec, "Snapshots and backup"); everything else is snapper's default | 1.4 |
+| `/usr/lib/bootc/install/20-lumen.toml` | `bootc install`, and bootc-image-builder with it, make a Btrfs root. Compression is a mount option the installer sets ([`installer/anaconda/lumen.conf`](../installer/anaconda/lumen.conf)); bootc has no setting for it, so disks bootc makes itself aren't compressed | 1.4 |
 
 - Kinoite is pinned by digest. Every Lumen package that links KWin or Plasma is built in a stage of this Containerfile against that exact base (CLAUDE.md, "Critical build rule").
 - Everything in `overlay/` lands in the image's root folder, so `overlay/` holds only files meant for the image, and no README.
-- The build copies the overlay with modes it sets itself: 0644 for files and 0755 for new folders. A Windows checkout seen from WSL shows every file as 0777, and the image must not inherit that.
+- The build copies the overlay with modes it sets itself: 0644 for files and 0755 for new folders, and 0755 for Lumen's programs in `/usr/libexec`. A Windows checkout seen from WSL shows every file as 0777, and the image must not inherit that.
 - Variants: `lumen` (the default), `lumen-gaming` (step 1.10), `lumen-nvidia` (step 1.11) and `lumen-gaming-nvidia` (step 1.12, ADR 0004).
 
 Spec: [image build and layout](../docs/spec.md#spec-image-build-and-layout). Architecture: [4.1 Base image](../docs/architecture.md#41-base-image), [9.3 Inside the image build](../docs/architecture.md#93-inside-the-image-build), [9.5 Variants](../docs/architecture.md#95-variants).

@@ -42,7 +42,7 @@ FROM base AS lumen
 # Copy image/overlay into the image. cp sets the modes itself rather than
 # keeping the checkout's, which aren't the same on every machine (in WSL, a
 # Windows checkout shows every file as 0777): files get 0644 and new folders
-# 0755.
+# 0755, and Lumen's programs in /usr/libexec 0755.
 #
 # Then turn units on and off. systemctl applies the presets the way systemd
 # does on a new machine's first boot, which turns on only what a preset
@@ -55,6 +55,7 @@ FROM base AS lumen
 #       Sends Fedora a weekly anonymous count. Lumen has no telemetry (spec).
 RUN --mount=type=bind,source=image/overlay,target=/run/lumen/overlay \
     cp --recursive --no-preserve=mode,ownership /run/lumen/overlay/. / \
+    && chmod 0755 /usr/libexec/lumen-* \
     && systemctl preset-all --preset-mode=enable-only \
     && systemctl mask rpm-ostreed-automatic.timer bootc-fetch-apply-updates.timer \
         rpm-ostree-countme.timer
