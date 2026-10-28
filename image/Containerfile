@@ -78,7 +78,12 @@ RUN --mount=type=bind,source=image,target=/run/lumen/image \
 
 # Catch image mistakes, such as content in /usr/etc or a missing kernel. A
 # warning fails the build too, so none can pile up unnoticed.
-RUN bootc container lint --fatal-warnings
+#
+# First delete /run/lumen, where the steps above mount their files. Podman 4.9.3
+# (Ubuntu 24.04's, on the CI runners) leaves the empty mount points in the
+# image, and the lint rejects anything in /run. Podman 5.8 in WSL removes them
+# itself, so there it deletes nothing.
+RUN rm -rf /run/lumen && bootc container lint --fatal-warnings
 
 # The image labels. bootc status and Settings > Updates show the version; the
 # source links the package on ghcr.io to the repository. Kinoite's other labels
