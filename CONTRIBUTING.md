@@ -41,6 +41,7 @@ Signed-off-by: Your Name <you@example.com>
 - You keep the copyright in your work and license it under the licence of the files you change: GPL-3.0-or-later for code and documents, ODbL 1.0 for entries in the compatibility database in `compat/` ([ADR 0003](docs/decisions/0003-licence.md)).
 - Forgot to sign off? `git commit --amend -s` fixes the last commit, and `git rebase --signoff main` fixes every commit on your branch.
 - **AI assistants.** Only a person can certify the DCO, so an AI assistant must never add a `Signed-off-by:` line. If one helped with a change, the person who submits it reviews it, signs off themselves and is responsible for it. Credit the assistant with a trailer such as `Co-Authored-By:`.
+- **Lumen's own workflows.** The base workflow's weekly pull request ([docs/versions.md](docs/versions.md#how-the-pins-move)) holds a commit that no person wrote, so it has no sign-off. Whoever merges it reviews it and is responsible for it. If you add a commit to that pull request, sign it off as usual.
 
 ## Licence headers
 

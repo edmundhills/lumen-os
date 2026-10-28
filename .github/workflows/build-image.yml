@@ -62,6 +62,19 @@ jobs:
           fi
           df -h / /var/lib/containers
 
+      # Pull the pinned bases from Lumen's copies on ghcr.io first, which keep
+      # them after quay.io deletes them (base.yml). Podman uses a copy only for a
+      # pull by digest, and falls back to quay.io when there is none yet, as for
+      # a new pin before its pull request is merged.
+      - name: Pull the bases from their copies
+        env:
+          REGISTRY: ghcr.io/${{ github.repository_owner }}
+        run: |
+          sudo mkdir -p /etc/containers/registries.conf.d
+          python3 image/bump_bases.py mirrors "$REGISTRY" image/Containerfile tests/lint/Containerfile |
+            sudo tee /etc/containers/registries.conf.d/50-lumen-bases.conf
+          sudo podman info --format '{{json .Registries}}'
+
       # The build runs as root: bootc images hold files of many owners, and
       # rootful Podman keeps them exactly.
       - name: Log in to ghcr.io

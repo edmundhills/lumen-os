@@ -50,6 +50,18 @@ jobs:
           tar -xzf "$archive" -C "$RUNNER_TEMP/bin" just
           printf '%s\n' "$RUNNER_TEMP/bin" >>"$GITHUB_PATH"
 
+      # The lint container's base, like the image's, is pulled from its copy on
+      # ghcr.io first, and from Fedora's registry when there is none
+      # (base.yml, build-image.yml).
+      - name: Pull the bases from their copies
+        env:
+          REGISTRY: ghcr.io/${{ github.repository_owner }}
+        run: |
+          sudo mkdir -p /etc/containers/registries.conf.d
+          python3 image/bump_bases.py mirrors "$REGISTRY" image/Containerfile tests/lint/Containerfile |
+            sudo tee /etc/containers/registries.conf.d/50-lumen-bases.conf
+          podman info --format '{{json .Registries}}'
+
       - name: just lint
         run: just lint
 
