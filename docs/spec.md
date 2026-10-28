@@ -148,13 +148,25 @@ The tier is picked automatically by a short GPU benchmark at first boot and can 
 
 One token file (JSON) defines colours, radii, blur strength, tint ranges, spacing and motion springs. A build step exports it to QML, GTK 4 CSS, GTK 3 CSS, Kvantum and an icon set, so every app family matches.
 
+### Lumen's look
+
+Lumen is light passing through glass. That idea, not another desktop's habits, decides how it looks (ADR 0006).
+
+- Top bar: three floating glass islands instead of a full-width strip. The focused app's name is shown, but not its menu.
+- App menus live in the window, behind a ⋯ button in the title bar.
+- The focused window is lit: a thin line of accent light runs along the top of its title bar.
+- App icons are round lenses: a disc with the app's symbol and a ring in its colour. Other apps' icons are shown in a lens frame.
+- Accents are named for kinds of light: Sunbeam (gold, the default), Ember, Rose, Orchid, Iris, Glacier, Lagoon and Moss.
+- Fonts: Red Hat Display for display text (clock, headings), Source Sans 3 for all interface text, JetBrains Mono for code. Display text switches to Source Sans 3 in languages Red Hat Display doesn't cover.
+- The dock starts with a "Search or run" field, and running apps cast a line of light in their colour.
+
 ## Easy by default, powerful underneath
 
 A new user should never need the terminal, and a power user should never be blocked by the GUI. The shell is designed in layers: simple surface, deeper panels, full control.
 
 ### The shell
 
-- Top bar: clock, status, quick settings, notifications. Floating glass dock at the bottom with running apps and pins.
+- Top bar: three floating glass islands for the app and workspaces, the clock and notifications, and status and quick settings. Floating glass dock at the bottom with a search field, running apps and pins.
 - Command palette (Super + Space): launch apps, search files, run settings, do maths, convert units, run commands. One search box for everything.
 - Window tiling built in: drag to edges or use Super + arrows; optional auto-tiling mode per workspace.
 - Workspaces overview with a three-finger swipe; per-monitor workspaces.
@@ -221,7 +233,7 @@ The variants are two independent choices: the driver (open or NVIDIA) and the ed
 | Hardware | Mesa, Intel/AMD firmware, sof-firmware, fprintd, iio-sensor-proxy, cups + ipp-usb, sane-airscan, bluez, device rules for OpenRGB and libratbag (ratbagd) | none |
 | Media | PipeWire, WirePlumber, ffmpeg-free plus codecs via Flatpak runtime; system codecs and hardware video decoding per the codecs ADR (step 1.14) | none |
 | Network | NetworkManager-openconnect (Cisco, GlobalProtect, Fortinet VPNs) | none |
-| Input | IBus and Fcitx5, Inter and JetBrains Mono fonts, Noto CJK and emoji, metric-compatible fonts for Office documents (Liberation, Carlito, Caladea) | Unused font packs |
+| Input | IBus and Fcitx5, Source Sans 3, Red Hat Display and JetBrains Mono fonts (ADR 0006), Noto CJK and emoji, metric-compatible fonts for Office documents (Liberation, Carlito, Caladea) | Unused font packs |
 
 User apps (browser, office, media, editor, Bottles) ship as Flatpaks preinstalled on first boot, not baked into the image, so they update independently.
 
@@ -317,8 +329,8 @@ lumen-shell is a Plasma shell package (`org.lumen.desktop`) with our own contain
 
 | Component | What it does | Built on |
 | --- | --- | --- |
-| Top bar | Left: Activities button and focused app's name with its menu. Centre: clock and date (click = calendar + notifications). Right: tray, network, sound, battery, user | Plasma containment, glass role `bar`, 32 px tall |
-| Dock | Bottom-centre floating glass dock; pinned + running apps, running dot, progress bars, badge counts, recent files on right-click; auto-hides when a window touches it | Plasma task manager backend (TaskManager library), glass role `dock` |
+| Top bar | Three floating islands, 6 px below the screen edge (ADR 0006). Left: Lumen mark (opens the overview), workspace indicator, focused app's name (its menu is in the window's title bar). Centre: clock and date with a count of unread notifications (click = calendar + notifications). Right: tray, network, sound, battery with a level meter, user | One floating Plasma panel per island, sized to its content; each is a glass surface with role `bar`, 32 px tall |
+| Dock | Bottom-centre floating glass dock; a "Search or run" field that opens the command palette, then pinned + running apps as lens icons; a running app casts a line of light in its colour, longer when focused; progress rings, badge counts, recent files on right-click; auto-hides when a window touches it | Plasma task manager backend (TaskManager library), glass role `dock` |
 | Command palette | Super+Space; one field for apps, files (Baloo), settings pages, calculator, unit and currency conversion, shell commands (prefix `>`), web search (prefix `?`), open windows | KRunner backends with a new QML front end |
 | Quick settings | Click right of the top bar: Wi-Fi, Bluetooth, Do Not Disturb, Night Light, power profile, dark mode, screen recording, volume and brightness sliders; tiles can be rearranged | Plasma applets' backends, glass role `popover` |
 | Notification centre | Grouped by app, inline reply, actions, history 7 days, focus modes (Work, Gaming, Sleep) that mute chosen apps | Plasma notifications server |
@@ -663,8 +675,8 @@ Acceptance: ISO installs in a VM with encryption; system boots; `bootc status` s
 
 ```text
 Implement design/tokens per the spec's "Liquid glass" and "Design tokens" sections.
-1. tokens.json: colours (light, dark, 8 accents), type scale (Inter), radii, spacing (4 px grid), elevation/shadows, glass presets per role (bar, dock, menu, popover, notification, sidebar, titlebar) with all parameters in the spec's table, spring presets.
-2. Exporters (run at image build): QML singleton module org.lumen.style; KDE colour schemes; Qt style (Kvantum); GTK 4/libadwaita CSS; GTK 3 theme; window decoration (KDecoration plugin) with rounded corners and glass titlebar role; cursor and icon theme config (an open icon set with accent recolouring).
+1. tokens.json: colours (light, dark, 8 accents named for kinds of light with Sunbeam as the default; each accent has a fill, a text colour on the fill and an ink shade for accent text, all at 4.5:1 or better), type scale (Source Sans 3 for interface text, Red Hat Display for display text, JetBrains Mono for code; display text falls back to Source Sans 3 in languages Red Hat Display doesn't cover), radii, spacing (4 px grid), elevation/shadows, glass presets per role (bar, dock, menu, popover, notification, sidebar, titlebar) with all parameters in the spec's table, spring presets. See "Lumen's look" and ADR 0006.
+2. Exporters (run at image build): QML singleton module org.lumen.style; KDE colour schemes; Qt style (Kvantum); GTK 4/libadwaita CSS; GTK 3 theme; window decoration (KDecoration plugin) with rounded corners, glass titlebar role, a left-aligned title with the app's icon, an app menu button, and a line of accent light on the focused window; cursor and icon theme config (an open symbolic icon set with accent recolouring) and lens icons for Lumen's apps and the apps in the image.
 3. Global theme (look-and-feel package) org.lumen.desktop.
 4. Visual test: screenshot a Qt app, a GTK 4 app, a GTK 3 app and a Flatpak app in light and dark; store as golden images.
 Acceptance: all four app types visibly match in both modes: the same light or dark mode, accent, contrast and fonts everywhere. Lumen's apps and apps in the image get the full style, GTK 3 Flatpaks get it through a Flathub theme extension, and libadwaita apps keep their own shapes (ADR 0004). Changing the accent in one place updates all of them after re-export.
@@ -678,7 +690,7 @@ Implement glass/ per the spec's "Spec: lumen-glass effect" section exactly.
 2. Shared 1/4-res dual-Kawase blur computed once per frame; damage-aware caching so idle frames do no blur work.
 3. Material fragment shader: rounded-rect SDF, edge refraction with RGB dispersion, vibrancy, adaptive tint guaranteeing 4.5:1 contrast against the theme text colour using backdrop luminance from the smallest mip, rim light, blue-noise dither texture.
 4. Roles: read the glass role from the lumen_glass_manager_v1 protocol, with the window type as a fallback; map to presets in tokens.json; reload on token change via D-Bus.
-5. Rounded corners and soft shadows for all windows; glass titlebar role.
+5. Rounded corners and soft shadows for all windows; glass titlebar role; the focused window's line of accent light for apps that draw their own title bars (ADR 0006).
 6. Tiers Full/Lite/Solid; first-boot benchmark service (systemd oneshot) writing /var/lib/lumen/glass-tier; battery saver drops one tier; honour Reduce Transparency and Reduce Motion.
 7. Spring-based open/close/morph animations; smooth-min SDF merging for dock shapes.
 8. GTK clients: no GTK module (GTK 4 has none, and Flatpak apps can't load one). Draw whole-window glass for GTK apps on the opt-in list; the GTK themes make header bars and sidebars translucent.
@@ -689,7 +701,7 @@ Acceptance: contrast >= 4.5:1 on all scenes; Full tier holds 60 fps with 8 glass
 ### Phase 4: lumen-shell
 
 ```text
-Implement shell/ per the spec's "Spec: lumen-shell" table: top bar, dock, command palette (KRunner backends, new QML UI), quick settings, notification centre with focus modes, overview restyle, tiling (KWin custom tiles + auto-tile KWin script), lock screen, login screen, OSDs. Apply every shortcut and gesture from the spec's shortcut table.
+Implement shell/ per the spec's "Spec: lumen-shell" table and "Lumen's look": top bar (three floating islands), dock (search field, lens icons, lines of light for running apps), command palette (KRunner backends, new QML UI), quick settings, notification centre with focus modes, overview restyle, tiling (KWin custom tiles + auto-tile KWin script), lock screen, login screen, OSDs. Apply every shortcut and gesture from the spec's shortcut table.
 Every surface sets its glass role. Use org.lumen.style tokens only; no hard-coded colours or sizes.
 Tests: QML unit tests; session test that opens each surface via D-Bus/shortcut and screenshots it; keyboard-only navigation test.
 Acceptance: shell starts < 1.5 s, < 250 MB RAM, ~0% CPU idle; every shortcut works; every surface is reachable by keyboard and announced by Orca.

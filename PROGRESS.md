@@ -47,6 +47,13 @@ Claude reads CLAUDE.md automatically, does that step (plus any ➕ steps right a
 - 1.1 done 2026-10-27 (Phase 1 started on the owner's "Do the next step"): `image/packages.toml`, one table per area of the spec's manifest with `keep` (Kinoite has it and Lumen relies on it), `install` and `remove` lists, read against Kinoite's own rpm database. Kinoite 44 already ships tuned-ppd instead of power-profiles-daemon, Liberation, Noto CJK and emoji, and NetworkManager-openconnect. Added: distrobox, snapper, `openrgb-udev-rules`, `libratbag-ratbagd`, Fcitx5 (Qt 6, GTK 3 and 4 modules, `kcm-fcitx5`, engines matching Kinoite's IBus ones), Inter (static `rsms-inter-fonts`: families "Inter" and "Inter Display"), JetBrains Mono, Carlito, Caladea. Removed: Discover (6 packages) and the unused font packs Adwaita Sans, Adwaita Mono and Open Sans; the other fonts cover scripts or other packages need them. Stock panels and plasmoids aren't separate packages, so 1.3 removes the default layout in the overlay. `image/packages.py` checks the file (`just lint`, now 11 checks; self-test 13) and applies it; `just test` also runs its 15 unit tests. It stops the build if a kept or removed package is missing from the base, an added one is already there, or dnf removes anything not listed. Weak dependencies are off.
 - 1.2 done 2026-10-27: `image/Containerfile` with the stages `base` and `lumen`; Kinoite pinned as `kinoite:44@sha256:9f71aa8e…5e18` (Fedora 45 still frozen). `just build-image` in WSL: the first pull of Kinoite took 11 min, the build about 9 min; 41 packages added (with dependencies), 9 removed, none changed version; `bootc container lint --fatal-warnings` passes 14 checks, 1 skipped, as bare Kinoite does. dnf leaves `/run/dnf` and files in `/var`, which the lint rejects, so the `base` stage deletes them (Kinoite's own `/var` holds only `/var/tmp`); any later stage that runs dnf needs the same. `localhost/lumen:dev` is 7.63 GB, Kinoite 7.38 GB.
 - [ADR 0005](docs/decisions/0005-plasma-login-manager.md) accepted 2026-10-27: Kinoite 44 has no SDDM; Fedora 44 ships KDE's Plasma Login Manager (`plasma-login-manager` 6.7.5, `plasmalogin.service` as `display-manager.service`). The owner chose to keep it. The spec, the architecture (4.4, 4.5) and steps 1.9, 4.15 and 5.6 now say "login screen" or name Plasma Login Manager, and `packages.toml` keeps it. Its greeter has no SDDM-style theme folder: it runs on its own KWin and Plasma, which step 4.15 works with.
+- [ADR 0006](docs/decisions/0006-lumen-look.md) accepted 2026-10-28: the owner found a spec-faithful mockup "way too much like macOS", so Lumen gets its own look.
+  - The top bar is three floating islands, and app menus move into the window's title bar.
+  - App icons are round lenses, and the eight accents are named for kinds of light, with gold Sunbeam as the default.
+  - The focused window gets a line of accent light, and the dock gets a "Search or run" field.
+  - Fonts: the owner first chose the Red Hat family, but Fedora's Red Hat fonts cover Latin-script languages only (no Cyrillic, Greek or Vietnamese; checked with `fc-query`). So it is Red Hat Display for display text only, Source Sans 3 (`adobe-source-sans-pro-fonts`) for interface text, and JetBrains Mono for code. Inter is gone from `packages.toml`.
+  - Applied to the spec ("Lumen's look", shell, manifest, Phase 2–4 prompts), `design/README.md` and steps 2.1, 2.9, 2.10, 2.11, 3.9, 4.2, 4.4 and 4.5.
+  - The clickable mockup is an artifact in the owner's claude.ai account, not in the repo.
 - For later steps: os-release and the image labels (architecture 9.7) aren't named by any step; the Containerfile assigns them to 1.5. Solaar (6.4) needs `solaar-udev` on the host, which the spec's manifest doesn't list: add it at 6.4. Both IBus and Fcitx5 are installed; 1.3 should check which one starts by default on Plasma Wayland (Settings > Virtual Keyboard picks it).
 
 ---
@@ -91,7 +98,7 @@ Claude reads CLAUDE.md automatically, does that step (plus any ➕ steps right a
 
 ## Phase 2 — Design tokens and theme (spec: "Liquid glass", "Design tokens", Phase 2)
 
-- [ ] **2.1** `tokens.json` part 1: colours (light, dark, 8 accents), Inter type scale, radii, 4 px spacing, elevation, plus a JSON schema.
+- [ ] **2.1** `tokens.json` part 1: colours (light, dark, 8 accents named for kinds of light with Sunbeam as the default; each with a fill, a text colour on the fill and an ink shade, all at 4.5:1), type scale (Source Sans 3 for interface text, Red Hat Display for display text with a Source Sans 3 fallback in other scripts, JetBrains Mono; ADR 0006), radii, 4 px spacing, elevation, plus a JSON schema.
 - [ ] ➕ **2.2** `tokens.json` part 2: glass presets per role (all parameters from the spec table) and spring presets; validation test.
 - [ ] **2.3** Exporter framework and the QML singleton module `org.lumen.style`.
 - [ ] **2.4** Exporter: KDE colour schemes.
@@ -99,9 +106,9 @@ Claude reads CLAUDE.md automatically, does that step (plus any ➕ steps right a
 - [ ] **2.6** Exporter: GTK 4/libadwaita CSS.
 - [ ] ➕ **2.7** Exporter: GTK 3 theme.
 - [ ] **2.8** KDecoration plugin scaffold, built in a Containerfile stage.
-- [ ] ➕ **2.9** Decoration: rounded corners and glass titlebar role.
-- [ ] **2.10** Cursor and icon theme config (open icon set with accent recolouring).
-- [ ] ➕ **2.11** Global theme (look-and-feel package) `org.lumen.desktop`. It replaces the interim theme from 1.3 in `image/overlay`; keep its layout script (the interim top bar) until 4.2.
+- [ ] ➕ **2.9** Decoration: rounded corners, glass titlebar role, left-aligned title with the app's icon, an app menu button (⋯) for apps that publish their menu, and a line of accent light on the focused window (ADR 0006). Record which kinds of app publish their menu.
+- [ ] ⚠️ **2.10** Cursor and icon theme config (open symbolic icon set with accent recolouring), and lens icons for Lumen's apps and the apps in the image (ADR 0006).
+- [ ] ➕ **2.11** Global theme (look-and-feel package) `org.lumen.desktop`. It replaces the interim theme from 1.3 in `image/overlay`; keep its layout script (the interim top bar) until 4.2. It sets the fonts (Source Sans 3, JetBrains Mono) and a fontconfig fallback from Red Hat Display to Source Sans 3 (ADR 0006).
 - [ ] ➕ **2.12** Run all exporters during the image build.
 - [ ] **2.13** Visual test: Qt, GTK 4, GTK 3 and Flatpak apps in light and dark; store golden images.
 - [ ] **2.14** 👤 Phase 2 acceptance: all four app types match in both modes (the same light or dark mode, accent, contrast and fonts; libadwaita apps keep their own shapes, ADR 0004); one accent change updates all of them.
@@ -116,7 +123,7 @@ Claude reads CLAUDE.md automatically, does that step (plus any ➕ steps right a
 - [ ] **3.6** Shader part 2: vibrancy, rim light, blue-noise dither.
 - [ ] **3.7** Shader part 3: adaptive tint from smallest-mip luminance, keeping 4.5:1 contrast.
 - [ ] **3.8** Roles: the `lumen_glass_manager_v1` protocol (window type as a fallback) → presets from tokens.json; reload on token change via D-Bus.
-- [ ] **3.9** Rounded corners and soft shadows for all windows; titlebar role.
+- [ ] **3.9** Rounded corners and soft shadows for all windows; titlebar role; the focused window's line of accent light for apps that draw their own title bars (ADR 0006).
 - [ ] **3.10** Tiers Full / Lite / Solid in the render path.
 - [ ] **3.11** First-boot benchmark oneshot → `/var/lib/lumen/glass-tier`; battery saver drops a tier; Reduce Transparency and Reduce Motion.
 - [ ] **3.12** Spring open/close/morph animations (stiffness 380, damping 30).
@@ -129,10 +136,10 @@ Claude reads CLAUDE.md automatically, does that step (plus any ➕ steps right a
 ## Phase 4 — lumen-shell (spec: "Spec: lumen-shell", "Default shortcuts and gestures", Phase 4)
 
 - [ ] **4.1** Shell package `org.lumen.desktop` skeleton; builds and loads in the image.
-- [ ] **4.2** Top bar layout (left / centre / right), glass role bar, 32 px. It replaces the interim top bar from 1.3 (the layout script in Lumen's global theme).
+- [ ] **4.2** Top bar as three floating islands (left / centre / right), each a floating Plasma panel sized to its content, glass role bar, 32 px (ADR 0006). First check that Plasma can put three such panels on one edge; if it can't, draw the islands in one containment and tell the owner, because lumen-glass then has to clip several rounded rectangles in one surface. It replaces the interim top bar from 1.3 (the layout script in Lumen's global theme).
 - [ ] ➕ **4.3** Top bar indicators: tray, network, sound, battery, user; camera/mic/location indicators.
-- [ ] **4.4** Dock: pinned and running apps (TaskManager), running dot.
-- [ ] ➕ **4.5** Dock: progress bars, badges, recent files on right-click, auto-hide.
+- [ ] **4.4** Dock: "Search or run" field that opens the palette; pinned and running apps (TaskManager) as lens icons, other apps' icons in a lens frame; a line of light in the app's colour under running apps, longer for the focused one (ADR 0006).
+- [ ] ➕ **4.5** Dock: progress rings, badges, recent files on right-click, auto-hide.
 - [ ] **4.6** Command palette QML UI over KRunner: apps, files, settings, calculator, unit and currency conversion.
 - [ ] ➕ **4.7** Palette: `>` commands, `?` web search, open windows.
 - [ ] **4.8** Quick settings tiles and sliders, rearrangeable.

@@ -11,8 +11,8 @@ Lumen's look: the design tokens and everything made from them.
 | Part | What it is | Steps |
 | --- | --- | --- |
 | [tokens/](tokens/) | `tokens.json`, its schema, and the exporters that turn it into each toolkit's theme | 2.1 to 2.7, 2.12 |
-| Window decoration | A KDecoration plugin: rounded corners and the glass title bar | 2.8, 2.9 |
-| Cursor and icon themes | Configuration for an open icon set, recoloured with the accent | 2.10 |
+| Window decoration | A KDecoration plugin: rounded corners, the glass title bar, the app menu button and the light on the focused window | 2.8, 2.9 |
+| Cursor and icon themes | Lens icons for Lumen's apps and the apps in the image, and configuration for an open symbolic icon set, recoloured with the accent ([ADR 0006](../docs/decisions/0006-lumen-look.md)) | 2.10 |
 | Global theme | The Plasma look-and-feel package `org.lumen.desktop` | 2.11 |
 
 It ships as two RPMs built in the image's `build-design` stage:

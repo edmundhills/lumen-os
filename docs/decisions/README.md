@@ -15,6 +15,7 @@ Architecture decision records (ADRs). Each one records a decision that changes t
 | [0003](0003-licence.md) | Licence: GPL-3.0-or-later for code, ODbL for the compatibility data | Accepted |
 | [0004](0004-phase-0-review.md) | Decisions from the Phase 0 review: build chain, disk unlock, theme baseline, variants and the rest | Accepted |
 | [0005](0005-plasma-login-manager.md) | Plasma Login Manager for the login screen, not SDDM | Accepted |
+| [0006](0006-lumen-look.md) | Lumen's own look: top-bar islands, app menus in the window, lens icons, Sunbeam accent, Red Hat Display and Source Sans 3 | Accepted |
 
 ## Writing an ADR
 
