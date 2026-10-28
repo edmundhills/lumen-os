@@ -5,8 +5,11 @@
 # The lint tools, so that `just lint` gives the same result in WSL and in CI.
 # All but actionlint come from Fedora's own repositories. The base and
 # actionlint are pinned (2026-10-27); Renovate will bump them from step 8.2.
+# The base comes from Fedora's own registry: quay.io/fedora/fedora deletes an
+# image within about a day of a newer one taking its tag, and this one still
+# has it.
 
-FROM quay.io/fedora/fedora:44@sha256:e34bf26713717aed250ebb18b959df39bca38a0e4a5cb9eb024b8e19c41162e2
+FROM registry.fedoraproject.org/fedora:44@sha256:e34bf26713717aed250ebb18b959df39bca38a0e4a5cb9eb024b8e19c41162e2
 
 RUN dnf install -y --setopt=install_weak_deps=False \
         git-core \
