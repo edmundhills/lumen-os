@@ -60,7 +60,8 @@ jobs:
   build:
     name: Build the image
     runs-on: ubuntu-24.04
-    # Builds of main took 45 to 52 minutes before the qcow2 came (step 1.8a).
+    # Builds of main took 45 to 52 minutes before the qcow2 came (step 1.8a),
+    # and the first with it 55 (ADR 0011, Follow-up).
     timeout-minutes: 120
     outputs:
       digest: ${{ steps.push.outputs.digest }}
