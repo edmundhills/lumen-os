@@ -1,0 +1,59 @@
+# SPDX-FileCopyrightText: 2026 Lumen OS contributors
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# The packages the live stage of image/Containerfile adds to the Lumen image:
+# what the install USB's live session needs, and nothing the installed system
+# gets. The format is that of image/packages.toml, and packages.py applies it
+# the same way: it stops the build if a package listed here is already in the
+# image, or if dnf removes anything. Weak dependencies stay out.
+#
+# What the live system must hold follows the "container-native ISO contract
+# v0.1.0" that Titanoboa and image-builder's generic-iso both pack (ADR 0011).
+#
+# Checked against Kinoite 44.20261028.0 (docs/versions.md).
+
+[live-boot]
+install = [
+  # The initramfs modules that find the USB by its label and run the system
+  # from its squashfs, with a writable layer in memory (dmsquash-live)
+  "dracut-live",
+  # GRUB's EFI program for booting from a CD or an ISO written to a USB,
+  # gcdx64.efi, which the contract wants next to shim
+  "grub2-efi-x64-cdboot",
+]
+
+[live-session]
+install = [
+  # Sets up the live session at boot: the user liveuser with no password,
+  # logged straight into Plasma, and the installer on the desktop
+  "livesys-scripts",
+]
+
+[installer]
+install = [
+  # Anaconda for live systems (liveinst), with its WebUI
+  "anaconda-live",
+  "anaconda-webui",
+  # The small Qt browser WebUI runs in: Anaconda's Fedora profile, which
+  # Lumen's builds on, names it (webui_web_engine). Kinoite already has the
+  # Qt WebEngine it uses
+  "slitherer",
+  # The plugins blivet, Anaconda's storage library, needs for disks that
+  # Kinoite's plugins (crypto, filesystems, partitions) don't cover: Btrfs for
+  # Lumen's default layout, and LVM and device-mapper for disks that already
+  # hold LVM, such as an earlier Fedora, and for Custom
+  "libblockdev-btrfs",
+  "libblockdev-lvm",
+  "libblockdev-dm",
+]
+
+[iso-tools]
+# image-builder's generic-iso builds the ISO with the tools in the image it
+# packs, so the image must have them: mksquashfs, xorriso and implantisomd5.
+# podman, grub2-mkimage and python3 are in Kinoite already.
+install = [
+  "squashfs-tools",
+  "xorriso",
+  "isomd5sum",
+]

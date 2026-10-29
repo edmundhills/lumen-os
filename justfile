@@ -41,9 +41,18 @@ build-image:
         --build-arg LUMEN_COMMIT="$(git rev-parse HEAD)" \
         --tag localhost/lumen:dev .
 
+# Build the live system the install ISO is made from, on the OS image or on a build of it such as ghcr.io/edmundhills/lumen:dev
+build-live from="":
+    version=$(python3 image/build_version.py image/Containerfile) \
+    && podman build --file image/Containerfile --target live \
+        {{ if from == "" { "" } else { "--build-arg LUMEN_LIVE_FROM=" + quote(from) } }} \
+        --build-arg LUMEN_BUILD_VERSION="$version" \
+        --build-arg LUMEN_COMMIT="$(git rev-parse HEAD)" \
+        --tag localhost/lumen-live:dev .
+
 # Build the install ISO
 build-iso:
-    @echo "Nothing to build yet: step 1.8b adds the ISO build, which runs in CI." >&2; exit 1
+    @echo "Nothing to build yet: step 1.8b-2 packs the live system into an ISO, in CI." >&2; exit 1
 
 # Boot the OS image in a local VM
 run-vm:

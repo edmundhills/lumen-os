@@ -1,0 +1,28 @@
+# SPDX-FileCopyrightText: 2026 Lumen OS contributors
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# The ISO's label and boot menu, in the format of the container-native ISO
+# contract v0.1.0 (ADR 0011). The live stage installs it as
+# /usr/lib/bootc-image-builder/iso.yaml, where Titanoboa reads it and where
+# image-builder reads it too, as long as the image has no
+# /usr/lib/image-builder/bootc folder (image/live/check-live.sh checks that).
+#
+# The label names the ISO's filesystem, and the initramfs finds the USB by it
+# (root=live:CDLABEL=), so every entry repeats it. rd.live.image tells the
+# initramfs and livesys that this is a live boot. The kernel and initramfs
+# paths are the ones the contract puts them at.
+
+label: Lumen-Live
+grub2:
+  default: 0
+  timeout: 10
+  entries:
+    - name: Try or install Lumen OS
+      linux: /images/pxeboot/vmlinuz root=live:CDLABEL=Lumen-Live rd.live.image quiet rhgb
+      initrd: /images/pxeboot/initrd.img
+    # For graphics cards the open drivers can't start: the kernel keeps the
+    # firmware's simple framebuffer.
+    - name: Try or install Lumen OS (basic graphics)
+      linux: /images/pxeboot/vmlinuz root=live:CDLABEL=Lumen-Live rd.live.image nomodeset quiet rhgb
+      initrd: /images/pxeboot/initrd.img

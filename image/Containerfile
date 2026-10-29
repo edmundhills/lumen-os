@@ -3,17 +3,26 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # The Lumen OS image: Fedora Kinoite with Lumen's packages, run by bootc.
-# docs/architecture.md, section 9.3, describes every stage. Phase 1 has two:
+# docs/architecture.md, section 9.3, describes every stage. Phase 1 has three:
 #
 #   base    Kinoite, pinned by digest, with the changes in image/packages.toml.
 #           Every later stage derives from it.
 #   lumen   The image users get. It ends with `bootc container lint`.
+#   live    The live system the install ISO boots, derived from lumen. It is
+#           only ever packed into an ISO, never pushed as an image.
 #
 # Build it from the top of the repository with `just build-image`, which runs
 #   podman build --file image/Containerfile --target lumen \
 #     --build-arg LUMEN_BUILD_VERSION=<version> --build-arg LUMEN_COMMIT=<commit> .
 # CI builds it the same way (.github/workflows/build-image.yml), then re-chunks
 # it into the layers users download (image/rechunk.sh, ADR 0007).
+# `just build-live` builds the live stage the same way, with --target live.
+
+# What the live stage builds on: the lumen stage of this build, unless
+# --build-arg LUMEN_LIVE_FROM=<image> names a build of it already made, such as
+# a published one by digest. Then Podman builds only the live stage, and the
+# live session is exactly that build.
+ARG LUMEN_LIVE_FROM=lumen
 
 # Fedora Kinoite, pinned by the digest of its multi-architecture index
 # (docs/versions.md). quay.io deletes dated builds four weeks after they are
@@ -110,3 +119,56 @@ LABEL org.opencontainers.image.title="Lumen OS" \
       org.opencontainers.image.revision="$LUMEN_COMMIT" \
       org.opencontainers.image.source="https://github.com/edmundhills/lumen-os" \
       org.opencontainers.image.url="https://github.com/edmundhills/lumen-os"
+
+# The live system the install ISO boots (docs/architecture.md, section 9.6): the
+# Lumen image with what the live session and the installer need, laid out as
+# the container-native ISO contract v0.1.0 asks, so that Titanoboa or
+# image-builder's generic-iso can pack it into an ISO (ADR 0011). LUMEN_LIVE_FROM,
+# at the top of this file, says which build of the lumen stage it starts from.
+FROM ${LUMEN_LIVE_FROM} AS live
+
+# The live packages (image/live/packages.toml), applied the way the base stage
+# applies image/packages.toml, and dnf's leftovers removed the same way.
+RUN --mount=type=bind,source=image/packages.py,target=/run/lumen/packages.py \
+    --mount=type=bind,source=image/live/packages.toml,target=/run/lumen/packages.toml \
+    PYTHONDONTWRITEBYTECODE=1 python3 /run/lumen/packages.py apply /run/lumen/packages.toml \
+    && rm -rf /run/dnf /var/cache/* /var/lib/dnf /var/log/*
+
+# An initramfs that boots from the ISO, in place of Kinoite's, which is made
+# for an installed system. dracut builds it from the image's own kernel, with
+# every driver (--no-hostonly) and the live modules: dmsquash-live finds the
+# USB by its label and runs the system from its squashfs, and
+# dmsquash-live-autooverlay gives that a writable layer in memory. The
+# contract wants it next to the kernel, named initramfs.img.
+#
+# dracut puts root's home folder in the initramfs and stops if it can't. In
+# the image, /root points to /var/roothome, which systemd-tmpfiles makes only
+# at boot, so the step makes it first.
+RUN mkdir -p "$(realpath /root)" \
+    && kernel=$(ls /usr/lib/modules) \
+    && dracut --force --zstd --reproducible --no-hostonly \
+        --add "dmsquash-live dmsquash-live-autooverlay" \
+        "/usr/lib/modules/$kernel/initramfs.img" "$kernel"
+
+# The live session: at boot, livesys makes the user liveuser, with no password,
+# and logs it straight into Plasma, with the installer on the desktop
+# (/usr/libexec/livesys/sessions.d/livesys-kde).
+RUN sed -i 's/^livesys_session=.*/livesys_session=kde/' /etc/sysconfig/livesys \
+    && systemctl enable livesys.service livesys-late.service
+
+# shim and GRUB's EFI programs where the contract wants them, in
+# /boot/efi/EFI/<vendor>: bootupd keeps them in /usr/lib/efi, a folder per
+# package, and the ISO tools copy them from /boot/efi.
+RUN mkdir -p /boot/efi && cp -a /usr/lib/efi/*/*/EFI /boot/efi/
+
+# The installer's install profile (installer/anaconda/lumen.conf, step 1.4),
+# and the ISO's label and boot menu (image/live/iso.yaml).
+RUN --mount=type=bind,source=installer,target=/run/lumen/installer \
+    --mount=type=bind,source=image/live,target=/run/lumen/live \
+    install -D --mode=0644 /run/lumen/installer/anaconda/lumen.conf /etc/anaconda/profile.d/lumen.conf \
+    && install -D --mode=0644 /run/lumen/live/iso.yaml /usr/lib/bootc-image-builder/iso.yaml
+
+# Check all of it (image/live/check-live.sh).
+RUN --mount=type=bind,source=installer,target=/run/lumen/installer \
+    --mount=type=bind,source=image/live,target=/run/lumen/live \
+    bash /run/lumen/live/check-live.sh /run/lumen/live /run/lumen/installer
