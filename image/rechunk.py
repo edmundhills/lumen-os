@@ -22,11 +22,17 @@
 #       downloads: the layers the previous build doesn't have, by size and
 #       what they hold. Exit 1 if the download is over BUDGET_MIB and both
 #       builds are re-chunked and on the same base image, or 0 otherwise.
+#   python3 image/rechunk.py layout MANIFEST CONFIG FOLDER
+#       Write an OCI layout in FOLDER, tagged latest, that holds only the image
+#       manifest MANIFEST and its config CONFIG, both as `skopeo inspect --raw`
+#       prints them. image/rechunk.sh gives it to rpm-ostree as the earlier
+#       build, whose layer plan is all rpm-ostree reads.
 #
 # Exits 2 on a usage error or a file it can't read.
 
 import hashlib
 import json
+import os
 import sys
 
 # rpm-ostree records the packages in each layer it makes in this annotation.
@@ -189,11 +195,53 @@ def download(budget_mib, manifest, config, digest, previous=None):
     return "\n".join(lines), within
 
 
+def write_layout(manifest_path, config_path, folder):
+    """Write an OCI layout in FOLDER holding only a manifest and its config, tagged latest.
+
+    The files must hold the exact bytes the registry serves, so that their
+    digests are the ones the manifest and the layout name. The layers stay
+    out: whoever reads the layout must need only the manifest and config.
+    """
+    blobs = {}
+    for path in (manifest_path, config_path):
+        try:
+            with open(path, "rb") as f:
+                blobs[path] = f.read()
+        except OSError as e:
+            raise InputError(f"{path}: {e}") from e
+    try:
+        manifest = json.loads(blobs[manifest_path])
+    except ValueError as e:
+        raise InputError(f"{manifest_path}: {e}") from e
+    layers(manifest)
+    config_digest = "sha256:" + hashlib.sha256(blobs[config_path]).hexdigest()
+    if manifest.get("config", {}).get("digest") != config_digest:
+        raise InputError(f"{config_path} has the digest {config_digest}, but the manifest's config is "
+                         f"{manifest.get('config', {}).get('digest')}: give the config as skopeo inspect --raw --config prints it")
+    if os.path.exists(folder):
+        raise InputError(f"{folder} already exists")
+    os.makedirs(os.path.join(folder, "blobs", "sha256"))
+    for data in blobs.values():
+        with open(os.path.join(folder, "blobs", "sha256", hashlib.sha256(data).hexdigest()), "wb") as f:
+            f.write(data)
+    with open(os.path.join(folder, "oci-layout"), "w", encoding="utf-8") as f:
+        json.dump({"imageLayoutVersion": "1.0.0"}, f)
+    index = {"schemaVersion": 2, "mediaType": "application/vnd.oci.image.index.v1+json", "manifests": [{
+        "mediaType": manifest.get("mediaType", "application/vnd.oci.image.manifest.v1+json"),
+        "digest": "sha256:" + hashlib.sha256(blobs[manifest_path]).hexdigest(),
+        "size": len(blobs[manifest_path]),
+        "annotations": {"org.opencontainers.image.ref.name": "latest"},
+    }]}
+    with open(os.path.join(folder, "index.json"), "w", encoding="utf-8") as f:
+        json.dump(index, f)
+
+
 def main(argv):
     usage = (
         "Usage: rechunk.py chunked MANIFEST\n"
         "       rechunk.py labels BEFORE AFTER\n"
-        "       rechunk.py download BUDGET_MIB MANIFEST CONFIG [PREVIOUS_MANIFEST PREVIOUS_CONFIG]"
+        "       rechunk.py download BUDGET_MIB MANIFEST CONFIG [PREVIOUS_MANIFEST PREVIOUS_CONFIG]\n"
+        "       rechunk.py layout MANIFEST CONFIG FOLDER"
     )
     command, args = (argv[1], argv[2:]) if len(argv) > 1 else (None, [])
     try:
@@ -219,6 +267,10 @@ def main(argv):
             if not within:
                 print("The update is over the download budget.", file=sys.stderr)
             return 0 if within else 1
+        if command == "layout" and len(args) == 3:
+            write_layout(*args)
+            print(f"{args[2]}: an OCI layout of {args[0]} and {args[1]}, tagged latest")
+            return 0
     except InputError as e:
         print(f"rechunk.py: {e}", file=sys.stderr)
         return 2

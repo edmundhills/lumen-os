@@ -21,6 +21,13 @@
 #             in, so a package that didn't change keeps its layer, digest and
 #             all. Without it, rpm-ostree plans the layers afresh.
 #
+#             rpm-ostree reads PREVIOUS through containers/image inside IMAGE,
+#             which applies IMAGE's trust policy, and that refuses Lumen's own
+#             images unless they are signed (ADR 0008). The layer plan is all
+#             rpm-ostree needs, and nothing in it is trusted, so for a registry
+#             this script reads the manifest and config itself and hands
+#             rpm-ostree an OCI layout of just those (image/rechunk.py layout).
+#
 # The tool is `rpm-ostree compose build-chunked-oci`, run from IMAGE itself, so
 # its version always matches the base. It reads IMAGE from Podman's storage,
 # which it needs mounted, so this runs as root. Exits 0 when the image is
@@ -45,6 +52,7 @@ readonly here
 
 args=(--bootc --format-version=2 --max-layers="$MAX_LAYERS")
 mounts=(--volume=/var/lib/containers:/var/lib/containers)
+remote=
 case $previous in
   '') ;;
   oci:*)
@@ -59,7 +67,7 @@ case $previous in
     mounts+=(--volume="$(realpath -- "$dir")":/run/rechunk/previous:ro)
     args+=(--previous-build="oci:/run/rechunk/previous$tag")
     ;;
-  docker://*) args+=(--previous-build="$previous") ;;
+  docker://*) remote=$previous ;;
   *)
     printf 'PREVIOUS must start with docker:// or oci:, not "%s".\n' "$previous" >&2
     exit 2
@@ -81,6 +89,16 @@ printf '{"schemaVersion": 2, "manifests": []}\n' >"$output/index.json"
 work=$(mktemp -d -- "$(dirname -- "$(realpath -- "$output")")/rechunk-work.XXXXXX")
 trap 'rm -rf -- "$work"' EXIT
 mounts+=(--volume="$(realpath -- "$output")":/run/rechunk/output --volume="$work":/var/tmp)
+
+# An earlier build on a registry: its manifest and config, as an OCI layout.
+# skopeo inspect checks no signatures, so no trust policy is involved.
+if [[ -n $remote ]]; then
+  skopeo inspect --raw "$remote" >"$work/previous-manifest.json"
+  skopeo inspect --raw --config "$remote" >"$work/previous-config.json"
+  python3 "$here/rechunk.py" layout "$work/previous-manifest.json" "$work/previous-config.json" "$work/previous"
+  mounts+=(--volume="$work/previous":/run/rechunk/previous:ro)
+  args+=(--previous-build=oci:/run/rechunk/previous:latest)
+fi
 
 # Format version 2 writes each layer's parent folders into it, which makes the
 # layers reproducible (rpm-ostree's documentation). rpm-ostree keeps IMAGE's

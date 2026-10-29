@@ -7,6 +7,7 @@
 # `just test` runs them in the lint container:
 #   python3 -m unittest discover --start-directory image
 
+import hashlib
 import json
 import os
 import subprocess
@@ -226,6 +227,43 @@ class CommandLine(unittest.TestCase):
         # The digest shown is that of the manifest's bytes, as the registry names it.
         self.assertIn(rechunk.read_json(paths[0])[1], result.stdout)
         self.assertEqual(self.run_main("download", "100", *paths).returncode, 0)
+
+    def test_layout_of_a_manifest_and_its_config(self):
+        # The exact bytes the registry serves, so the digests are the registry's.
+        config_bytes = json.dumps(config(RECHUNKED), indent=3).encode()
+        m = rechunked_image("44.20261029", BASE_44_1)[0]
+        m["config"] = {"mediaType": "application/vnd.oci.image.config.v1+json",
+                       "digest": "sha256:" + hashlib.sha256(config_bytes).hexdigest(), "size": len(config_bytes)}
+        manifest_bytes = json.dumps(m, indent=2).encode()
+        (self.dir / "m.json").write_bytes(manifest_bytes)
+        (self.dir / "c.json").write_bytes(config_bytes)
+        folder = self.dir / "layout"
+        result = self.run_main("layout", str(self.dir / "m.json"), str(self.dir / "c.json"), str(folder))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        index = json.loads((folder / "index.json").read_text(encoding="utf-8"))
+        [entry] = index["manifests"]
+        self.assertEqual(entry["digest"], "sha256:" + hashlib.sha256(manifest_bytes).hexdigest())
+        self.assertEqual(entry["size"], len(manifest_bytes))
+        self.assertEqual(entry["annotations"]["org.opencontainers.image.ref.name"], "latest")
+        blobs = folder / "blobs" / "sha256"
+        self.assertEqual((blobs / entry["digest"][7:]).read_bytes(), manifest_bytes)
+        self.assertEqual((blobs / m["config"]["digest"][7:]).read_bytes(), config_bytes)
+        self.assertEqual(sorted(p.name for p in blobs.iterdir()),
+                         sorted([entry["digest"][7:], m["config"]["digest"][7:]]))
+        # Not twice into the same folder.
+        again = self.run_main("layout", str(self.dir / "m.json"), str(self.dir / "c.json"), str(folder))
+        self.assertEqual(again.returncode, 2)
+        self.assertIn("already exists", again.stderr)
+
+    def test_layout_needs_the_config_the_manifest_names(self):
+        # skopeo inspect --config without --raw reformats the config, which
+        # changes its digest.
+        m = rechunked_image("44.20261029", BASE_44_1)[0]
+        result = self.run_main("layout", self.write("m.json", m), self.write("c.json", config(RECHUNKED)),
+                               str(self.dir / "layout"))
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("skopeo inspect --raw --config", result.stderr)
+        self.assertFalse((self.dir / "layout").exists())
 
     def test_usage_and_unreadable_files(self):
         self.assertEqual(self.run_main().returncode, 2)
