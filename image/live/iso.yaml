@@ -4,14 +4,15 @@
 #
 # The ISO's label and boot menu, in the format of the container-native ISO
 # contract v0.1.0 (ADR 0011). The live stage installs it as
-# /usr/lib/bootc-image-builder/iso.yaml, where Titanoboa reads it and where
-# image-builder reads it too, as long as the image has no
+# /usr/lib/bootc-image-builder/iso.yaml, where image-builder, which packs the
+# ISO (ADR 0012), reads it as long as the image has no
 # /usr/lib/image-builder/bootc folder (image/live/check-live.sh checks that).
 #
 # The label names the ISO's filesystem, and the initramfs finds the USB by it
 # (root=live:CDLABEL=), so every entry repeats it. rd.live.image tells the
 # initramfs and livesys that this is a live boot. The kernel and initramfs
-# paths are the ones the contract puts them at.
+# paths are the ones the contract puts them at. No entry turns SELinux off:
+# image/make-iso.sh labels the live system's files (ADR 0012).
 
 label: Lumen-Live
 grub2:
@@ -20,6 +21,12 @@ grub2:
   entries:
     - name: Try or install Lumen OS
       linux: /images/pxeboot/vmlinuz root=live:CDLABEL=Lumen-Live rd.live.image quiet rhgb
+      initrd: /images/pxeboot/initrd.img
+    # rd.live.check reads the whole USB first and compares it with the
+    # checksum image-builder writes into the ISO (implantisomd5), which finds
+    # a download or a copy to the USB that went wrong.
+    - name: Check this USB, then try or install Lumen OS
+      linux: /images/pxeboot/vmlinuz root=live:CDLABEL=Lumen-Live rd.live.image rd.live.check quiet rhgb
       initrd: /images/pxeboot/initrd.img
     # For graphics cards the open drivers can't start: the kernel keeps the
     # firmware's simple framebuffer.

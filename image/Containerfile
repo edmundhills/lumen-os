@@ -122,9 +122,10 @@ LABEL org.opencontainers.image.title="Lumen OS" \
 
 # The live system the install ISO boots (docs/architecture.md, section 9.6): the
 # Lumen image with what the live session and the installer need, laid out as
-# the container-native ISO contract v0.1.0 asks, so that Titanoboa or
-# image-builder's generic-iso can pack it into an ISO (ADR 0011). LUMEN_LIVE_FROM,
-# at the top of this file, says which build of the lumen stage it starts from.
+# the container-native ISO contract v0.1.0 asks (ADR 0011), so that
+# image-builder's generic-iso can pack it into an ISO (image/make-iso.sh, ADR
+# 0012). LUMEN_LIVE_FROM, at the top of this file, says which build of the
+# lumen stage it starts from.
 FROM ${LUMEN_LIVE_FROM} AS live
 
 # The live packages (image/live/packages.toml), applied the way the base stage

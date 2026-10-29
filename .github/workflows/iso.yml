@@ -1,0 +1,173 @@
+# SPDX-FileCopyrightText: 2026 Lumen OS contributors
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# The iso workflow: make the install ISO of a published Lumen build, check it,
+# and keep it for a week as a workflow artifact (docs/architecture.md, section
+# 9.6; docs/decisions/0012-install-iso.md). Until the promote workflow makes
+# the ISO of each release (step 10.1), it runs on demand, and on pushes to main
+# that change the live system or how the ISO is made.
+#
+# It builds only the live stage of image/Containerfile, on the build named
+# (LUMEN_LIVE_FROM), after checking that build's signature with the trust
+# policy Lumen ships. image/make-iso.sh packs it with image-builder, labelled
+# for SELinux, and image/check-iso.sh checks the result inside the live system.
+
+name: iso
+
+on:
+  workflow_dispatch:
+    inputs:
+      image:
+        description: >-
+          The build to make the ISO of: a tag of ghcr.io/<owner>/lumen, such as
+          dev or dev-44.20261029.4.
+        type: string
+        default: dev
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/iso.yml
+      - image/Containerfile
+      - image/check-iso.sh
+      - image/iso.py
+      - image/live/**
+      - image/make-iso.sh
+      - installer/**
+
+permissions: {}
+
+# One ISO at a time: each takes most of the runner's disk.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  iso:
+    name: Make the ISO
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    env:
+      REGISTRY_IMAGE: ghcr.io/${{ github.repository_owner }}/lumen
+      TAG: ${{ inputs.image || 'dev' }}
+      PUBLIC_KEY: image/overlay/usr/share/pki/containers/lumen.pub
+      LIVE_IMAGE: localhost/lumen-live:ci
+      # The image-builder that makes the qcow2 (build-image.yml): one release
+      # to move, which test_iso.py checks.
+      IMAGE_BUILDER: >-
+        ghcr.io/osbuild/image-builder-cli:v88.0.0@sha256:a0c38fa28181aca104b64465a1d21b385603ac62b184ced4041f467573a1534c
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      # As in build-image.yml: the runner's disk is mostly full of language
+      # tools Lumen doesn't use. The ISO needs the build, the live system,
+      # osbuild's two copies of it and the ISO, about 45 GB at the peak.
+      - name: Free disk space
+        run: |
+          df -h / /mnt
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /usr/local/.ghcup /opt/hostedtoolcache /usr/share/swift \
+            /usr/local/share/powershell /usr/local/share/chromium /opt/microsoft \
+            /opt/google /opt/az /usr/lib/jvm
+          sudo docker system prune --all --force >/dev/null
+          avail() { df --output=avail -- "$1" | tail -n 1; }
+          if mountpoint -q /mnt && (($(avail /mnt) > $(avail /))); then
+            sudo mkdir -p /mnt/containers /var/lib/containers
+            sudo mount --bind /mnt/containers /var/lib/containers
+          fi
+          df -h / /var/lib/containers
+
+      # The tag moves, so the rest of the job uses the digest it names now.
+      - name: Find the build
+        id: build
+        run: |
+          found=$(skopeo inspect --no-tags \
+            --format '{{.Digest}} {{index .Labels "org.opencontainers.image.version"}}' "docker://$REGISTRY_IMAGE:$TAG")
+          read -r digest version <<<"$found"
+          printf 'digest=%s\nversion=%s\n' "$digest" "$version" >>"$GITHUB_OUTPUT"
+          printf '%s:%s is build %s, %s\n' "$REGISTRY_IMAGE" "$TAG" "$version" "$digest"
+
+      # Podman checks the signature before it pulls anything, with the trust
+      # policy and registries.d from image/overlay, its key path pointing to
+      # the key in the checkout, as the sign job checks it (ADR 0008). So the
+      # ISO is only ever made from a build signed with Lumen's key.
+      - name: Pull the build, checking its signature
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          sed "s#/usr/share/pki/containers/lumen.pub#$PWD/$PUBLIC_KEY#" image/overlay/etc/containers/policy.json \
+            >"$RUNNER_TEMP/policy.json"
+          sudo mkdir -p /etc/containers/registries.d
+          sudo cp image/overlay/etc/containers/registries.d/lumen.yaml /etc/containers/registries.d/
+          sudo podman pull --quiet --signature-policy "$RUNNER_TEMP/policy.json" "$REGISTRY_IMAGE@$DIGEST"
+
+      # Only the live stage: on the build pulled, Podman skips the stages
+      # before it. image/live/check-live.sh runs as its last step.
+      - name: Build the live system
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          sudo podman build --file image/Containerfile --target live \
+            --build-arg "LUMEN_LIVE_FROM=$REGISTRY_IMAGE@$DIGEST" --tag "$LIVE_IMAGE" .
+          sudo podman images
+          df -h / /var/lib/containers
+
+      - name: Make the ISO
+        id: iso
+        env:
+          VERSION: ${{ steps.build.outputs.version }}
+        run: |
+          name=lumen-$VERSION-live-x86_64.iso
+          sudo image/make-iso.sh "$IMAGE_BUILDER" "$LIVE_IMAGE" "$RUNNER_TEMP/iso/$name"
+          sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/iso/$name"
+          (cd "$RUNNER_TEMP/iso" && sha256sum "$name" | tee "$name.sha256")
+          ls -l "$RUNNER_TEMP/iso"
+          df -h / /var/lib/containers
+          printf 'name=%s\n' "$name" >>"$GITHUB_OUTPUT"
+
+      # Inside the live system, which has the tools and the SELinux policy
+      # the check reads the labels with.
+      - name: Check the ISO
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          VERSION: ${{ steps.build.outputs.version }}
+          NAME: ${{ steps.iso.outputs.name }}
+        run: |
+          report=$RUNNER_TEMP/iso-report status=0
+          # The runner writes the report.
+          # shellcheck disable=SC2024
+          sudo podman run --rm --privileged --network=none \
+            --volume "$RUNNER_TEMP/iso:/iso:ro" --volume "$PWD:/src:ro" "$LIVE_IMAGE" \
+            bash /src/image/check-iso.sh "/iso/$NAME" /src/image/live/iso.yaml "$VERSION" >"$report" 2>&1 || status=$?
+          cat "$report"
+          size=$(du --apparent-size --human-readable "$RUNNER_TEMP/iso/$NAME" | cut -f1)
+          # The backticks are Markdown, for the run's summary page.
+          # shellcheck disable=SC2016
+          {
+            printf '### The install ISO\n\n'
+            printf -- '- `%s`, %s, from `%s:%s` (`%s`)\n' "$NAME" "$size" "$REGISTRY_IMAGE" "$TAG" "$DIGEST"
+            printf -- '- SHA-256: `%s`\n\n```text\n' "$(cut -d' ' -f1 "$RUNNER_TEMP/iso/$NAME.sha256")"
+            cat "$report"
+            printf '```\n'
+          } >>"$GITHUB_STEP_SUMMARY"
+          exit "$status"
+
+      # A test ISO, kept a week (architecture, Q15). It is bigger than
+      # GitHub's 2 GiB limit for release files, so releases need another
+      # host (step 9.5).
+      - name: Keep the ISO
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          path: ${{ runner.temp }}/iso/${{ steps.iso.outputs.name }}
+          archive: false
+          retention-days: 7
+          if-no-files-found: error

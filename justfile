@@ -50,9 +50,9 @@ build-live from="":
         --build-arg LUMEN_COMMIT="$(git rev-parse HEAD)" \
         --tag localhost/lumen-live:dev .
 
-# Build the install ISO
+# Build the install ISO: CI's iso workflow does, with image/make-iso.sh
 build-iso:
-    @echo "Nothing to build yet: step 1.8b-2 packs the live system into an ISO, in CI." >&2; exit 1
+    @echo "The iso workflow makes the ISO in CI: on GitHub, Actions > iso > Run workflow. By hand, as root: image/make-iso.sh IMAGE_BUILDER LIVE_IMAGE ISO (it takes hours in WSL)." >&2; exit 1
 
 # Boot the OS image in a local VM
 run-vm:
