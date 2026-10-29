@@ -20,12 +20,11 @@ Claude reads CLAUDE.md automatically, does that step (plus any ➕ steps right a
 
 ## Current step
 
-**1.6** 👤 cosign signing and the SBOM, with ➕ **1.7**, the trust policy. Both are written and tested in WSL, and committed but not pushed ([ADR 0008](docs/decisions/0008-image-signing.md)). They wait for the owner's key:
+**1.6** 👤 cosign signing and the SBOM, with ➕ **1.7**, the trust policy. Both are written, tested in WSL with the real public key, and committed but not pushed ([ADR 0008](docs/decisions/0008-image-signing.md)). The key and the `image-signing` environment with its two secrets exist (2026-10-29; ADR 0008's Follow-up).
 
-0. **Claude, first:** the session hit its usage limit before re-running two checks after the last edits. `sign.sh` gained `verify`, `test_signatures.py` gained two tests, and `test_trust.py` no longer skips the real key. Put a stand-in key at `image/overlay/usr/share/pki/containers/lumen.pub` (don't commit it), then run `just test` and `just build-image` in WSL; the build runs the two new image checks. A build was started but its result wasn't read. Also unchecked: the syft facts in ADR 0008 came from the research's early output (rpm database found, `oci-dir:`, SPDX 2.3, `SYFT_FILE_METADATA_SELECTION=none`, and the flags `--source-name`/`--source-version`). The first CI run will show them.
-1. **Owner:** make the signing key and the `image-signing` environment as ADR 0008, ["How the key is made and kept"](docs/decisions/0008-image-signing.md#how-the-key-is-made-and-kept), says: steps 1, 2 and 4. Leave `cosign.pub` in `~/lumen-signing-key/` in WSL, and tell Claude. The private key and its password never go to Claude.
-2. **Claude:** copy `cosign.pub` to `image/overlay/usr/share/pki/containers/lumen.pub` and commit it, then run `just lint` and `just test`. Until that file exists, both fail on purpose: a policy that names a missing key would refuse every update.
-3. **Owner:** sign off the commits and push. **Claude:** check main's first signed run. The `sign` job's checks must pass, ghcr.io must have the tags `sha256-<digest>.sig` and `.att`, and `dev` must have moved to the digest. Record it in ADR 0008's Follow-up, then tick 1.6 and 1.7.
+1. **Owner:** keep `cosign.key` and `password` from `~/lumen-signing-key/` in WSL safe offline, such as on a USB drive and in a password manager, then delete those two files from WSL (ADR 0008, step 4 of ["How the key is made and kept"](docs/decisions/0008-image-signing.md#how-the-key-is-made-and-kept)).
+2. **Owner:** sign off the commits and push. **Claude:** first check the sign-offs in git.
+3. **Claude:** check main's first signed run. The `sign` job's checks must pass, ghcr.io must have the tags `sha256-<digest>.sig` and `.att`, and `dev` must have moved to the digest. Record it in ADR 0008's Follow-up, then tick 1.6 and 1.7. The syft facts in ADR 0008 came from the research's early output (rpm database found, `oci-dir:`, SPDX 2.3, `SYFT_FILE_METADATA_SELECTION=none`, the flags `--source-name` and `--source-version`); that run's "Make the SBOM" step confirms them or shows what to fix.
 
 Two things left over from 1.5c and 1.5b:
 

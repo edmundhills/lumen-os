@@ -75,4 +75,5 @@ The owner does this once, in WSL and on GitHub. The private key and its password
 
 ## Follow-up
 
-- 2026-10-29: tested in WSL with a stand-in key, not yet in CI. The first push after the owner adds the key is the first signed build; record here what its `sign` job did.
+- 2026-10-29: tested in WSL, not yet in CI. The first push from here is the first signed build; record here what its `sign` job did.
+- 2026-10-29, the key: on the owner's instruction, Claude made it in the owner's WSL with the lint container's cosign 3.1.4 and no network, as step 1 says, with a random 33-byte password written to `~/lumen-signing-key/password` rather than typed. Neither the private key nor the password was shown. Claude checked that the password opens the key and that the key's public half is `cosign.pub`, which is now `lumen.pub`. The owner created the `image-signing` environment, limited to the branch `main`, and added the two secrets; Claude checked that they are there, by name. The offline backup and deleting the WSL copies (step 4) are the owner's.
