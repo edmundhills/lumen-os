@@ -446,9 +446,10 @@ Every rating shows when and how it was last tested. Entries not tested in the la
 ### Compatibility database
 
 - `compat/windows-apps.json`, validated against a JSON schema in CI and published under ODbL 1.0 (required because it includes ProtonDB data).
-- Each entry: name, publisher, how to recognise it (PE version info such as ProductName and CompanyName, installer type, SHA-256 of known installers, Steam App ID), rating, reason, known issues, recipe, alternatives (Flatpak IDs, web app URLs), anti-cheat status, last tested (Wine or Proton version, date, by CI or a maintainer), sources.
+- Each entry: name, publisher, how to recognise it (PE version info such as ProductName and CompanyName, installer type, SHA-256 of known installers, Steam App ID), rating, reason, known issues, recipe, alternatives (Flatpak IDs, web app URLs, and for games that anti-cheat blocks, the cloud-gaming services that carry them), anti-cheat status, last tested (Wine or Proton version, date, by CI or a maintainer), sources.
 - Recipe: Bottles environment (application or gaming), dependencies (for example Visual C++ runtimes, .NET, core fonts), DLL overrides and environment variables.
 - Sources: Lumen's nightly CI tests and maintainers first; ProtonDB report exports (ODbL 1.0 + DbCL, with attribution) for games; AreWeAntiCheatYet for anti-cheat status (licence confirmed in step 7.1). Never scrape.
+- Sources that disagree are checked, not copied: a game AreWeAntiCheatYet calls broken, whose recent ProtonDB reports say it runs, is rated "May work, not yet confirmed" until CI or a maintainer confirms it (ADR 0009).
 - Delivery: shipped in the image and refreshed as a signed file by lumen-updated. Lookups happen offline; Lumen never sends "this user is installing X" anywhere.
 - The `lumen-compat` Rust crate identifies a file and looks it up. The Store, the dialog, Welcome and the CLI all use it, so they can't disagree.
 
@@ -470,6 +471,7 @@ Every rating shows when and how it was last tested. Entries not tested in the la
 
 - Steam with Proton (gaming image, or ticked in Welcome); Heroic for Epic and GOG; Lutris for other launchers.
 - Anti-cheat status comes from the compatibility database and shows before install.
+- For a game whose anti-cheat blocks Linux, Lumen offers what does work (ADR 0009). Where a cloud-gaming service carries the game, it is offered as the alternative, saying what it needs. On a computer that also has Windows, "Play in Windows" restarts the computer once into Windows, through the firmware's one-time boot so that BitLocker isn't disturbed; the next restart returns to Lumen. Lumen never helps a game get past its anti-cheat: that gets accounts banned.
 
 ### Lumen Setup for Windows
 
@@ -483,7 +485,7 @@ Lumen says these plainly in ratings, the Store and the FAQ, and offers the best 
 
 - Microsoft 365 desktop apps (use Office on the web, LibreOffice or OnlyOffice).
 - Adobe Creative Cloud and some large CAD suites.
-- Games whose kernel anti-cheat the publisher hasn't enabled for Linux.
+- Games whose kernel anti-cheat the publisher hasn't enabled for Linux (Lumen offers cloud gaming where the game is there, and "Play in Windows" for those who kept Windows).
 - 4K video in streaming services' browser players (DRM limits).
 - Windows Hello face unlock, iCloud desktop sync, and Windows-only drivers and vendor tools.
 
@@ -736,7 +738,7 @@ Acceptance: fresh install to first usable desktop in under 15 minutes in a VM; a
 ```text
 Implement per "Spec: Windows apps and switching".
 1. docs/windows-apps.md: the top 100 apps Windows users need, by category, with today's status; confirm the licences of every data source. The owner reviews the list.
-2. Compatibility database v1: recipes, alternatives, anti-cheat status; import ProtonDB and AreWeAntiCheatYet data with attribution; cover the top 100. Signed updates through lumen-updated; offline lookup only.
+2. Compatibility database v1: recipes, alternatives (cloud gaming for games that anti-cheat blocks), anti-cheat status; import ProtonDB and AreWeAntiCheatYet data with attribution, rating a game "May work, not yet confirmed" where they disagree; cover the top 100. Signed updates through lumen-updated; offline lookup only.
 3. lumen-compat crate: identify an .exe or .msi (version info, installer type, hash) and match it; `lumen app check`.
 4. "Open Windows app" dialog: rating, reason, alternatives, Install / Try it; creates the bottle with its recipe; adds the app to the menu.
 5. Sandbox defaults; Windows apps in Settings → Apps; `lumen app list --windows`; full removal.
@@ -744,6 +746,7 @@ Implement per "Spec: Windows apps and switching".
 7. Welcome: "Your Windows apps" scan of the Windows drive, with BitLocker unlock by recovery key.
 8. Lumen Setup for Windows (fork of Fedora Media Writer): hardware check, BitLocker / Fast Startup / Secure Boot checks, partition shrink, UTC clock, USB writer; built and code-signed in CI.
 9. Dual-boot Health checks: Fast Startup, clock, missing boot entry, Secure Boot certificate.
+10. "Play in Windows" for games that anti-cheat blocks: restart once into Windows through the firmware's one-time boot.
 Acceptance: every top-100 app has a rating and a path, and at least 80% are covered; the dialog, Store and CLI give the same rating; a lookup makes no network request; a Windows user installs Lumen with Lumen Setup, sees their apps' status, and installs five Windows apps by double-clicking, with every rating correct.
 ```
 

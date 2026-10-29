@@ -309,17 +309,18 @@ Two things left over from 1.5c and 1.5b:
 
 ## Phase 7 — Switching from Windows (spec: "Spec: Windows apps and switching", Phase 7)
 
-- [ ] **7.1** 👤 `docs/windows-apps.md`: the top 100 apps Windows users need, by category, with today's status; confirm the licences of ProtonDB, AreWeAntiCheatYet and any other source; pick the OneDrive client. You review the list.
-- [ ] **7.2** Compatibility database v1: recipes, alternatives, anti-cheat status; import ProtonDB and AreWeAntiCheatYet data with attribution; cover the top 100.
+- [ ] **7.1** 👤 `docs/windows-apps.md`: the top 100 apps Windows users need, by category, with today's status; confirm the licences of ProtonDB, AreWeAntiCheatYet and any other source, including where the cloud-gaming alternatives come from and whether their terms allow Lumen to use them (ADR 0009); pick the OneDrive client. You review the list.
+- [ ] **7.2** Compatibility database v1: recipes, alternatives, anti-cheat status; import ProtonDB and AreWeAntiCheatYet data with attribution; cover the top 100. For games that anti-cheat blocks, list the cloud-gaming services that carry them as alternatives. Where AreWeAntiCheatYet says broken and recent ProtonDB reports say it runs, rate the game "May work, not yet confirmed" (ADR 0009: only 32 of its 636 broken entries changed after 2025-01-01).
 - [ ] **7.3** Signed database updates through `lumen-updated`; offline lookup only; test that a lookup makes no network request.
 - [ ] **7.4** `lumen-compat` Rust crate: identify an `.exe` or `.msi` (version info, installer type, file hash) and match it; `lumen app check`.
 - [ ] **7.5** "Open Windows app" dialog (`apps/windows-app`): rating, reason, alternatives, Install / Try it; creates the bottle with its recipe; adds the app to the menu.
 - [ ] **7.6** Sandbox defaults for Bottles; Windows apps in Settings → Apps; `lumen app list --windows`; full removal.
-- [ ] **7.7** Store: ratings on Windows-name searches, Windows alternatives collection, web apps, Heroic and Lutris, anti-cheat status.
+- [ ] **7.7** Store: ratings on Windows-name searches, Windows alternatives collection, web apps, Heroic and Lutris, anti-cheat status, and on a blocked game's page its cloud-gaming alternatives.
 - [ ] **7.8** Welcome: "Your Windows apps" scan of the Windows drive; BitLocker unlock by recovery key for the scan and the file import.
 - [ ] **7.9** ⚠️ 👤 Lumen Setup for Windows (`windows-setup/`, fork of Fedora Media Writer): hardware check, BitLocker / Fast Startup / Secure Boot checks, partition shrink, UTC clock, USB writer; built on a Windows CI runner. You provide a Windows code-signing certificate, or SmartScreen will warn users.
 - [ ] **7.10** Dual-boot Health checks: Fast Startup, clock mismatch, missing boot entry, Secure Boot certificate.
-- [ ] **7.11** Tests: every top-100 app has a rating and a path; dialog, Store and CLI agree; offline lookup; sandbox defaults.
+- [ ] ➕ **7.10a** "Play in Windows" (ADR 0009): on a blocked game's Store page, in its dialog and in the app menu, a button that asks first, then restarts once into Windows through the firmware's one-time boot (UEFI `BootNext` to Windows Boot Manager, never Lumen's boot menu, so BitLocker isn't disturbed). Shown only when that firmware entry exists. Decide which service sets `BootNext` under polkit (lumen-updated owns restarts), and check that BitLocker stays quiet on a real dual-boot machine.
+- [ ] **7.11** Tests: every top-100 app has a rating and a path; dialog, Store and CLI agree; offline lookup; sandbox defaults; a blocked game offers its cloud alternatives and, with a Windows entry, "Play in Windows".
 - [ ] **7.12** 👤 Phase 7 acceptance: a Windows user installs Lumen with Lumen Setup, sees their apps' status, and installs five Windows apps by double-clicking, with every rating correct; at least 80% of the top-100 list is covered.
 
 ## Phase 8 — Hardening, accessibility, performance (spec: "Spec: security model", Phase 8)

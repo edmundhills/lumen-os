@@ -33,7 +33,7 @@ This is a living list. Each gap is either covered by the spec, partly covered, a
 | Steam games | Proton runs most of the Steam library | Steam, Proton, Gamescope, MangoHud, GameMode | ✅ |
 | Wine/Proton speed | Windows-style thread syncing needs the `ntsync` kernel module (Linux 6.14+). Fedora 44 loads it through an `ntsync-autoload` package | Image ships the module autoloaded; boot test checks `/dev/ntsync` exists | ➕ |
 | Epic, GOG, EA, Ubisoft, Battle.net launchers | Possible with Heroic, Lutris or Bottles, but users must find them | Heroic and Lutris in the Store's Gaming collection with a one-click setup; database entries for each launcher | ➕ |
-| Games with kernel anti-cheat (for example Valorant and some Call of Duty titles) | Blocked by the game publisher; no technical fix | Show anti-cheat status before install, using AreWeAntiCheatYet data | ⛔ (honest status) |
+| Games with kernel anti-cheat (for example Valorant and some Call of Duty titles) | Blocked by the game publisher; no technical fix. SteamOS has the same limits | Show anti-cheat status before install, using AreWeAntiCheatYet data checked against ProtonDB. Offer cloud gaming where the game is there, and "Play in Windows" (one restart into Windows) for those who kept it ([ADR 0009](decisions/0009-games-blocked-by-anti-cheat.md)) | ⛔ native; ➕ cloud and one-click Windows |
 | Game Pass / Xbox app | No native app | Xbox Cloud Gaming as an installable web app | ⛔ native; ➕ web app |
 | DirectX 12 slower on NVIDIA under Proton | Upstream driver and VKD3D-Proton work in progress | Track upstream; note it in the rating where it matters | ⛔ (upstream) |
 

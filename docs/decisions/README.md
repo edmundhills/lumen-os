@@ -18,6 +18,7 @@ Architecture decision records (ADRs). Each one records a decision that changes t
 | [0006](0006-lumen-look.md) | Lumen's own look: top-bar islands, app menus in the window, lens icons, Sunbeam accent, Red Hat Display and Source Sans 3 | Accepted |
 | [0007](0007-rechunking.md) | Re-chunk the image with rpm-ostree, against a download budget | Accepted |
 | [0008](0008-image-signing.md) | Sign images with a cosign key, attach a syft SBOM, and trust Lumen's images only with that signature | Accepted |
+| [0009](0009-games-blocked-by-anti-cheat.md) | Help with games that anti-cheat blocks: cloud gaming, "Play in Windows", and checked ratings | Accepted |
 
 ## Writing an ADR
 
