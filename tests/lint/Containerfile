@@ -66,3 +66,17 @@ RUN curl --fail --silent --show-error --location --output /usr/local/bin/cosign 
         "https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/cosign-linux-amd64" \
     && printf '%s  %s\n' "$COSIGN_SHA256" /usr/local/bin/cosign | sha256sum --check --strict \
     && chmod 0755 /usr/local/bin/cosign
+
+# syft makes the image's SBOM in CI (image/sbom.sh), and image/test_sbom.py
+# runs it on this container's own rpm database the same way. Fedora doesn't
+# package it, so this is the x86_64 release from its release page, checked
+# against the checksum published there (syft_<version>_checksums.txt). The
+# image workflow installs syft from these two lines too. It is pinned
+# (2026-10-29); Renovate will bump it from step 9.2.
+ARG SYFT_VERSION=1.55.0
+ARG SYFT_SHA256=bb65249542db5fedeeb4d3f9b018b75e7264dbfbbb10486f044581a92f90490d
+RUN curl --fail --silent --show-error --location --output /tmp/syft.tar.gz \
+        "https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/syft_${SYFT_VERSION}_linux_amd64.tar.gz" \
+    && printf '%s  %s\n' "$SYFT_SHA256" /tmp/syft.tar.gz | sha256sum --check --strict \
+    && tar -xzf /tmp/syft.tar.gz -C /usr/local/bin syft \
+    && rm /tmp/syft.tar.gz

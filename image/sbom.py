@@ -22,7 +22,8 @@ import sys
 from collections import Counter
 from urllib.parse import parse_qs, unquote, urlsplit
 
-# rpm lists the keys it trusts as packages named gpg-pubkey, which syft skips.
+# rpm keeps the keys it trusts as packages named gpg-pubkey, which are no
+# software; syft lists them too. Neither side's count includes them.
 NOT_PACKAGES = {"gpg-pubkey"}
 # How many differences to list before saying how many more there are.
 SHOWN = 20
@@ -71,7 +72,8 @@ def read_sbom(path):
         locator = purl(package)
         rpm = rpm_from_purl(locator)
         if rpm:
-            rpms[rpm] += 1
+            if rpm[0] not in NOT_PACKAGES:
+                rpms[rpm] += 1
         elif not str(package.get("SPDXID", "")).startswith("SPDXRef-DocumentRoot"):
             # The document's root package is the image itself.
             others[kind(locator)] += 1

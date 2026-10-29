@@ -16,8 +16,9 @@ lint_run := "podman run --rm --network=none --volume " + quote(justfile_director
 lint_container := lint_run + " " + lint_image
 
 # For the unit tests, ghcr.io is the container itself: image/test_signatures.py
-# runs a registry there that stands in for it.
-test_container := lint_run + " --add-host=ghcr.io:127.0.0.1 --env=LUMEN_SIGNATURE_TEST=1 " + lint_image
+# runs a registry there that stands in for it. LUMEN_LINT_CONTAINER tells the
+# tests that need the container's own tools, such as syft, that they have them.
+test_container := lint_run + " --add-host=ghcr.io:127.0.0.1 --env=LUMEN_SIGNATURE_TEST=1 --env=LUMEN_LINT_CONTAINER=1 " + lint_image
 
 # List the recipes
 default:

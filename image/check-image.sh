@@ -22,6 +22,10 @@ readonly overlay=$1
 here=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 readonly here
 
+# Checking the image must not change it: Python would write bytecode files for
+# the modules it imports that have none (image/Containerfile).
+export PYTHONDONTWRITEBYTECODE=1
+
 # The timers the Containerfile masks.
 readonly MASKED_UNITS=(
   rpm-ostreed-automatic.timer bootc-fetch-apply-updates.timer

@@ -49,6 +49,13 @@ on:
 # No permissions here: the jobs get exactly those their caller in image.yml
 # grants, and only the caller for main can write packages.
 
+# Naming the shell makes GitHub run each step with `bash -eo pipefail`. Its
+# default, `bash -e`, ignores a failure on the left of a pipe, so a check
+# piped into tee, such as the download budget's, could never fail the build.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   build:
     name: Build the image
@@ -67,6 +74,12 @@ jobs:
       # (ADR 0007). A change that needs more raises this in the same pull
       # request and says why.
       DOWNLOAD_BUDGET_MIB: 100
+      # The one earlier build that an update isn't held to the budget from:
+      # the first re-chunked dev (44.20261029). The trust policy, the new
+      # image checks and turning off Python's bytecode files during the build
+      # change files in its shared layers once (ADR 0007, Follow-up). When dev
+      # has moved on, this matches nothing and can go.
+      DOWNLOAD_BUDGET_EXEMPT: sha256:101c706b49f1f96e6a9b4d733228e8ebd1740bb18d4b4c50901f34df5171181c
     steps:
       - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -224,36 +237,42 @@ jobs:
           sudo skopeo inspect --raw "oci:$RUNNER_TEMP/rechunked:latest" >"$new/manifest.json"
           # shellcheck disable=SC2024
           sudo skopeo inspect --config "oci:$RUNNER_TEMP/rechunked:latest" >"$new/config.json"
-          args=("$DOWNLOAD_BUDGET_MIB" "$new/manifest.json" "$new/config.json")
+          budget=$DOWNLOAD_BUDGET_MIB previous=
+          # The previous manifest's bytes give its digest.
+          [[ ! -f $dir/manifest.json ]] || previous=sha256:$(sha256sum <"$dir/manifest.json" | cut -d' ' -f1)
+          if [[ $previous == "$DOWNLOAD_BUDGET_EXEMPT" ]]; then
+            printf 'The update from %s is not held to the budget (DOWNLOAD_BUDGET_EXEMPT).\n\n' \
+              "$DOWNLOAD_BUDGET_EXEMPT" | tee -a "$GITHUB_STEP_SUMMARY"
+            budget=1000000
+          fi
+          args=("$budget" "$new/manifest.json" "$new/config.json")
           [[ ! -f $dir/manifest.json ]] || args+=("$dir/manifest.json" "$dir/config.json")
           python3 image/rechunk.py download "${args[@]}" | tee -a "$GITHUB_STEP_SUMMARY"
 
-      # The SBOM: every package in the image, as SPDX JSON (ADR 0008). syft
-      # reads the re-chunked layout, which is what gets pushed, and
-      # image/sbom.py checks that it lists exactly the RPM packages the image
-      # has. The sign job attaches it to builds of main; every run keeps it
-      # with its other results for 30 days.
+      # The SBOM: every package in the image, as SPDX JSON (ADR 0008).
+      # image/sbom.sh runs syft on the files of the re-chunked image, which is
+      # what gets pushed, reading only its rpm database: scanning everything,
+      # syft needed more memory than the runner has. image/sbom.py then checks
+      # that the SBOM lists exactly the RPM packages the image has. The sign
+      # job attaches it to builds of main; every run keeps it for 30 days.
       - name: Make the SBOM
         env:
           VERSION: ${{ steps.version.outputs.version }}
-          # syft's release from its release page, checked against its checksum.
-          SYFT_VERSION: 1.55.0
-          SYFT_SHA256: bb65249542db5fedeeb4d3f9b018b75e7264dbfbbb10486f044581a92f90490d
-          # Packages only. A record of each of the image's 470,000 files would
-          # make the SBOM hundreds of megabytes, and they are all in the
-          # packages' own lists.
-          SYFT_FILE_METADATA_SELECTION: none
         run: |
+          # The syft the lint container has (tests/lint/Containerfile), whose
+          # tests (image/test_sbom.py) run sbom.sh the same way.
+          version=$(sed -n 's/^ARG SYFT_VERSION=//p' tests/lint/Containerfile)
+          sha256=$(sed -n 's/^ARG SYFT_SHA256=//p' tests/lint/Containerfile)
           archive=$RUNNER_TEMP/syft.tar.gz dir=$RUNNER_TEMP/sbom
           curl --fail --silent --show-error --location --output "$archive" \
-            "https://github.com/anchore/syft/releases/download/v$SYFT_VERSION/syft_${SYFT_VERSION}_linux_amd64.tar.gz"
-          printf '%s  %s\n' "$SYFT_SHA256" "$archive" | sha256sum --check --strict
+            "https://github.com/anchore/syft/releases/download/v$version/syft_${version}_linux_amd64.tar.gz"
+          printf '%s  %s\n' "$sha256" "$archive" | sha256sum --check --strict
           mkdir -p "$RUNNER_TEMP/bin" "$dir"
           tar -xzf "$archive" -C "$RUNNER_TEMP/bin" syft
-          # Root wrote the layout.
-          sudo --preserve-env=SYFT_FILE_METADATA_SELECTION "$RUNNER_TEMP/bin/syft" scan \
-            --source-name "$REGISTRY_IMAGE" --source-version "$VERSION" \
-            --output "spdx-json=$dir/lumen.spdx.json" "oci-dir:$RUNNER_TEMP/rechunked"
+          root=$(sudo podman image mount "$LOCAL_IMAGE-rechunked")
+          sudo env PATH="$RUNNER_TEMP/bin:$PATH" \
+            image/sbom.sh "$root" "$REGISTRY_IMAGE" "$VERSION" "$dir/lumen.spdx.json"
+          sudo podman image unmount "$LOCAL_IMAGE-rechunked"
           # Root runs Podman, and the runner writes the file.
           # shellcheck disable=SC2024
           sudo podman run --rm --pull=never --entrypoint=rpm "$LOCAL_IMAGE-rechunked" \

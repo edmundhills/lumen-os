@@ -34,9 +34,16 @@ FROM quay.io/fedora-ostree-desktops/kinoite:44@sha256:93139a85f048799787b472307c
 # Only the two files this step reads are mounted. Podman reuses a step only if
 # what it mounts is unchanged, so mounting all of image/ would rerun dnf (about
 # 9 minutes) after any change there, such as to the overlay.
+#
+# Python runs in this build without writing bytecode files (.pyc): the build's
+# scripts must not change the image beyond what they are for. Python writes one
+# for any module it imports that has none, and such a file belongs to no
+# package, so it would land in the large layer of files no package owns, which
+# users then download again (ADR 0007). The same goes for every step below
+# that runs Python, and for image/check-image.sh.
 RUN --mount=type=bind,source=image/packages.py,target=/run/lumen/packages.py \
     --mount=type=bind,source=image/packages.toml,target=/run/lumen/packages.toml \
-    python3 /run/lumen/packages.py apply /run/lumen/packages.toml \
+    PYTHONDONTWRITEBYTECODE=1 python3 /run/lumen/packages.py apply /run/lumen/packages.toml \
     && rm -rf /run/dnf /var/cache/* /var/lib/dnf /var/log/*
 
 FROM base AS lumen
@@ -78,7 +85,7 @@ RUN --mount=type=bind,source=image/os-release.sh,target=/run/lumen/os-release.sh
 # Mark the files that need a layer of their own when CI re-chunks the image,
 # such as os-release and the overlay's files (image/layer_hints.py, ADR 0007).
 RUN --mount=type=bind,source=image,target=/run/lumen/image \
-    python3 /run/lumen/image/layer_hints.py /run/lumen/image/overlay
+    PYTHONDONTWRITEBYTECODE=1 python3 /run/lumen/image/layer_hints.py /run/lumen/image/overlay
 
 # Check what the overlay and the steps above set up (image/check-image.sh).
 RUN --mount=type=bind,source=image,target=/run/lumen/image \

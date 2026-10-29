@@ -22,6 +22,12 @@ concurrency:
   # replace one that is waiting to start.
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
+# `bash -eo pipefail` for every step, so a failure inside a pipe fails it
+# (build-image.yml).
+defaults:
+  run:
+    shell: bash
+
 jobs:
   lint:
     name: Lint and test

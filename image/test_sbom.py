@@ -9,12 +9,16 @@
 import contextlib
 import io
 import json
+import os
 import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 
 import sbom
+
+HERE = Path(sbom.__file__).resolve().parent
 
 
 def package(name, purl):
@@ -64,9 +68,12 @@ class SbomTest(unittest.TestCase):
         self.assertIn("1 golang, 1 pypi", report)
 
     def test_gpg_pubkey_is_not_a_package(self):
-        ok, report = sbom.check(*self.write([BASH], "bash 0:5.3.9-3.fc44 x86_64\n"
-                                                    "gpg-pubkey 0:31645531-66b6dccf (none)\n"))
+        # rpm keeps a trusted key as a package named gpg-pubkey, and syft lists it.
+        key = package("gpg-pubkey", "pkg:rpm/fedora/gpg-pubkey@36f612dcf27f7d1a-6786af3b?distro=fedora-44")
+        ok, report = sbom.check(*self.write([BASH, key], "bash 0:5.3.9-3.fc44 x86_64\n"
+                                                         "gpg-pubkey 0:36f612dcf27f7d1a-6786af3b (none)\n"))
         self.assertTrue(ok, report)
+        self.assertIn("lists the image's 1 RPM packages", report)
 
     def test_missing_package(self):
         ok, report = sbom.check(*self.write([BASH, SHADOW, LIBSTDCXX, FONTS, GLIBC]))
@@ -114,6 +121,36 @@ class SbomTest(unittest.TestCase):
             self.assertEqual(sbom.main(["sbom.py", "check", paths[0], str(self.work / "missing")]), 2)
             self.assertEqual(sbom.main(["sbom.py", "check"]), 2)
         self.assertIn("### SBOM", out.getvalue())
+
+
+@unittest.skipUnless(os.environ.get("LUMEN_LINT_CONTAINER") == "1", "needs the lint container: run `just test`")
+class SyftTest(unittest.TestCase):
+    """sbom.sh, with the pinned syft, on the lint container's own files, as CI runs it on the image."""
+
+    def test_the_sbom_lists_exactly_the_rpm_packages(self):
+        with tempfile.TemporaryDirectory() as d:
+            work = Path(d)
+            out = work / "sbom.spdx.json"
+            made = subprocess.run(["bash", str(HERE / "sbom.sh"), "/", "localhost/lumen-lint", "test", str(out)],
+                                  capture_output=True, text=True, check=False)
+            self.assertEqual(made.returncode, 0, made.stdout + made.stderr)
+            rpm = subprocess.run(["rpm", "--query", "--all", "--queryformat",
+                                  "%{NAME} %{EPOCHNUM}:%{VERSION}-%{RELEASE} %{ARCH}\n"],
+                                 capture_output=True, text=True, check=True)
+            (work / "packages").write_text(rpm.stdout, encoding="utf-8")
+            ok, report = sbom.check(str(out), str(work / "packages"))
+            self.assertTrue(ok, report)
+            document = json.loads(out.read_text(encoding="utf-8"))
+            self.assertTrue(document["spdxVersion"].startswith("SPDX-2."), document["spdxVersion"])
+            # Packages only: the one file recorded is the rpm database they came from.
+            files = [f["fileName"] for f in document.get("files") or []]
+            self.assertEqual(len(files), 1, files)
+            self.assertTrue(files[0].endswith("rpm/rpmdb.sqlite"), files)
+            self.assertEqual(document["name"], "localhost/lumen-lint")
+
+    def test_usage(self):
+        result = subprocess.run(["bash", str(HERE / "sbom.sh"), "/"], capture_output=True, text=True, check=False)
+        self.assertEqual(result.returncode, 2)
 
 
 if __name__ == "__main__":
