@@ -2,10 +2,16 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Build image/Containerfile, the way `just build-image` does in WSL, and, when
-# asked, push the image to ghcr.io. image.yml calls this for every push and
-# pull request; only its job for main asks for the push.
-# docs/architecture.md, section 9.8.
+# Build image/Containerfile, the way `just build-image` does in WSL, re-chunk
+# it into the layers users download, and, when asked, push it to ghcr.io.
+# image.yml calls this for every push and pull request; only its job for main
+# asks for the push. docs/architecture.md, section 9.8.
+#
+# Re-chunking (image/rechunk.sh, ADR 0007) keeps the layer plan of the newest
+# build on ghcr.io, so an update downloads only the layers whose packages
+# changed. Each run says how much that is, and fails when a build on the same
+# base image as the newest one would make users download more than
+# DOWNLOAD_BUDGET_MIB (risk 14 in docs/risks.md).
 #
 # Pushed tags (docs/architecture.md, section 9.7):
 #   dev-<build version>   never moves, for example dev-44.20261028
@@ -29,12 +35,14 @@ jobs:
   build:
     name: Build the image
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 150
     env:
       # The image as Podman stores it on the runner, and where it is pushed.
       # Registry names must be lower case, and the owner's is.
       LOCAL_IMAGE: localhost/lumen:ci
       REGISTRY_IMAGE: ghcr.io/${{ github.repository_owner }}/lumen
+      # The most an update between two builds on the same base may download.
+      DOWNLOAD_BUDGET_MIB: 150
     steps:
       - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -136,15 +144,165 @@ jobs:
           sudo podman image ls "$LOCAL_IMAGE"
           df -h /
 
+      # Read the newest build on ghcr.io, as users would, without logging in.
+      # Re-chunking keeps its layer plan once it is re-chunked itself, and the
+      # next step measures the update from it. Builds of main must be able to
+      # read it; other builds go on without it, as a fork's may have to.
+      - name: Read the newest build on ghcr.io
+        env:
+          PUBLISH: ${{ inputs.publish }}
+        run: |
+          dir=$RUNNER_TEMP/previous log=$RUNNER_TEMP/previous.log
+          mkdir -p "$dir"
+          if ! digest=$(skopeo inspect --no-creds --format '{{.Digest}}' "docker://$REGISTRY_IMAGE:dev" 2>"$log"); then
+            if grep -qiE 'manifest unknown|name unknown|not known to registry' "$log"; then
+              printf '%s:dev does not exist yet.\n' "$REGISTRY_IMAGE"
+              exit 0
+            fi
+            cat "$log" >&2
+            if [[ $PUBLISH == true ]]; then
+              printf '::error::Cannot read %s:dev without logging in. Make the package public.\n' "$REGISTRY_IMAGE"
+              exit 1
+            fi
+            printf '::warning::Cannot read %s:dev, so this build is not compared with it.\n' "$REGISTRY_IMAGE"
+            exit 0
+          fi
+          skopeo inspect --no-creds --raw "docker://$REGISTRY_IMAGE@$digest" >"$dir/manifest.json"
+          skopeo inspect --no-creds --config "docker://$REGISTRY_IMAGE@$digest" >"$dir/config.json"
+          # Only a re-chunked build has a layer plan to keep.
+          status=0
+          python3 image/rechunk.py chunked "$dir/manifest.json" || status=$?
+          case $status in
+            0) printf 'docker://%s@%s\n' "$REGISTRY_IMAGE" "$digest" >"$dir/plan" ;;
+            1) ;;
+            *) exit 1 ;;
+          esac
+
+      # image/rechunk.sh re-chunks the image with rpm-ostree, from the image
+      # itself, into an OCI layout, then checks it: the same labels and
+      # settings, image/check-image.sh and bootc container lint.
+      - name: Re-chunk
+        run: |
+          plan=$RUNNER_TEMP/previous/plan previous=()
+          [[ ! -f $plan ]] || previous=("$(<"$plan")")
+          sudo image/rechunk.sh "$LOCAL_IMAGE" "$RUNNER_TEMP/rechunked" "${previous[@]}"
+          sudo du -sh "$RUNNER_TEMP/rechunked"
+          df -h /
+
+      # What an update from the newest build on ghcr.io to this one downloads.
+      # Over the budget, the build fails, unless the base image changed.
+      - name: Measure the download
+        run: |
+          dir=$RUNNER_TEMP/previous new=$RUNNER_TEMP/new
+          mkdir -p "$new"
+          # Root wrote the layout, and the runner writes the files.
+          # shellcheck disable=SC2024
+          sudo skopeo inspect --raw "oci:$RUNNER_TEMP/rechunked:latest" >"$new/manifest.json"
+          # shellcheck disable=SC2024
+          sudo skopeo inspect --config "oci:$RUNNER_TEMP/rechunked:latest" >"$new/config.json"
+          args=("$DOWNLOAD_BUDGET_MIB" "$new/manifest.json" "$new/config.json")
+          [[ ! -f $dir/manifest.json ]] || args+=("$dir/manifest.json" "$dir/config.json")
+          python3 image/rechunk.py download "${args[@]}" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # TEMPORARY, for step 1.5c only: compare the files of the built and the
+      # re-chunked image, then rebuild the same commit from scratch, re-chunk
+      # it with the first as the previous build, and measure the update.
+      - name: Experiment (step 1.5c)
+        if: github.ref == 'refs/heads/claude/next-step-zfy63s'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          cat >"$RUNNER_TEMP/layers.py" <<'EOF'
+          import json, sys
+          m = json.load(open(sys.argv[1]))
+          for i, l in enumerate(m["layers"]):
+              names = (l.get("annotations") or {}).get("ostree.components", "-")
+              print(f"{i:4} {l['size'] / 2**20:9.1f} MiB  {names[:150]}")
+          EOF
+          cat >"$RUNNER_TEMP/compare.py" <<'EOF'
+          import collections, hashlib, os, stat, sys
+          from concurrent.futures import ThreadPoolExecutor
+          def digest(p):
+              h = hashlib.sha256()
+              with open(p, "rb") as f:
+                  for chunk in iter(lambda: f.read(1 << 20), b""):
+                      h.update(chunk)
+              return h.hexdigest()
+          def scan(root):
+              out, files = {}, []
+              for d, dirs, names in os.walk(root):
+                  for n in dirs + names:
+                      p = os.path.join(d, n)
+                      st = os.lstat(p)
+                      e = [oct(st.st_mode), st.st_uid, st.st_gid]
+                      if stat.S_ISLNK(st.st_mode):
+                          e.append(os.readlink(p))
+                      elif stat.S_ISREG(st.st_mode):
+                          e.append(st.st_size)
+                          files.append(p)
+                      try:
+                          e.append(sorted((k, os.getxattr(p, k, follow_symlinks=False))
+                                          for k in os.listxattr(p, follow_symlinks=False)))
+                      except OSError as x:
+                          e.append(str(x))
+                      out[os.path.relpath(p, root)] = e
+              with ThreadPoolExecutor(8) as pool:
+                  for p, h in zip(files, pool.map(digest, files)):
+                      out[os.path.relpath(p, root)].append(h)
+              return out
+          a, b = scan(sys.argv[1]), scan(sys.argv[2])
+          only_a, only_b = sorted(set(a) - set(b)), sorted(set(b) - set(a))
+          diff = sorted(p for p in set(a) & set(b) if a[p] != b[p])
+          print(f"paths: {len(a)} built, {len(b)} re-chunked; only built {len(only_a)},"
+                f" only re-chunked {len(only_b)}, different {len(diff)}")
+          for title, paths in (("only in built", only_a), ("only in re-chunked", only_b)):
+              print(f"--- {title}, by top folder:", dict(collections.Counter(p.split("/")[0] for p in paths)))
+              for p in paths[:40]:
+                  print("   ", p)
+          print("--- different, by top folder:", dict(collections.Counter(p.split("/")[0] for p in diff)))
+          for p in diff[:80]:
+              print("   ", p, a[p][:-1] if len(a[p]) > 4 else a[p], "|", b[p][:-1] if len(b[p]) > 4 else b[p])
+          EOF
+          printf '::group::Layers of the re-chunked image\n'
+          sudo skopeo inspect --raw "oci:$RUNNER_TEMP/rechunked:latest" | python3 "$RUNNER_TEMP/layers.py" /dev/stdin
+          printf '::endgroup::\n'
+          SECONDS=0
+          built=$(sudo podman image mount "$LOCAL_IMAGE")
+          rechunked=$(sudo podman image mount "$LOCAL_IMAGE-rechunked")
+          sudo python3 "$RUNNER_TEMP/compare.py" "$built" "$rechunked"
+          sudo podman image unmount "$LOCAL_IMAGE" "$LOCAL_IMAGE-rechunked"
+          printf 'Comparing the files took %d s.\n' "$SECONDS"
+          SECONDS=0
+          # shellcheck disable=SC2024
+          sudo podman build --no-cache --file image/Containerfile --target lumen \
+            --build-arg LUMEN_BUILD_VERSION="$VERSION.1" --build-arg LUMEN_COMMIT="$GITHUB_SHA" \
+            --tag localhost/lumen:ci2 . >"$RUNNER_TEMP/build2.log" 2>&1 ||
+            { tail -50 "$RUNNER_TEMP/build2.log"; exit 1; }
+          printf 'The second build took %d s.\n' "$SECONDS"
+          SECONDS=0
+          sudo image/rechunk.sh localhost/lumen:ci2 "$RUNNER_TEMP/rechunked2" "oci:$RUNNER_TEMP/rechunked:latest"
+          printf 'Re-chunking the second build took %d s.\n' "$SECONDS"
+          new=$RUNNER_TEMP/new2 old=$RUNNER_TEMP/new
+          mkdir -p "$new"
+          # shellcheck disable=SC2024
+          sudo skopeo inspect --raw "oci:$RUNNER_TEMP/rechunked2:latest" >"$new/manifest.json"
+          # shellcheck disable=SC2024
+          sudo skopeo inspect --config "oci:$RUNNER_TEMP/rechunked2:latest" >"$new/config.json"
+          python3 image/rechunk.py download 1 "$new/manifest.json" "$new/config.json" \
+            "$old/manifest.json" "$old/config.json" | tee -a "$GITHUB_STEP_SUMMARY" || true
+          df -h /
+
       # The tags that never move come first, so dev only moves to an image
-      # that already has them.
+      # that already has them. skopeo pushes the layout as it is, so the
+      # digest is the one measured above.
       - name: Push to ghcr.io
         if: inputs.publish
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           digestfile=$RUNNER_TEMP/digest
-          sudo podman push --digestfile "$digestfile" "$LOCAL_IMAGE" "docker://$REGISTRY_IMAGE:dev-$VERSION"
+          sudo skopeo copy --preserve-digests --retry-times 3 --digestfile "$digestfile" \
+            "oci:$RUNNER_TEMP/rechunked:latest" "docker://$REGISTRY_IMAGE:dev-$VERSION"
           digest=$(<"$digestfile")
           for tag in "sha-$GITHUB_SHA" dev; do
             sudo skopeo copy --preserve-digests "docker://$REGISTRY_IMAGE@$digest" "docker://$REGISTRY_IMAGE:$tag"
