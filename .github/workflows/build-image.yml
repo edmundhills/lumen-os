@@ -204,23 +204,44 @@ jobs:
           [[ ! -f $dir/manifest.json ]] || args+=("$dir/manifest.json" "$dir/config.json")
           python3 image/rechunk.py download "${args[@]}" | tee -a "$GITHUB_STEP_SUMMARY"
 
-      # TEMPORARY, for step 1.5c only: compare the files of the built and the
-      # re-chunked image, then rebuild the same commit from scratch, re-chunk
-      # it with the first as the previous build, and measure the update.
+      # TEMPORARY, for step 1.5c only: say what the files no package owns
+      # weigh, rebuild the same commit from scratch, list the files that differ
+      # between the two builds and who owns them, then re-chunk the second
+      # with the first as the previous build and measure the update.
       - name: Experiment (step 1.5c)
         if: github.ref == 'refs/heads/claude/next-step-zfy63s'
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          cat >"$RUNNER_TEMP/layers.py" <<'EOF'
-          import json, sys
-          m = json.load(open(sys.argv[1]))
-          for i, l in enumerate(m["layers"]):
-              names = (l.get("annotations") or {}).get("ostree.components", "-")
-              print(f"{i:4} {l['size'] / 2**20:9.1f} MiB  {names[:150]}")
+          x=$RUNNER_TEMP/x
+          mkdir -p "$x"
+          cat >"$x/unowned.py" <<'EOF'
+          # Inside the image: the files under /usr and /etc that no package owns.
+          import collections, os, subprocess
+          rpm = subprocess.run(["rpm", "-qal"], capture_output=True, text=True, check=True)
+          owned = set(rpm.stdout.splitlines())
+          total, by_dir, big = 0, collections.Counter(), []
+          for top in ("/usr", "/etc"):
+              for d, dirs, names in os.walk(top):
+                  for n in names:
+                      p = os.path.join(d, n)
+                      if p in owned or os.path.islink(p):
+                          continue
+                      size = os.lstat(p).st_size
+                      total += size
+                      by_dir["/".join(p.split("/")[:5])] += size
+                      if size > 1 << 20:
+                          big.append((size, p))
+          print(f"Files no package owns under /usr and /etc: {total / 2**20:.1f} MiB")
+          for d, size in by_dir.most_common(40):
+              print(f"  {size / 2**20:9.1f} MiB  {d}")
+          print("The biggest:")
+          for size, p in sorted(big, reverse=True)[:40]:
+              print(f"  {size / 2**20:9.1f} MiB  {p}")
           EOF
-          cat >"$RUNNER_TEMP/compare.py" <<'EOF'
-          import collections, hashlib, os, stat, sys
+          cat >"$x/compare.py" <<'EOF'
+          # On the runner: the files under usr and etc that differ between two images.
+          import hashlib, os, stat, sys
           from concurrent.futures import ThreadPoolExecutor
           def digest(p):
               h = hashlib.sha256()
@@ -230,48 +251,37 @@ jobs:
               return h.hexdigest()
           def scan(root):
               out, files = {}, []
-              for d, dirs, names in os.walk(root):
-                  for n in dirs + names:
-                      p = os.path.join(d, n)
-                      st = os.lstat(p)
-                      e = [oct(st.st_mode), st.st_uid, st.st_gid]
-                      if stat.S_ISLNK(st.st_mode):
-                          e.append(os.readlink(p))
-                      elif stat.S_ISREG(st.st_mode):
-                          e.append(st.st_size)
-                          files.append(p)
-                      try:
-                          e.append(sorted((k, os.getxattr(p, k, follow_symlinks=False))
-                                          for k in os.listxattr(p, follow_symlinks=False)))
-                      except OSError as x:
-                          e.append(str(x))
-                      out[os.path.relpath(p, root)] = e
+              for top in ("usr", "etc"):
+                  for d, dirs, names in os.walk(os.path.join(root, top)):
+                      for n in dirs + names:
+                          p = os.path.join(d, n)
+                          st = os.lstat(p)
+                          e = [oct(st.st_mode), st.st_uid, st.st_gid, st.st_size]
+                          if stat.S_ISLNK(st.st_mode):
+                              e.append(os.readlink(p))
+                          elif stat.S_ISREG(st.st_mode):
+                              files.append(p)
+                          e.append(sorted(os.listxattr(p, follow_symlinks=False)))
+                          out["/" + os.path.relpath(p, root)] = e
               with ThreadPoolExecutor(8) as pool:
                   for p, h in zip(files, pool.map(digest, files)):
-                      out[os.path.relpath(p, root)].append(h)
+                      out["/" + os.path.relpath(p, root)].append(h)
               return out
           a, b = scan(sys.argv[1]), scan(sys.argv[2])
-          only_a, only_b = sorted(set(a) - set(b)), sorted(set(b) - set(a))
-          diff = sorted(p for p in set(a) & set(b) if a[p] != b[p])
-          print(f"paths: {len(a)} built, {len(b)} re-chunked; only built {len(only_a)},"
-                f" only re-chunked {len(only_b)}, different {len(diff)}")
-          for title, paths in (("only in built", only_a), ("only in re-chunked", only_b)):
-              print(f"--- {title}, by top folder:", dict(collections.Counter(p.split("/")[0] for p in paths)))
-              for p in paths[:40]:
-                  print("   ", p)
-          print("--- different, by top folder:", dict(collections.Counter(p.split("/")[0] for p in diff)))
-          for p in diff[:80]:
-              print("   ", p, a[p][:-1] if len(a[p]) > 4 else a[p], "|", b[p][:-1] if len(b[p]) > 4 else b[p])
+          changed = sorted(set(a) ^ set(b) | {p for p in set(a) & set(b) if a[p] != b[p]})
+          print(f"{len(changed)} of {len(a)} paths differ between the two builds", file=sys.stderr)
+          for p in changed:
+              print(p)
           EOF
           printf '::group::Layers of the re-chunked image\n'
-          sudo skopeo inspect --raw "oci:$RUNNER_TEMP/rechunked:latest" | python3 "$RUNNER_TEMP/layers.py" /dev/stdin
+          sudo skopeo inspect --raw "oci:$RUNNER_TEMP/rechunked:latest" | python3 -c '
+          import json, sys
+          for i, l in enumerate(json.load(sys.stdin)["layers"]):
+              names = (l.get("annotations") or {}).get("ostree.components", "-")
+              print("%4d %9.1f MiB  %s" % (i, l["size"] / 2**20, names[:150]))'
           printf '::endgroup::\n'
-          SECONDS=0
-          built=$(sudo podman image mount "$LOCAL_IMAGE")
-          rechunked=$(sudo podman image mount "$LOCAL_IMAGE-rechunked")
-          sudo python3 "$RUNNER_TEMP/compare.py" "$built" "$rechunked"
-          sudo podman image unmount "$LOCAL_IMAGE" "$LOCAL_IMAGE-rechunked"
-          printf 'Comparing the files took %d s.\n' "$SECONDS"
+          sudo podman run --rm --network=none --volume="$x:/run/x:ro" --entrypoint=bash "$LOCAL_IMAGE" \
+            -c 'ls -l /usr/lib/modules/*/initramfs.img; python3 /run/x/unowned.py'
           SECONDS=0
           # shellcheck disable=SC2024
           sudo podman build --no-cache --file image/Containerfile --target lumen \
@@ -279,6 +289,20 @@ jobs:
             --tag localhost/lumen:ci2 . >"$RUNNER_TEMP/build2.log" 2>&1 ||
             { tail -50 "$RUNNER_TEMP/build2.log"; exit 1; }
           printf 'The second build took %d s.\n' "$SECONDS"
+          SECONDS=0
+          one=$(sudo podman image mount "$LOCAL_IMAGE")
+          two=$(sudo podman image mount localhost/lumen:ci2)
+          # shellcheck disable=SC2024
+          sudo python3 "$x/compare.py" "$one" "$two" >"$x/changed"
+          sudo podman image unmount "$LOCAL_IMAGE" localhost/lumen:ci2
+          printf 'Comparing the two builds took %d s.\n' "$SECONDS"
+          printf '::group::Files that differ between the two builds, with their size and owner\n'
+          sudo podman run --rm --network=none --volume="$x:/run/x:ro" --entrypoint=bash "$LOCAL_IMAGE" -c '
+            while read -r p; do
+              printf "%10s  %s  %s\n" "$(stat -c %s "$p" 2>/dev/null || echo -)" "$p" \
+                "$(rpm -qf --queryformat "%{NAME}" "$p" 2>/dev/null || echo "(no package)")"
+            done </run/x/changed'
+          printf '::endgroup::\n'
           SECONDS=0
           sudo image/rechunk.sh localhost/lumen:ci2 "$RUNNER_TEMP/rechunked2" "oci:$RUNNER_TEMP/rechunked:latest"
           printf 'Re-chunking the second build took %d s.\n' "$SECONDS"
