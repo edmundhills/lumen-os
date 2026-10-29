@@ -26,7 +26,7 @@ Claude reads CLAUDE.md automatically, does that step (plus any ➕ steps right a
 
 First, left over from 1.6 and 1.5b:
 
-- **Owner:** keep `cosign.key` and `password` from `~/lumen-signing-key/` in WSL safe offline, such as on a USB drive and in a password manager, then delete those two files from WSL (ADR 0008, step 4 of ["How the key is made and kept"](docs/decisions/0008-image-signing.md#how-the-key-is-made-and-kept)). Still open on 2026-10-29: without a backup, a lost key leaves every installed system unable to check its updates.
+- **Owner:** keep `cosign.key` and `password` from `~/lumen-signing-key/` in WSL safe offline, such as on a USB drive and in a password manager, then delete those two files from WSL (ADR 0008, step 4 of ["How the key is made and kept"](docs/decisions/0008-image-signing.md#how-the-key-is-made-and-kept)). The owner backed them up on 2026-10-29; deleting the WSL copies is what is left.
 - **Owner:** sign off the commits on the branch `ccr-aa9986c4-vir9s7` and merge them into main, as for 1.5c (the command is in the 1.5c note). Nothing waits on it: main's `DOWNLOAD_BUDGET_EXEMPT` names a build that is no longer `dev`, so main is already held to the budget.
 - How the next bump pull request got its checks, on Monday 2026-11-02 or by hand before then. Did GitHub run its `pull_request` checks straight away, hold them for approval, or make none, so that the job started them itself? Record the answer in versions.md, "How the pins move". Its image run is also the first to report the download for a new base.
 
