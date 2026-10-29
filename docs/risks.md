@@ -135,15 +135,15 @@ Likelihood **Medium**. Impact **High** (no way to install).
 
 **What can go wrong**
 
-- ADR 0002 relies on a newer path: Titanoboa turns the Lumen image into a live ISO, which then starts Anaconda WebUI. Universal Blue uses it, but one of its own ISO builds (Bluefin LTS) broke because Anaconda didn't work on that base image. Handing the image to Anaconda from the ISO, offline, is unproven for us.
+- ADR 0002 relies on a newer path: image-builder's `generic-iso` turns the `live` stage into a live ISO, which then starts Anaconda WebUI ([ADR 0012](decisions/0012-install-iso.md)). Universal Blue does the same with Titanoboa, but one of its own ISO builds (Bluefin LTS) broke because Anaconda didn't work on that base image. Handing the image to Anaconda from the ISO, offline, is unproven for us.
 - Anaconda WebUI's partitioning must offer "alongside Windows" using free space only ([risk 3](#3-bitlocker-on-windows-drives)), plus erase-disk with LUKS2. Its modes may not match the spec's three install modes.
 - The ISO holds a live system and a copy of the image, so it will exceed GitHub's 2 GiB limit per release file ([Q15](architecture.md#8-spec-problems-and-open-questions)). CI has to build it within the runner's disk and time limits ([risk 13](#13-ci-capacity-disk-time-kvm-and-no-gpu)).
 - The ISO's shim has to boot on old and new firmware ([risk 2](#2-secure-boots-move-to-the-microsoft-uefi-ca-2023)).
 
 **Mitigation**
 
-- Steps 1.8b and 1.8c build it early, before Phase 2 builds on it, and record the tool in an ADR. Whichever tool packs the ISO is pinned (Titanoboa has no releases, so by commit; image-builder by release and digest) and moved by Renovate.
-- Since 2026, the live system is the container's own work under the "container-native ISO contract", which both Titanoboa and image-builder's `generic-iso` pack, so the `live` stage doesn't depend on the tool and either can stand in for the other ([ADR 0011](decisions/0011-disk-images.md)).
+- Steps 1.8b and 1.8c build it early, before Phase 2 builds on it, and record the tool in an ADR. image-builder packs it, pinned by release and digest and moved by Renovate. Lumen adds osbuild's SELinux stage to image-builder's build, so a new release can break that edit: `image/iso.py` then stops the build and says what changed ([ADR 0012](decisions/0012-install-iso.md)).
+- Since 2026, the live system is the container's own work under the "container-native ISO contract", which both Titanoboa and image-builder's `generic-iso` pack, so the `live` stage doesn't depend on the tool and either can stand in for the other ([ADR 0011](decisions/0011-disk-images.md)). Titanoboa would need a labelled copy of the tree and the firmware fix in ADR 0012.
 - The fallback: `anaconda-iso` with a partial kickstart, which now exists only in bootc-image-builder's deprecated command line, or `generic-iso` with a plain Anaconda environment and no live desktop. Dropping the live hardware report needs the owner's approval either way (ADR 0002).
 - From step 1.8c on, CI installs from the ISO in a VM, and from Phase 6 in each install mode.
 - The download host is chosen at step 10.5 (Q15). Until then CI keeps test ISOs as short-lived workflow artifacts.
@@ -405,4 +405,4 @@ Checked on 2026-10-27.
 - Codecs: [Fedora's OpenH264 page](https://fedoraproject.org/wiki/OpenH264); [RPM Fusion's `mesa-va-drivers-freeworld` for Fedora 44](https://centos.ruhr-uni-bochum.de/rpmfusion/free/fedora/updates/44/x86_64/repoview/mesa-va-drivers-freeworld.html) (mirror).
 - Compatibility data: [ProtonDB's ODbL exports](https://protondb.com/news/report-exports-odbl); [AreWeAntiCheatYet](https://github.com/AreWeAntiCheatYet/AreWeAntiCheatYet); [PCGamingWiki's licence](https://en.wikipedia.org/wiki/PCGamingWiki).
 - CI: [GitHub-hosted runner hardware](https://docs.github.com/en/actions/reference/runners/github-hosted-runners); [KVM on GitHub's Linux runners](https://github.blog/changelog/2023-02-23-hardware-accelerated-android-virtualization-on-actions-windows-and-linux-larger-hosted-runners).
-- Live ISO: [Titanoboa](https://github.com/ublue-os/titanoboa).
+- Live ISO: [Titanoboa](https://github.com/ublue-os/titanoboa); [image-builder's ISOs from bootable containers](https://github.com/osbuild/images/blob/main/doc/20-advanced/20-bootc/10-isos.md).

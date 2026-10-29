@@ -1,0 +1,51 @@
+<!--
+SPDX-FileCopyrightText: 2026 Lumen OS contributors
+
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
+
+# 0012. Pack the install ISO with image-builder's generic-iso, and label its files for SELinux
+
+- Status: **Accepted** (2026-10-29), at step 1.8b-2. The owner chose that the live session runs with SELinux enforcing; the lead engineer chose the tool.
+- Deciders: owner (SELinux in the live session), lead engineer (Claude). The owner reviews the rest at the Phase 1 acceptance (step 1.17).
+
+## Context
+
+The install ISO is a live ISO made from the Lumen image (ADR 0002). Step 1.8b-1 built the `live` stage of `image/Containerfile` to the "container-native ISO contract v0.1.0", which two tools pack into an ISO: Universal Blue's Titanoboa, which the spec says to try first, and osbuild's image-builder, with its `generic-iso` type ([ADR 0011](0011-disk-images.md)). What each does, checked on 2026-10-29 in their source and by running image-builder:
+
+- **Neither labels the files for SELinux.** A system reads each file's SELinux label from an extended attribute. Labels never travel in a container image's layers, so the files of an unpacked image have none, and the policy refuses an enforcing system almost everything on unlabelled files. Titanoboa packs the image straight from container storage. image-builder unpacks it into a tree of its own and labels only its build environment: in the manifest it made of the live system, the `os-tree` pipeline that becomes the squashfs is the unpacking stage alone. Its source on 2026-10-29 (`osbuild/images`, `pkg/manifest/os_from_container.go`) has no SELinux stage there either. So every upstream example boots its live session with `enforcing=0`, which image-builder also writes into its default menu.
+- **The owner's choice (2026-10-29):** Lumen labels the live system's files itself before packing, so the live session runs enforcing, as Fedora's own live ISOs do. Booting the live session permissive was the other option. Either way the installed system is enforcing.
+- **Labelling works without SELinux on the build machine**, which matters because GitHub's Ubuntu runners use AppArmor and WSL has no SELinux. Checked in WSL with the live system's own `setfiles` (policycoreutils 3.11) and policy (version 35): `setfiles -F -m -r` wrote the labels the policy gives, such as `shell_exec_t` on `/usr/bin/bash` and `shadow_t` on `/etc/shadow`, and kept file capabilities (`cap_setuid` on `newuidmap`). `mksquashfs` kept both. Asked to change nothing, `setfiles -n -v` listed no file on the labelled squashfs, and 4,305 of the same files on an unlabelled one. osbuild's own SELinux stage says it is meant to run where SELinux is off.
+- **Titanoboa** (`ublue-os/titanoboa`, newest commit `5c457c3` of 2026-05-19, no releases) is two short scripts. `main.sh` mounts the image into an unpinned `quay.io/fedora/fedora:latest` container, where `build_iso.sh` installs its tools from Fedora's mirrors, runs `mksquashfs` on the mounted image and builds the ISO with `xorriso`. For Lumen:
+  - It packs the image as mounted, so its files have no labels, and it takes no other input. Lumen would run `build_iso.sh` alone, with a labelled copy of the tree mounted in its place.
+  - It copies the image's `/boot/efi/EFI` folder as it is. Fedora's shim puts only itself (`BOOTX64.EFI`) and its fallback loader (`fbx64.efi`) in `EFI/BOOT`, with no GRUB. shim started from a USB runs the fallback loader when it finds one, which writes a boot entry for the USB into the PC's firmware and boots that, so every PC the USB starts would keep an entry. GRUB for a CD (`gcdx64.efi`), which the contract asks for, isn't used.
+  - It makes ISOs that boot on UEFI only. Its check for GRUB's BIOS files tests a folder as if it were a file, so it never copies them.
+  - It writes no checksum into the ISO, so a "check this USB" entry can't work.
+- **image-builder 88.0.0's `generic-iso`**, from the container Lumen already pins for the qcow2:
+  - The manifest it makes of the live system has five pipelines: `build` (the live system as the build environment, labelled), `os-tree` (the live system unpacked), `efiboot-tree`, `bootiso-tree` (squashfs, kernel, BIOS boot) and `bootiso` (`xorrisofs`, then `implantisomd5`).
+  - It makes the squashfs from `os-tree` with `mksquashfs`, which stores extended attributes, and so labels, by default.
+  - It lays out `EFI/BOOT` as Fedora's ISOs do: shim as `BOOTX64.EFI`, `gcdx64.efi` as the `grubx64.efi` shim starts, and the MOK manager, with no fallback loader. It also builds GRUB's BIOS boot image and writes the checksum.
+  - Lumen's own menu entries from `iso.yaml` replace its default ones, so its `enforcing=0` isn't used.
+  - With `--bootc-installer-payload-ref` it copies an image into the live system's container storage, which step 1.8c needs to install with no network.
+
+## Decision
+
+1. **image-builder's `generic-iso` packs the install ISO**, from the container that makes the qcow2, pinned by release and digest: `.github/workflows/iso.yml` pins the same one as `build-image.yml`, and `image/test_iso.py` checks that they agree. Titanoboa isn't used: the spec's "try Titanoboa first" is answered by the points above, of which the firmware boot entries and the lack of labels matter most.
+2. **Lumen labels the files with osbuild's own SELinux stage.** `image/make-iso.sh` asks image-builder for its manifest (`image-builder manifest --bootc-ref <live system> generic-iso`), `image/iso.py label` adds an `org.osbuild.selinux` stage at the end of the `os-tree` pipeline, which labels every file with the live system's own `file_contexts`, and the script runs osbuild from the same container. `iso.py` stops with a message if the manifest is no longer laid out this way, or if image-builder labels the tree itself, which would make the step unnecessary.
+3. **`image/check-iso.sh` checks every ISO**, inside the live system it was made from, so that it reads the labels with that system's `setfiles` and policy:
+   - The label and boot menus are those of `iso.yaml`, and no entry turns SELinux off.
+   - The files UEFI and BIOS firmware start are there, with no fallback loader, and the EFI system partition holds the same boot files as the ISO.
+   - `checkisomd5` accepts the checksum.
+   - The kernel and initramfs are the live system's own.
+   - The squashfs holds the build named, with `SELINUX=enforcing`.
+   - Every file in the squashfs has the label the policy gives it.
+4. **The `iso` workflow makes the ISO** on demand, and on pushes to main that change the live system or how the ISO is made. It builds only the `live` stage, on a published build whose signature it checks first with the trust policy Lumen ships, and keeps the ISO for 7 days as a workflow artifact (Q15).
+5. **`iso.yaml` gets a "Check this USB, then try or install Lumen OS" entry** (`rd.live.check`), now that the ISO carries a checksum. The initramfs has `checkisomd5`, because the live stage installs `isomd5sum` before it runs dracut.
+
+## Consequences
+
+- The live session runs with SELinux enforcing. Whether it reaches the desktop without denials is the boot test's to find out (step 1.8b-3). A denial is fixed by labelling or policy, never by booting permissive, unless the owner decides otherwise.
+- `make-iso.sh` runs osbuild itself rather than `image-builder build`, so a new image-builder release can break the edit. `iso.py` then stops and says what changed, and the pin moves only in a pull request that passes the `iso` workflow. Once image-builder labels the tree itself, `iso.py` says so, and the edit goes. Asking osbuild to label `generic-iso` trees upstream would help every bootc ISO; that is the owner's call, since it means posting to their project.
+- The ISO is larger than GitHub's 2 GiB limit for release files, so releases need another host (Q15, step 9.5).
+- Step 1.8c adds `--bootc-installer-payload-ref` to the manifest `make-iso.sh` asks for. image-builder copies the payload into `os-tree` before the SELinux stage, so its files are labelled too.
+- The spec, the architecture and the risk register now name image-builder as the ISO's packer, and Titanoboa is no longer one of the tool images Renovate will move.

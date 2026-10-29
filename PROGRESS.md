@@ -22,7 +22,7 @@ Claude reads CLAUDE.md automatically, does that step (plus any ➕ steps right a
 
 ## Current step
 
-**1.8b-2** ⚠️ 👤 Pack the live stage into an ISO, on demand in CI. **First the owner answers the SELinux question** in the 1.8b-1 notes below: (a) Lumen labels the live system's files before packing, so the live session runs enforcing, or (b) the live session runs permissive. Then read ADR 0011 and the 1.8a and 1.8b-1 notes. Build in CI, not in WSL (1.8b-1 notes).
+**1.8b-2**, its first run in CI. The code is done ([ADR 0012](docs/decisions/0012-install-iso.md), 1.8b-2 notes below). Once the owner has signed off and pushed it, the push starts the `iso` workflow, because it changes `image/live/` and the workflow itself. Check that run: "Check the ISO" must pass 6 of 6. Record its step times, the ISO's size and `df` in ADR 0012's Follow-up, then tick 1.8b-2 and go on to 1.8b-3. If it fails, the notes say what was checked where. Build in CI, not in WSL.
 
 Left over from 1.6, 1.5c and 1.5b:
 
@@ -177,6 +177,32 @@ Left over from 1.6, 1.5c and 1.5b:
   - Left for 1.8c: the kickstart, `/var/lib/rpm-state` (Bazzite makes it for WebUI) and a larger tmpfs on `/var/tmp` for the install.
   - **WSL is too slow for this now.** Rootless Podman here uses fuse-overlayfs, and committing the `base` stage's layer ran over 55 minutes before it was stopped (1.2's whole build took 9). Rootful Podman (`sudo podman`) worked, but each step's layer commit took about 5 minutes, so the stage took about 50 minutes on the pulled `dev`, and WSL wedged three times (`wsl --shutdown --force`, once twice). Build images in CI from now on. The rootful store holds `ghcr.io/edmundhills/lumen@sha256:2debdb4e…` (`44.20261029.4`) and the live stage's layers, about 8 GB: delete them when 1.8b-2 no longer needs them. Rootless `localhost/lumen:dev` is still a build on the previous pin.
   - `just lint` 12 of 12 (the manifest check now covers `image/live/packages.toml`), `just test` passes (160 unit tests).
+  - **The owner chose (a)** on 2026-10-29: Lumen labels the files, and the live session runs enforcing.
+- 1.8b-2, 2026-10-29, code done, first CI run still to come. [ADR 0012](docs/decisions/0012-install-iso.md) has the facts and sources.
+  - **The tool is image-builder's `generic-iso`**, not Titanoboa. Titanoboa (`5c457c3`, still its newest commit) packs the image as mounted, so with no labels. It copies Fedora's `EFI/BOOT` as it is, so shim would run its fallback loader from the USB and write a boot entry into every PC's firmware. It also boots UEFI only and writes no checksum. image-builder lays out shim and the CD GRUB as Fedora's ISOs do, boots BIOS too, writes the checksum, and can carry the payload for 1.8c.
+  - **Labelling:** `image/make-iso.sh` gets image-builder's manifest (`image-builder manifest --bootc-ref <live> generic-iso`), and `image/iso.py label` adds `org.osbuild.selinux` at the end of its `os-tree` pipeline, which becomes the squashfs. Then the script runs osbuild from image-builder's container. `iso.py` stops if the manifest's layout changes, or once image-builder labels the tree itself. Asking osbuild upstream to label `generic-iso` trees would help everyone, but means posting to their project: the owner's call.
+  - **`image/check-iso.sh`** runs inside the live system, with its `setfiles` and policy. Its 6 checks are:
+    - the boot menus are `iso.yaml`'s, with no `enforcing=0` or `selinux=0`;
+    - the boot files are there, with no `fbx64.efi`;
+    - the EFI system partition matches the ISO's `EFI/BOOT`;
+    - `checkisomd5` accepts the checksum;
+    - the kernel and initramfs are the live system's;
+    - the squashfs holds the build named, with `SELINUX=enforcing`, and `setfiles -n` finds no file to relabel.
+  - **`.github/workflows/iso.yml`** runs on demand (Actions > iso > Run workflow, any tag of `lumen`, default `dev`) and on pushes to main that change the live system or the ISO scripts. It works out the digest and version, and pulls the build with `podman pull --signature-policy` and the overlay's policy and registries.d. Then it builds only the `live` stage on that build, makes and checks the ISO, and keeps it 7 days (`archive: false`, so the download is the `.iso` itself). `test_iso.py` checks that it pins the same image-builder as `build-image.yml`.
+  - `iso.yaml` has a third entry, "Check this USB, then try or install Lumen OS" (`rd.live.check`): the live initramfs has `checkisomd5`. `just build-iso` now says to use the workflow.
+  - **Checked in WSL:**
+    - `setfiles -F -m -r` labels a tree with SELinux off and keeps file capabilities, and `mksquashfs` keeps both (sample of the live system).
+    - image-builder 88's manifest of the live system has `build`, `os-tree`, `efiboot-tree`, `bootiso-tree` and `bootiso`, with Lumen's menu entries and no `enforcing=0` in them. osbuild accepted the edited manifest and started building it.
+    - Ubuntu 24.04's Podman 4.9.3 parses `FROM ${LUMEN_LIVE_FROM}` and, given the build argument, builds only the `live` stage. This answers the 1.8b-1 question.
+    - `check-iso.sh` passed 6 of 6 on a 585 MB stand-in ISO made like image-builder's from the live image. With faults planted, five checks failed as they should: `enforcing=0`, a fallback loader, no checksum, the wrong version, and an unlabelled squashfs (4,300 files).
+  - **Not checked yet, so watch the first run:**
+    - The full ISO: WSL stopped responding 13 minutes into osbuild, the fourth time, and was restarted with `wsl --shutdown --force`.
+    - How long osbuild takes on the runner, and how big the ISO is. 1.8a's qcow2 took 11 minutes; this has two copies of an 8 GB tree and a zstd squashfs, and the ISO should be over 2 GiB.
+    - Whether Podman 4.9.3 accepts the signature (the sign job checks it with skopeo 1.13.3).
+    - Whether `actions/upload-artifact` with `archive: false` takes a file that size.
+    - WSL's kernel can't mount zstd squashfs, but the live initramfs's kernel can.
+  - Left in WSL's rootful store, about 25 GB: `2debdb4e…` (`44.20261029.4`), the live stage's layers, Ubuntu 24.04 and image-builder 88. Delete them once 1.8b is done.
+  - `just lint` 12 of 12, `just test` passes (172 unit tests).
 
 ---
 
@@ -212,6 +238,7 @@ Left over from 1.6, 1.5c and 1.5b:
 - [x] **1.8a** CI: bootc-image-builder, now part of osbuild's image-builder (ADR 0011), makes a qcow2 of every build for the boot test. Check the disk it makes: the partitions, a Btrfs root, Lumen's os-release, and that the install records `ghcr.io/edmundhills/lumen:dev` with the signed transport (ADR 0008).
 - [x] **1.8b-1** The `live` stage: a Lumen live session that follows the container-native ISO contract (dracut-live with `dmsquash-live`, livesys-scripts, Anaconda WebUI with `installer/anaconda/lumen.conf`, Welcome kept from running, shim and GRUB where the contract wants them, `iso.yaml`), with checks, built in WSL.
 - [ ] **1.8b-2** ⚠️ 👤 Pack the live stage into an ISO, on demand in CI, with the SELinux labels the owner chose (1.8b-1 notes). Try Titanoboa first, then image-builder's `generic-iso`, and record the tool in an ADR. CI keeps the ISO as a short-lived workflow artifact (Q15).
+- [ ] **1.8b-3** Boot the ISO in QEMU in CI, with UEFI and Secure Boot (OVMF): the live session starts with SELinux enforcing and no denials, and the live user reaches Plasma; "Check this USB" passes. This is CI's first VM, so it also finds out whether the runners have KVM (1.9).
 - [ ] **1.8c** The installer installs the ISO's own copy of the image, with no network, through Anaconda's `bootc` kickstart command (`--source-imgref containers-storage:…`, `--target-imgref ghcr.io/edmundhills/lumen:dev`), so the installed system records the signed transport (ADR 0008). Check it with an unattended install in a VM in CI. If no live ISO works, fall back as ADR 0002 says and tell the owner.
 - [ ] **1.9** `tests/boot`: QEMU/KVM boot test in CI; the login screen within 60 s (`display-manager.service`, Plasma Login Manager, active and its greeter running; ADR 0005); `systemctl --failed` empty. Also boot once with Secure Boot (OVMF) and record whether kernel lockdown is on and hibernation is offered (`/sys/kernel/security/lockdown`, `/sys/power/state`) in ADR 0001's follow-up.
 - [ ] **1.10** Variant `lumen-gaming`: Steam, Gamescope session, MangoHud, controller udev rules, as a layer that 1.12 also puts on `lumen-nvidia`.

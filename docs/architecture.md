@@ -324,7 +324,7 @@ There is no Lumen app daemon. Flatpak's system helper already is the service, so
 
 ### 4.8 Installer
 
-The install media is a live ISO built from the Lumen image (ADR 0002; try Universal Blue's Titanoboa first, at step 1.8b). It boots into a Lumen live session, which runs the hardware report through lumen-hwd and then starts Anaconda WebUI with Lumen's kickstart and theme from `installer/`. How the live ISO hands the image to Anaconda is worked out at step 1.8c.
+The install media is a live ISO built from the Lumen image (ADR 0002), packed by image-builder's `generic-iso` with its files labelled for SELinux, so the live session runs enforcing ([ADR 0012](decisions/0012-install-iso.md)). It boots into a Lumen live session, which runs the hardware report through lumen-hwd and then starts Anaconda WebUI with Lumen's kickstart and theme from `installer/`. How the live ISO hands the image to Anaconda is worked out at step 1.8c.
 
 - After install, the system must track `ghcr.io/<org>/lumen:<channel>` and enforce the signature policy from its first update. The image's `bootc install` settings ask for that (`enforce-container-sigpolicy`), which covers `bootc install`, image-builder (which bootc-image-builder became) and Anaconda's `bootc` kickstart command. Anaconda's `ostreecontainer` command ignores it, so if step 1.8c uses that command, the kickstart's `%post` switches to the signed transport ([ADR 0008](decisions/0008-image-signing.md)).
 - "Install alongside Windows" uses free space made from inside Windows and never resizes a BitLocker volume (spec).
@@ -576,7 +576,7 @@ The base image is pinned by digest, but Fedora's mirrors carry only the release-
 ### 9.6 Disk images and install media
 
 - **qcow2**, for the boot and update tests: image-builder, which bootc-image-builder became, makes it from every build of the `lumen` image, and from each variant for the boot test, and `image/check-disk.sh` checks it ([ADR 0011](decisions/0011-disk-images.md)). The image is named `ghcr.io/<org>/lumen:dev` for it, so the system on the disk follows `dev`. It gets a Btrfs root from the image's `bootc install` settings (step 1.4), in a subvolume named `root`. Compression is a mount option, which `bootc install` has no setting for: image-builder installs with `compress=zstd:1` of its own accord, and an installed system gets it from Lumen's Anaconda profile (`installer/anaconda/lumen.conf`). `/var/home` is made on the first boot, as a plain folder, so a qcow2 has no snapshots of `/home`.
-- **Live ISO**, for installing (ADR 0002). A `live` stage, derived from `lumen`, adds Anaconda WebUI and `lumen-installer` (kickstart and theme), starts the hardware report when the live session starts, and keeps Welcome from running. Titanoboa (tried first, at step 1.8b) or image-builder's `generic-iso` packs it into an ISO; both follow the same contract for what the stage must hold ([ADR 0011](decisions/0011-disk-images.md)). So the stage has an initramfs that boots from the ISO (dracut's `dmsquash-live`), livesys to set up the live user and log it into Plasma, shim and GRUB under `/boot/efi`, and the ISO's label and boot menu in `iso.yaml`; `image/live/` holds its packages, that menu and its checks.
+- **Live ISO**, for installing (ADR 0002). A `live` stage, derived from `lumen`, adds Anaconda WebUI and `lumen-installer` (kickstart and theme), starts the hardware report when the live session starts, and keeps Welcome from running. image-builder's `generic-iso` packs it into an ISO, following the contract for what the stage must hold ([ADR 0011](decisions/0011-disk-images.md)), and `image/make-iso.sh` adds osbuild's SELinux stage to its build, because image-builder doesn't label the files itself. `image/check-iso.sh` checks each ISO, down to every file's label ([ADR 0012](decisions/0012-install-iso.md)). So the stage has an initramfs that boots from the ISO (dracut's `dmsquash-live`), livesys to set up the live user and log it into Plasma, shim and GRUB under `/boot/efi`, and the ISO's label and boot menu in `iso.yaml`; `image/live/` holds its packages, that menu and its checks.
 - The ISO also carries a copy of the `lumen` image for Anaconda to install, so installing needs no network and download speed can't push it past the spec's 10 minutes. The installed system then tracks `ghcr.io/<org>/lumen:<channel>` and accepts only signed images from its first update (section 4.8). How the copy reaches Anaconda is worked out at step 1.8c.
 - **One ISO, made from the default image.** The live session runs on the open graphics drivers, which is enough for the installer. After install, the hardware report and lumen-hwd suggest the NVIDIA driver or the gaming edition, and `SwitchVariant` moves to it (section 4.5). That keeps one download and one install path to test; variant ISOs can come later if testers need them.
 - GitHub release files are limited to 2 GiB each. The ISO holds a live system and a copy of the image, so it will be larger and needs another host ([Q15](#8-spec-problems-and-open-questions)).
@@ -633,10 +633,11 @@ A red build of `main` is never signed or pushed. Promotion only moves tags to te
 | `promote` | Weekly for beta, every 2 weeks for stable, or on demand | Runs the update test on the candidate, moves the channel tag to its digest, and builds the ISO and qcow2 for the release | 10.1, 10.2 |
 | `compat` | Nightly | The Windows compatibility test, plus (from Phase 7) the ProtonDB and AreWeAntiCheatYet imports; opens a pull request with the results | 1.16, 7.2 |
 | `windows-setup` | Changes to `windows-setup/`, `hardware/` or the hardware-matching crate; releases | Builds Lumen Setup for Windows on a Windows runner; signs it for releases | 7.9 |
+| `iso` | On demand; pushes to main that change the live system or how the ISO is made | Builds the `live` stage on a published build whose signature it checks, packs it with image-builder, labelled for SELinux, checks it with `image/check-iso.sh`, and keeps it for a week as a workflow artifact ([ADR 0012](decisions/0012-install-iso.md)) | 1.8b |
 | `base` | Mondays; merges that change a pin | A pull request that moves the Kinoite pin and the lint container's Fedora pin to their newest builds, and Kinoite's to a new Fedora release once it is current. Copies each pinned base to ghcr.io with its digest ([versions](versions.md#how-the-pins-move)) | 1.5b |
-| Renovate | When upstream changes | Pull requests for the pinned tool images (bootc-image-builder, Titanoboa), GitHub Actions, the lint tools and Cargo dependencies | 9.2 |
+| Renovate | When upstream changes | Pull requests for the pinned tool images (image-builder), GitHub Actions, the lint tools and Cargo dependencies | 9.2 |
 
-Until `promote` exists, the ISO is built on demand (step 1.8b). GitHub's hosted runners have limited disk (step 1.5 frees space first) and a 6-hour limit per job; whether they expose KVM for the boot test is checked at step 1.9.
+Until `promote` exists, the `iso` workflow makes test ISOs. GitHub's hosted runners have limited disk (step 1.5 frees space first) and a 6-hour limit per job; whether they expose KVM for the boot test is checked at step 1.9.
 
 ### 9.9 Where each test layer runs
 
@@ -669,7 +670,7 @@ Linux tooling runs in WSL (Fedora 44, 7.7 GiB of RAM, no nested virtualization),
 | `lint` | Yes, in the lint container (`tests/lint/`), so WSL and CI run the same tool versions | Yes, the same container |
 | `test` | The lint self-test now; from Phase 1, the unit tests in the `devel` container | Every test layer |
 | `build-image` | Yes, but slow, and it needs plenty of free disk | Yes |
-| `build-iso` | Not planned | Yes |
+| `build-iso` | No: it says how to run `image/make-iso.sh` by hand, which takes hours in WSL and makes WSL stop responding (step 1.8b) | Yes, the `iso` workflow |
 | `run-vm` | No: there is no `/dev/kvm` | The boot and update tests |
 
 ## 10. Dependency graphs

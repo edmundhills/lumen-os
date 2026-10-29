@@ -416,7 +416,7 @@ These four are the user's first impression, so each must work without reading an
 
 ### Installer
 
-- Install media: a live ISO built from the Lumen image itself (try Universal Blue's Titanoboa first). It boots into a Lumen live session that runs the hardware report, then starts the installer (ADR 0002). bootc-image-builder's `anaconda-iso` can't do this: it boots straight into Anaconda with no live desktop, and by default installs unattended to the first disk.
+- Install media: a live ISO built from the Lumen image itself, packed by osbuild's image-builder (`generic-iso`) with every file labelled for SELinux, so the live session runs enforcing (ADR 0012; Universal Blue's Titanoboa was tried first). It boots into a Lumen live session that runs the hardware report, then starts the installer (ADR 0002). bootc-image-builder's `anaconda-iso` can't do this: it boots straight into Anaconda with no live desktop, and by default installs unattended to the first disk.
 - Fallback, only if no live ISO works by Phase 6: `anaconda-iso` with a partial kickstart, so the user picks the disk and install mode. The hardware report then runs only in Lumen Setup for Windows and after install, which needs the owner's approval because it drops the live-USB report.
 - Anaconda WebUI, running in the live session, themed with Lumen tokens.
 - Three choices only: Erase disk (default, encrypted), Install alongside Windows, Custom (expert partitioning).
