@@ -18,6 +18,8 @@ Claude reads CLAUDE.md automatically, does that step (plus any ➕ steps right a
 
 **Legend:** 👤 = needs you (an account, an admin install, real hardware or an approval). ⚠️ = big step, may get split into a/b sub-steps. ➕ = small step, done in the same session as the step above it (a batch).
 
+**The look is decided with the owner** (owner's request, 2026-10-29). Before any step that fixes how Lumen looks, Claude goes through the exact design with the owner and waits for their agreement: colours, type, sizes, spacing, glass, motion, icons, and the layout of each surface. Steps 2.0, 3.0 and 4.0 are those design sessions. For a step in a later phase that designs a screen of its own, such as a Settings page, the Store or Welcome, show the design first too.
+
 ## Current step
 
 **1.6** 👤 cosign signing and the SBOM, with ➕ **1.7**, the trust policy. Both are written, tested in WSL with the real public key, and committed but not pushed ([ADR 0008](docs/decisions/0008-image-signing.md)). The key and the `image-signing` environment with its two secrets exist (2026-10-29; ADR 0008's Follow-up).
@@ -200,6 +202,7 @@ Two things left over from 1.5c and 1.5b:
 
 ## Phase 2 — Design tokens and theme (spec: "Liquid glass", "Design tokens", Phase 2)
 
+- [ ] **2.0** 👤 Design session: Lumen's exact visual language, before any token is written. Start from ADR 0006 and its clickable mockup (an artifact in the owner's claude.ai account). Propose and show, with a page the owner can click through, the light and dark colours, the eight accents, the type scale, radii, spacing, elevation, the glass presets per role, the springs and the icon style. Then record what the owner agrees to in an ADR, and 2.1 to 2.11 build exactly that. *Done when:* the owner has agreed to every value.
 - [ ] **2.1** `tokens.json` part 1: colours (light, dark, 8 accents named for kinds of light with Sunbeam as the default; each with a fill, a text colour on the fill and an ink shade, all at 4.5:1), type scale (Source Sans 3 for interface text, Red Hat Display for display text with a Source Sans 3 fallback in other scripts, JetBrains Mono; ADR 0006), radii, 4 px spacing, elevation, plus a JSON schema.
 - [ ] ➕ **2.2** `tokens.json` part 2: glass presets per role (all parameters from the spec table) and spring presets; validation test.
 - [ ] **2.3** Exporter framework and the QML singleton module `org.lumen.style`.
@@ -217,6 +220,7 @@ Two things left over from 1.5c and 1.5b:
 
 ## Phase 3 — lumen-glass (spec: "Spec: lumen-glass effect", Phase 3)
 
+- [ ] **3.0** 👤 Design session: what the glass looks like on screen. The values come from 2.0; here, show the owner the refraction, dispersion, rim light and tint on real backgrounds, as renders or a page, and agree on them before the shader work. *Done when:* the owner has agreed.
 - [ ] **3.1** ⚠️ Fork KWin's blur effect (the image's exact KWin version) into `glass/` as `lumen-glass`; build as an RPM in a Containerfile stage.
 - [ ] **3.2** Ship it in the image; confirm it matches stock blur in a VM.
 - [ ] **3.3** Shared 1/4-resolution dual-Kawase blur, computed once per frame.
@@ -237,6 +241,7 @@ Two things left over from 1.5c and 1.5b:
 
 ## Phase 4 — lumen-shell (spec: "Spec: lumen-shell", "Default shortcuts and gestures", Phase 4)
 
+- [ ] **4.0** 👤 Design session: the exact layout of every shell surface. Cover the top bar's three islands, the dock, the command palette, quick settings, notifications, the overview, the lock and login screens, the OSDs and the shortcut overlay. Show sizes, spacing, what each holds and how it moves, as a clickable page, and record what the owner agrees to before 4.1. *Done when:* the owner has agreed.
 - [ ] **4.1** Shell package `org.lumen.desktop` skeleton; builds and loads in the image.
 - [ ] **4.2** Top bar as three floating islands (left / centre / right), each a floating Plasma panel sized to its content, glass role bar, 32 px (ADR 0006). First check that Plasma can put three such panels on one edge; if it can't, draw the islands in one containment and tell the owner, because lumen-glass then has to clip several rounded rectangles in one surface. It replaces the interim top bar from 1.3 (the layout script in Lumen's global theme).
 - [ ] ➕ **4.3** Top bar indicators: tray, network, sound, battery, user; camera/mic/location indicators.
