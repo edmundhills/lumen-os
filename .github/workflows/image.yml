@@ -3,11 +3,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # The image workflow: build image/Containerfile and check it on every push and
-# pull request. Builds of main also push the image to ghcr.io as `dev`.
-# docs/architecture.md, section 9.8.
+# pull request. Builds of main also push the image to ghcr.io, sign it, and
+# move `dev` to it. docs/architecture.md, section 9.8.
 #
 # The build itself is in build-image.yml. It is called from two jobs so that
-# only builds of main get a token that can write to ghcr.io.
+# only builds of main get a token that can write to ghcr.io, and the signing key.
 
 name: image
 
@@ -44,3 +44,8 @@ jobs:
     uses: ./.github/workflows/build-image.yml
     with:
       publish: true
+    # The signing key, a secret of the image-signing environment, which only
+    # main may use (ADR 0008). build-image.yml's sign job opens the environment.
+    secrets:
+      COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+      COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}

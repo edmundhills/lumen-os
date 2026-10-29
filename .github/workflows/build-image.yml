@@ -3,9 +3,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Build image/Containerfile, the way `just build-image` does in WSL, re-chunk
-# it into the layers users download, and, when asked, push it to ghcr.io.
-# image.yml calls this for every push and pull request; only its job for main
-# asks for the push. docs/architecture.md, section 9.8.
+# it into the layers users download, make its SBOM, and, when asked, push it
+# to ghcr.io and sign it. image.yml calls this for every push and pull
+# request; only its job for main asks for the push. docs/architecture.md,
+# section 9.8.
 #
 # Re-chunking (image/rechunk.sh, ADR 0007) keeps the layer plan of the newest
 # build on ghcr.io, so an update downloads only the layers whose packages
@@ -13,10 +14,17 @@
 # base image as the newest one would make users download more than
 # DOWNLOAD_BUDGET_MIB (risk 14 in docs/risks.md).
 #
+# Signing (ADR 0008): the sign job signs the pushed digest with cosign and
+# attaches the SBOM to it as a signed attestation. Its key is a secret of the
+# GitHub environment image-signing, which only main may use, and the job runs
+# on a runner of its own, so the key never reaches the one that ran the build.
+# Only then does dev move, so a system that follows dev never meets an
+# unsigned image: Lumen's trust policy would refuse it.
+#
 # Pushed tags (docs/architecture.md, section 9.7):
 #   dev-<build version>   never moves, for example dev-44.20261028
 #   sha-<commit>          never moves
-#   dev                   the newest build of main
+#   dev                   the newest signed build of main
 
 name: build-image
 
@@ -24,11 +32,21 @@ on:
   workflow_call:
     inputs:
       publish:
-        description: Push the image to ghcr.io. Only builds of main do.
+        description: Push the image to ghcr.io and sign it. Only builds of main do.
         type: boolean
         required: true
+    # Secrets of the image-signing environment. The caller must pass them by
+    # name even so: GitHub gives a called workflow only the secrets it is
+    # passed, and an empty string for the rest. Only the caller for main does.
+    secrets:
+      COSIGN_PRIVATE_KEY:
+        description: cosign's private key, which signs the image.
+        required: false
+      COSIGN_PASSWORD:
+        description: The private key's password.
+        required: false
 
-# No permissions here: the job gets exactly those its caller in image.yml
+# No permissions here: the jobs get exactly those their caller in image.yml
 # grants, and only the caller for main can write packages.
 
 jobs:
@@ -36,6 +54,8 @@ jobs:
     name: Build the image
     runs-on: ubuntu-24.04
     timeout-minutes: 90
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
     env:
       # The image as Podman stores it on the runner, and where it is pushed.
       # Registry names must be lower case, and the owner's is.
@@ -208,10 +228,52 @@ jobs:
           [[ ! -f $dir/manifest.json ]] || args+=("$dir/manifest.json" "$dir/config.json")
           python3 image/rechunk.py download "${args[@]}" | tee -a "$GITHUB_STEP_SUMMARY"
 
-      # The tags that never move come first, so dev only moves to an image
-      # that already has them. skopeo pushes the layout as it is, so the
-      # digest is the one measured above.
+      # The SBOM: every package in the image, as SPDX JSON (ADR 0008). syft
+      # reads the re-chunked layout, which is what gets pushed, and
+      # image/sbom.py checks that it lists exactly the RPM packages the image
+      # has. The sign job attaches it to builds of main; every run keeps it
+      # with its other results for 30 days.
+      - name: Make the SBOM
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          # syft's release from its release page, checked against its checksum.
+          SYFT_VERSION: 1.55.0
+          SYFT_SHA256: bb65249542db5fedeeb4d3f9b018b75e7264dbfbbb10486f044581a92f90490d
+          # Packages only. A record of each of the image's 470,000 files would
+          # make the SBOM hundreds of megabytes, and they are all in the
+          # packages' own lists.
+          SYFT_FILE_METADATA_SELECTION: none
+        run: |
+          archive=$RUNNER_TEMP/syft.tar.gz dir=$RUNNER_TEMP/sbom
+          curl --fail --silent --show-error --location --output "$archive" \
+            "https://github.com/anchore/syft/releases/download/v$SYFT_VERSION/syft_${SYFT_VERSION}_linux_amd64.tar.gz"
+          printf '%s  %s\n' "$SYFT_SHA256" "$archive" | sha256sum --check --strict
+          mkdir -p "$RUNNER_TEMP/bin" "$dir"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/bin" syft
+          # Root wrote the layout.
+          sudo --preserve-env=SYFT_FILE_METADATA_SELECTION "$RUNNER_TEMP/bin/syft" scan \
+            --source-name "$REGISTRY_IMAGE" --source-version "$VERSION" \
+            --output "spdx-json=$dir/lumen.spdx.json" "oci-dir:$RUNNER_TEMP/rechunked"
+          # Root runs Podman, and the runner writes the file.
+          # shellcheck disable=SC2024
+          sudo podman run --rm --pull=never --entrypoint=rpm "$LOCAL_IMAGE-rechunked" \
+            --query --all --queryformat '%{NAME} %{EPOCHNUM}:%{VERSION}-%{RELEASE} %{ARCH}\n' >"$dir/packages"
+          python3 image/sbom.py check "$dir/lumen.spdx.json" "$dir/packages" | tee -a "$GITHUB_STEP_SUMMARY"
+          ls -l "$dir"
+
+      - name: Keep the SBOM
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          path: ${{ runner.temp }}/sbom/lumen.spdx.json
+          archive: false
+          retention-days: 30
+          if-no-files-found: error
+
+      # The tags that never move. dev moves in the sign job, once the image is
+      # signed. skopeo pushes the layout as it is, so the digest is the one
+      # measured above, and the one the sign job signs.
       - name: Push to ghcr.io
+        id: push
         if: inputs.publish
         env:
           VERSION: ${{ steps.version.outputs.version }}
@@ -220,13 +282,123 @@ jobs:
           sudo skopeo copy --preserve-digests --retry-times 3 --digestfile "$digestfile" \
             "oci:$RUNNER_TEMP/rechunked:latest" "docker://$REGISTRY_IMAGE:dev-$VERSION"
           digest=$(<"$digestfile")
-          for tag in "sha-$GITHUB_SHA" dev; do
-            sudo skopeo copy --preserve-digests "docker://$REGISTRY_IMAGE@$digest" "docker://$REGISTRY_IMAGE:$tag"
-          done
+          sudo skopeo copy --preserve-digests \
+            "docker://$REGISTRY_IMAGE@$digest" "docker://$REGISTRY_IMAGE:sha-$GITHUB_SHA"
+          printf 'digest=%s\n' "$digest" >>"$GITHUB_OUTPUT"
           # The backticks are Markdown, for the run's summary page.
           # shellcheck disable=SC2016
           {
             printf '### Pushed %s\n\n' "$REGISTRY_IMAGE"
             printf -- '- Digest: `%s`\n' "$digest"
-            printf -- '- Tags: `dev-%s`, `sha-%s`, `dev`\n' "$VERSION" "$GITHUB_SHA"
+            printf -- '- Tags: `dev-%s`, `sha-%s`. `dev` moves once the image is signed.\n' "$VERSION" "$GITHUB_SHA"
+          } >>"$GITHUB_STEP_SUMMARY"
+
+  # Sign the pushed image and attach its SBOM, check both with the key and the
+  # trust policy that ship in the image, then move dev to it (ADR 0008).
+  # If this job fails, the dated and sha- tags stay unsigned and dev stays
+  # where it was; once the cause is fixed, re-run this job alone ("Re-run
+  # failed jobs"), because a new run would find the commit already pushed.
+  sign:
+    name: Sign the image
+    needs: build
+    if: inputs.publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    # Its secrets are the signing key. A deployment record for every build
+    # would only clutter the repository page.
+    environment:
+      name: image-signing
+      deployment: false
+    env:
+      REGISTRY_IMAGE: ghcr.io/${{ github.repository_owner }}/lumen
+      DIGEST: ${{ needs.build.outputs.digest }}
+      PUBLIC_KEY: image/overlay/usr/share/pki/containers/lumen.pub
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fetch the SBOM
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          name: lumen.spdx.json
+          path: ${{ runner.temp }}/sbom
+
+      # The version and checksum the lint container has (tests/lint/Containerfile),
+      # so CI signs the way image/test_signatures.py checks.
+      - name: Install cosign
+        run: |
+          version=$(sed -n 's/^ARG COSIGN_VERSION=//p' tests/lint/Containerfile)
+          sha256=$(sed -n 's/^ARG COSIGN_SHA256=//p' tests/lint/Containerfile)
+          mkdir -p "$RUNNER_TEMP/bin"
+          curl --fail --silent --show-error --location --output "$RUNNER_TEMP/bin/cosign" \
+            "https://github.com/sigstore/cosign/releases/download/v$version/cosign-linux-amd64"
+          printf '%s  %s\n' "$sha256" "$RUNNER_TEMP/bin/cosign" | sha256sum --check --strict
+          chmod 0755 "$RUNNER_TEMP/bin/cosign"
+          printf '%s\n' "$RUNNER_TEMP/bin" >>"$GITHUB_PATH"
+
+      # cosign writes the login to ~/.docker/config.json, where skopeo finds
+      # it too.
+      - name: Log in to ghcr.io
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s\n' "$TOKEN" | cosign login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+
+      # The trust policy from image/overlay, with its key path pointing to the
+      # key in the checkout, and the overlay's registries.d. skopeo checks an
+      # image against the policy before it copies anything, and must refuse
+      # this one while it is unsigned.
+      - name: Check that the trust policy refuses the image unsigned
+        run: |
+          sed "s#/usr/share/pki/containers/lumen.pub#$PWD/$PUBLIC_KEY#" image/overlay/etc/containers/policy.json \
+            >"$RUNNER_TEMP/policy.json"
+          if out=$(skopeo --policy "$RUNNER_TEMP/policy.json" --registries.d image/overlay/etc/containers/registries.d \
+            copy --remove-signatures "docker://$REGISTRY_IMAGE@$DIGEST" "oci:$RUNNER_TEMP/check:unsigned" 2>&1); then
+            printf '::error::The trust policy accepted %s@%s before it was signed.\n' "$REGISTRY_IMAGE" "$DIGEST"
+            exit 1
+          fi
+          if ! grep -qF 'A signature was required, but no signature exists' <<<"$out"; then
+            printf '%s\n' "$out" >&2
+            exit 1
+          fi
+          printf 'Refused, as it should be: %s\n' "$out"
+          rm -rf "$RUNNER_TEMP/check"
+
+      - name: Sign
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+        run: |
+          if [[ -z $COSIGN_PRIVATE_KEY ]]; then
+            printf '::error::%s %s\n' "The image-signing environment has no COSIGN_PRIVATE_KEY secret, or image.yml" \
+              "doesn't pass it. docs/decisions/0008-image-signing.md says how the key is made and stored."
+            exit 1
+          fi
+          image/sign.sh sign "$REGISTRY_IMAGE@$DIGEST" env://COSIGN_PRIVATE_KEY "$RUNNER_TEMP/sbom/lumen.spdx.json"
+
+      # With the public key in the image: cosign checks the signature and the
+      # attestation, and skopeo, which reads signatures as bootc does, must
+      # now accept the image. This download is the whole image, about 3 GiB.
+      - name: Check the signature and the SBOM
+        run: |
+          image/sign.sh verify "$REGISTRY_IMAGE@$DIGEST" "$PUBLIC_KEY" --sbom
+          skopeo --policy "$RUNNER_TEMP/policy.json" --registries.d image/overlay/etc/containers/registries.d \
+            copy --quiet --remove-signatures "docker://$REGISTRY_IMAGE@$DIGEST" "oci:$RUNNER_TEMP/check:signed"
+          rm -rf "$RUNNER_TEMP/check"
+          printf 'The trust policy accepts %s@%s.\n' "$REGISTRY_IMAGE" "$DIGEST"
+
+      # skopeo copies only the manifest: the layers and the signature, which
+      # is stored by digest, are already there.
+      - name: Move dev to the signed image
+        run: |
+          skopeo copy --preserve-digests "docker://$REGISTRY_IMAGE@$DIGEST" "docker://$REGISTRY_IMAGE:dev"
+          # The backticks are Markdown, for the run's summary page.
+          # shellcheck disable=SC2016
+          {
+            printf '### Signed %s\n\n' "$REGISTRY_IMAGE"
+            printf -- '- Digest: `%s`, signed with the key in `%s`\n' "$DIGEST" "$PUBLIC_KEY"
+            printf -- '- Signature: tag `sha256-%s.sig`; SBOM attestation: tag `sha256-%s.att`\n' "${DIGEST#sha256:}" \
+              "${DIGEST#sha256:}"
+            printf -- '- `dev` now points to it\n'
           } >>"$GITHUB_STEP_SUMMARY"
