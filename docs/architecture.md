@@ -550,7 +550,7 @@ Building in stages avoids all three. COPR stays available for packages from outs
 - Each build stage copies in only the folders it builds. Podman can then run independent stages in parallel (`--jobs`) and reuse any stage whose inputs didn't change.
 - Translations (`.ts` and `.po` files, step 8.7) are compiled in the stage of the package that owns them.
 - Phase 1 has only `base` and `lumen`. Each later phase adds its build stage.
-- After the build, CI re-chunks the image, so that an update downloads only the packages that changed rather than one large layer holding everything Lumen added. This matters on slow and metered connections. `image/rechunk.sh` runs `rpm-ostree compose build-chunked-oci` from the image itself, keeping the packing of the newest build on ghcr.io, then checks that the labels, settings, image checks and `bootc container lint` still hold. `image/layer_hints.py` gives files that change on their own, such as the initramfs and os-release, layers of their own ([ADR 0007](decisions/0007-rechunking.md)).
+- After the build, CI re-chunks the image, so that an update downloads only the packages that changed rather than one large layer holding everything Lumen added. This matters on slow and metered connections. `image/rechunk.sh` runs `rpm-ostree compose build-chunked-oci` from the image itself, keeping the packing of the newest build on ghcr.io, then checks that the labels, settings, image checks and `bootc container lint` still hold. `image/layer_hints.py` gives files that change on their own layers of their own: what the package step writes afresh on every build, os-release, and the overlay's files ([ADR 0007](decisions/0007-rechunking.md)).
 
 ### 9.4 Matching the base image exactly
 

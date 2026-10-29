@@ -21,7 +21,7 @@ The Lumen OS image: an OCI container image built `FROM` Fedora Kinoite and manag
 | `copy-bases.sh` | Copies each pinned base to ghcr.io with its digest, and checks that anyone can pull the copy. `test_copy_bases.py` tests it with a stand-in for skopeo | 1.5b |
 | `rechunk.sh` | Re-chunks a built image with rpm-ostree, run from the image itself, keeping an earlier build's packing, so an update downloads only the layers whose packages changed. Then checks the result: the same labels and settings, `check-image.sh` and `bootc container lint` ([ADR 0007](../docs/decisions/0007-rechunking.md)). CI runs it after every build | 1.5c |
 | `rechunk.py` | Tells whether a build is re-chunked, compares the labels before and after, and measures what an update between two builds downloads, against the budget. `test_rechunk.py` holds its unit tests | 1.5c |
-| `layer_hints.py` | Marks files that change on their own, the initramfs and os-release, so re-chunking gives each a layer of its own. The `lumen` stage runs it. `test_layer_hints.py` holds its unit tests | 1.5c |
+| `layer_hints.py` | Marks the files that change on their own, so re-chunking gives them layers of their own: what the package step writes afresh on every build, os-release, and the overlay's files. The `lumen` stage runs it. `test_layer_hints.py` holds its unit tests | 1.5c |
 | `test_home_snapshots.py` | Unit tests for the snapshots of `/home`: the setup script's choices, with stand-ins for `stat`, `snapper` and `restorecon`, and the template's limits against the spec (`just test`) | 1.4 |
 
 What the overlay sets up so far:
