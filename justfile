@@ -43,12 +43,12 @@ build-image:
 
 # Build the install ISO
 build-iso:
-    @echo "Nothing to build yet: step 1.8 adds the ISO build, which runs in CI." >&2; exit 1
+    @echo "Nothing to build yet: step 1.8b adds the ISO build, which runs in CI." >&2; exit 1
 
 # Boot the OS image in a local VM
 run-vm:
     @test -e /dev/kvm || { echo "This machine has no /dev/kvm, so it can't run VMs. The boot test runs in CI." >&2; exit 1; }
-    @echo "Nothing to boot yet: step 1.9 adds the VM, using the qcow2 from step 1.8." >&2; exit 1
+    @echo "Nothing to boot yet: step 1.9 adds the VM, using the qcow2 from step 1.8a." >&2; exit 1
 
 # Build the lint container, or reuse it if tests/lint/Containerfile hasn't changed
 _lint-image:

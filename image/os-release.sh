@@ -25,6 +25,15 @@ if (($# != 1)); then
 fi
 readonly build_version=$1
 
+# image-builder, which makes Lumen's disk images, reads VERSION_ID as a version
+# with at most one dot, and can't make a disk of an image whose VERSION_ID has
+# more (docs/decisions/0011-disk-images.md).
+if [[ ! $PRODUCT_VERSION =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+  printf 'The product version "%s" is not N or N.N, so image-builder could not make disks of the image.\n' \
+    "$PRODUCT_VERSION" >&2
+  exit 1
+fi
+
 fedora=$(rpm --eval '%{fedora}')
 if [[ ! $build_version =~ ^${fedora}\.[0-9]{8}(\.[1-9][0-9]*)?$ ]]; then
   printf 'The build version "%s" is not %s.<date>[.N]: the image is Fedora %s.\n' \

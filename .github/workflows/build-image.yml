@@ -3,10 +3,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Build image/Containerfile, the way `just build-image` does in WSL, re-chunk
-# it into the layers users download, make its SBOM, and, when asked, push it
-# to ghcr.io and sign it. image.yml calls this for every push and pull
-# request; only its job for main asks for the push. docs/architecture.md,
-# section 9.8.
+# it into the layers users download, make its SBOM and the qcow2 the boot test
+# starts, and, when asked, push it to ghcr.io and sign it. image.yml calls this
+# for every push and pull request; only its job for main asks for the push.
+# docs/architecture.md, section 9.8.
 #
 # Re-chunking (image/rechunk.sh, ADR 0007) keeps the layer plan of the newest
 # build on ghcr.io, so an update downloads only the layers whose packages
@@ -60,7 +60,8 @@ jobs:
   build:
     name: Build the image
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    # Builds of main took 45 to 52 minutes before the qcow2 came (step 1.8a).
+    timeout-minutes: 120
     outputs:
       digest: ${{ steps.push.outputs.digest }}
     env:
@@ -79,6 +80,10 @@ jobs:
       # soon as dev moves on. Empty: the last one was the first re-chunked
       # dev, 44.20261029 (ADR 0007, Follow-up).
       DOWNLOAD_BUDGET_EXEMPT: ""
+      # osbuild's image-builder, which bootc-image-builder became, makes the
+      # qcow2 (ADR 0011): the container of its release 88.0.0, by digest.
+      IMAGE_BUILDER: >-
+        ghcr.io/osbuild/image-builder-cli:v88.0.0@sha256:a0c38fa28181aca104b64465a1d21b385603ac62b184ced4041f467573a1534c
     steps:
       - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -286,6 +291,50 @@ jobs:
           archive: false
           retention-days: 30
           if-no-files-found: error
+
+      # The qcow2 the boot test starts (step 1.9). image-builder installs the
+      # re-chunked image on a disk with the image's own bootc, which records
+      # the name it is given as the image the system follows, so the image
+      # gets the name Lumen systems follow (ADR 0011).
+      - name: Make the qcow2
+        run: |
+          dir=$RUNNER_TEMP/disk
+          mkdir -p "$dir"
+          # osbuild mounts the new Btrfs root, which needs the host's module.
+          sudo modprobe btrfs
+          sudo podman tag "$LOCAL_IMAGE-rechunked" "$REGISTRY_IMAGE:dev"
+          sudo podman run --rm --privileged --security-opt label=type:unconfined_t \
+            --volume /var/lib/containers/storage:/var/lib/containers/storage \
+            --volume "$dir:/output" \
+            "$IMAGE_BUILDER" build --output-dir /output --progress verbose \
+            --bootc-ref "$REGISTRY_IMAGE:dev" qcow2
+          sudo podman untag "$LOCAL_IMAGE-rechunked" "$REGISTRY_IMAGE:dev"
+          sudo find "$dir" -type f -exec ls -ls {} +
+          df -h /
+
+      # image/check-disk.sh reads the disk as a raw file, read-only: the
+      # partitions, the boot files, and what the deployment follows.
+      - name: Check the qcow2
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          dir=$RUNNER_TEMP/disk
+          qcow2=$(sudo find "$dir" -name '*.qcow2' -printf '%P\n')
+          sudo podman run --rm --volume "$dir:/output" --entrypoint qemu-img "$IMAGE_BUILDER" \
+            convert -O raw "/output/$qcow2" /output/check.raw
+          report=$RUNNER_TEMP/disk-report status=0
+          # shellcheck disable=SC2024
+          sudo image/check-disk.sh "$dir/check.raw" "$REGISTRY_IMAGE:dev" "$VERSION" >"$report" 2>&1 || status=$?
+          sudo rm "$dir/check.raw"
+          cat "$report"
+          # The backticks are Markdown, for the run's summary page.
+          # shellcheck disable=SC2016
+          {
+            printf '### The qcow2\n\n```text\n'
+            cat "$report"
+            printf '```\n'
+          } >>"$GITHUB_STEP_SUMMARY"
+          exit "$status"
 
       # The tags that never move. dev moves in the sign job, once the image is
       # signed. skopeo pushes the layout as it is, so the digest is the one
