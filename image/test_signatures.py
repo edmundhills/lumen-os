@@ -108,8 +108,13 @@ class SignatureTest(unittest.TestCase):
             "http": {"addr": "127.0.0.1:443", "tls": {
                 "certificate": str(certs / "ghcr.io.crt"), "key": str(work / "registry.key")}},
         }), encoding="utf-8")
-        cls.registry = subprocess.Popen(["registry", "serve", str(config)],
-                                        stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        # The registry logs every request that fails, such as cosign looking
+        # for a tag that isn't there, so its log goes to a file: a pipe that
+        # nobody reads fills up and stops the registry.
+        log = work / "registry.log"
+        with open(log, "wb") as out:
+            cls.registry = subprocess.Popen(["registry", "serve", str(config)],
+                                            stdout=subprocess.DEVNULL, stderr=out)
         context = ssl.create_default_context(cafile=str(certs / "ghcr.io.crt"))
         for _ in range(100):
             try:
@@ -117,7 +122,7 @@ class SignatureTest(unittest.TestCase):
                 break
             except OSError:
                 if cls.registry.poll() is not None:
-                    raise AssertionError(f"the registry stopped: {cls.registry.stderr.read().decode()}")
+                    raise AssertionError(f"the registry stopped: {log.read_text(errors='replace')}")
                 time.sleep(0.1)
         else:
             raise AssertionError("the registry didn't start")
