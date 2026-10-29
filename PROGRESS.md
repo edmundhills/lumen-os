@@ -26,8 +26,8 @@ Claude reads CLAUDE.md automatically, does that step (plus any ➕ steps right a
 
 Left over from 1.6, 1.5c and 1.5b:
 
+- **First, two local commits from 2026-10-29 aren't pushed yet:** "docs: tick 1.6 and 1.7…" and "docs: record that the signing key is backed up…". Ask the owner to sign them off (with the session's own commits, or first), check the sign-offs, and push.
 - **The first build held to the download budget** is main's run for the commit that ticked 1.6 and 1.7 (it compares with `dev` `44.20261029.1`, now that `DOWNLOAD_BUDGET_EXEMPT` is empty). If it goes over 100 MiB, find out which files in the changed layers differ from the previous build's before raising anything, and record it in ADR 0007's Follow-up.
-- **Owner:** keep `cosign.key` and `password` from `~/lumen-signing-key/` in WSL safe offline, such as on a USB drive and in a password manager, then delete those two files from WSL (ADR 0008, step 4 of ["How the key is made and kept"](docs/decisions/0008-image-signing.md#how-the-key-is-made-and-kept)).
 - How the next bump pull request got its checks, on Monday 2026-11-02 or by hand before then. Did GitHub run its `pull_request` checks straight away, hold them for approval, or make none, so that the job started them itself? Record the answer in versions.md, "How the pins move". Its image run is also the first to report the download for a new base.
 - Offered, not decided: skip the hour-long image build for commits that change only documentation (the lint workflow still checks them). Most of 2026-10-29's pushes were docs only.
 
