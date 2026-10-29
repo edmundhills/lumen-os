@@ -3,13 +3,21 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Lumen's defaults for `bootc install`. bootc-image-builder reads them too, so
-# the qcow2 for the boot and update tests (step 1.8) gets a Btrfs root, like an
-# installed Lumen (spec: "Btrfs root with compression (zstd)").
-#
-# Compression is a mount option, which the installer sets, not the image:
-# Lumen's Anaconda profile (installer/anaconda/lumen.conf) mounts Btrfs with
-# zstd. bootc has no setting for mount options, so a disk made by bootc itself
-# or by bootc-image-builder is not compressed.
+# the qcow2 for the boot and update tests (step 1.8) gets them, like an
+# installed Lumen.
 
+[install]
+# An installed system follows its image with signatures checked from its
+# first update (docs/decisions/0008-image-signing.md): bootc records the image
+# as ostree-image-signed, which also refuses a trust policy that accepts any
+# image by default. Lumen's /etc/containers/policy.json requires Lumen's
+# signature for Lumen's images.
+enforce-container-sigpolicy = true
+
+# A Btrfs root (spec: "Btrfs root with compression (zstd)"). Compression is a
+# mount option, which the installer sets, not the image: Lumen's Anaconda
+# profile (installer/anaconda/lumen.conf) mounts Btrfs with zstd. bootc has no
+# setting for mount options, so a disk made by bootc itself or by
+# bootc-image-builder is not compressed.
 [install.filesystem.root]
 type = "btrfs"

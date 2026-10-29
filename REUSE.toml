@@ -19,3 +19,10 @@ SPDX-License-Identifier = "GPL-3.0-or-later"
 path = "image/overlay/**/metadata.json"
 SPDX-FileCopyrightText = "2026 Lumen OS contributors"
 SPDX-License-Identifier = "GPL-3.0-or-later"
+
+# The container trust policy is JSON too, and the signing key's public half is
+# a PEM file that tools read whole (ADR 0008).
+[[annotations]]
+path = ["image/overlay/etc/containers/policy.json", "image/overlay/usr/share/pki/containers/lumen.pub"]
+SPDX-FileCopyrightText = "2026 Lumen OS contributors"
+SPDX-License-Identifier = "GPL-3.0-or-later"

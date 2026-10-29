@@ -1,0 +1,17 @@
+# SPDX-FileCopyrightText: 2026 Lumen OS contributors
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Where Lumen's image signatures are. CI signs every image it pushes with
+# cosign, which stores the signature in the same repository, under the tag
+# sha256-<image digest>.sig. /etc/containers/policy.json requires that
+# signature for these repositories (step 1.7, docs/decisions/0008-image-signing.md).
+docker:
+  ghcr.io/edmundhills/lumen:
+    use-sigstore-attachments: true
+  ghcr.io/edmundhills/lumen-nvidia:
+    use-sigstore-attachments: true
+  ghcr.io/edmundhills/lumen-gaming:
+    use-sigstore-attachments: true
+  ghcr.io/edmundhills/lumen-gaming-nvidia:
+    use-sigstore-attachments: true

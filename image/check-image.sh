@@ -19,6 +19,8 @@ if (($# != 1)) || [[ ! -d $1 ]]; then
   exit 2
 fi
 readonly overlay=$1
+here=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+readonly here
 
 # The timers the Containerfile masks.
 readonly MASKED_UNITS=(
@@ -199,6 +201,26 @@ os_release() {
   return "$status"
 }
 
+# Images under Lumen's names are accepted only with Lumen's signature, as
+# containers/image reads the settings in the image: no other file in
+# registries.d undoes Lumen's, and the key is there (image/trust.py, ADR 0008).
+trust_policy() {
+  python3 "$here/trust.py" check /
+}
+
+# bootc install, and the installers and bootc-image-builder with it, records
+# the image with its signatures checked (ostree-image-signed).
+signed_installs() {
+  local enforced
+  enforced=$(bootc install print-configuration |
+    python3 -c 'import json, sys; print(json.load(sys.stdin).get("enforce-container-sigpolicy"))') || return 1
+  if [[ $enforced != True ]]; then
+    printf 'bootc install would follow the image without checking its signatures (enforce-container-sigpolicy is %s)\n' \
+      "$enforced"
+    return 1
+  fi
+}
+
 printf 'Lumen image checks\n'
 check "Overlay files are in place, owned and writable only by root" overlay_files
 check "Units that Lumen's presets enable are enabled" enabled_units
@@ -209,6 +231,8 @@ check "SELinux is enforcing" selinux
 check "Discover is removed" no_discover
 check "Lumen's global theme (interim top bar) is the default" global_theme
 check "os-release names Lumen and its build version" os_release
+check "Only images Lumen signed are trusted under Lumen's names" trust_policy
+check "bootc install follows the image with its signatures checked" signed_installs
 
 printf '\nPassed: %d   Failed: %d\n' "$passes" "$failures"
 ((failures == 0))

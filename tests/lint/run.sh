@@ -127,6 +127,7 @@ check "justfile formatting (just --fmt)" just --fmt --check
 check "Whitespace and line endings" whitespace
 check "Repository layout and licence files" layout
 check "Image package manifest (image/packages.py)" python3 image/packages.py check
+check "Image trust policy (image/trust.py)" python3 image/trust.py check image/overlay
 
 printf '\nPassed: %d   Failed: %d\n' "$passes" "$failures"
 ((failures == 0))

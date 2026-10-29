@@ -1,0 +1,108 @@
+{
+    "default": [
+        {
+            "type": "reject"
+        }
+    ],
+    "transports": {
+        "docker": {
+            "": [
+                {
+                    "type": "insecureAcceptAnything"
+                }
+            ],
+            "ghcr.io/edmundhills/lumen": [
+                {
+                    "type": "sigstoreSigned",
+                    "keyPath": "/usr/share/pki/containers/lumen.pub",
+                    "signedIdentity": {
+                        "type": "matchRepository"
+                    }
+                }
+            ],
+            "ghcr.io/edmundhills/lumen-nvidia": [
+                {
+                    "type": "sigstoreSigned",
+                    "keyPath": "/usr/share/pki/containers/lumen.pub",
+                    "signedIdentity": {
+                        "type": "matchRepository"
+                    }
+                }
+            ],
+            "ghcr.io/edmundhills/lumen-gaming": [
+                {
+                    "type": "sigstoreSigned",
+                    "keyPath": "/usr/share/pki/containers/lumen.pub",
+                    "signedIdentity": {
+                        "type": "matchRepository"
+                    }
+                }
+            ],
+            "ghcr.io/edmundhills/lumen-gaming-nvidia": [
+                {
+                    "type": "sigstoreSigned",
+                    "keyPath": "/usr/share/pki/containers/lumen.pub",
+                    "signedIdentity": {
+                        "type": "matchRepository"
+                    }
+                }
+            ]
+        },
+        "containers-storage": {
+            "": [
+                {
+                    "type": "insecureAcceptAnything"
+                }
+            ]
+        },
+        "dir": {
+            "": [
+                {
+                    "type": "insecureAcceptAnything"
+                }
+            ]
+        },
+        "docker-archive": {
+            "": [
+                {
+                    "type": "insecureAcceptAnything"
+                }
+            ]
+        },
+        "docker-daemon": {
+            "": [
+                {
+                    "type": "insecureAcceptAnything"
+                }
+            ]
+        },
+        "oci": {
+            "": [
+                {
+                    "type": "insecureAcceptAnything"
+                }
+            ]
+        },
+        "oci-archive": {
+            "": [
+                {
+                    "type": "insecureAcceptAnything"
+                }
+            ]
+        },
+        "sif": {
+            "": [
+                {
+                    "type": "insecureAcceptAnything"
+                }
+            ]
+        },
+        "tarball": {
+            "": [
+                {
+                    "type": "insecureAcceptAnything"
+                }
+            ]
+        }
+    }
+}

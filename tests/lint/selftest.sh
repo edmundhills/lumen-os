@@ -66,6 +66,7 @@ printf 'key: 1\nkey: 2\n' >fault.yaml
 printf 'on: push\njobs:\n  fault:\n    needs: no-such-job\n    runs-on: ubuntu-24.04\n    steps:\n      - run: "true"\n' >.github/workflows/fault.yml
 rm -- glass/README.md
 printf '\n[fault]\ninstall = ["kwin"]\n' >>image/packages.toml
+sed -i 's/"reject"/"insecureAcceptAnything"/' image/overlay/etc/containers/policy.json
 git add -A
 
 faults=(
@@ -80,6 +81,7 @@ faults=(
   "Whitespace:a line that ends in a space"
   "layout:a missing README"
   "manifest:a package listed twice in the image's package manifest"
+  "trust:a trust policy that accepts any image by default"
 )
 if out=$(bash tests/lint/run.sh 2>&1); then
   fail "Lint should fail on a copy with a fault for every check" "$out"
