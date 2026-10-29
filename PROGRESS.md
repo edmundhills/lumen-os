@@ -26,8 +26,7 @@ Claude reads CLAUDE.md automatically, does that step (plus any ➕ steps right a
 
 Left over from 1.6, 1.5c and 1.5b:
 
-- **First, two local commits from 2026-10-29 aren't pushed yet:** "docs: tick 1.6 and 1.7…" and "docs: record that the signing key is backed up…". Ask the owner to sign them off (with the session's own commits, or first), check the sign-offs, and push.
-- **The first build held to the download budget** is main's run for the commit that ticked 1.6 and 1.7 (it compares with `dev` `44.20261029.1`, now that `DOWNLOAD_BUDGET_EXEMPT` is empty). If it goes over 100 MiB, find out which files in the changed layers differ from the previous build's before raising anything, and record it in ADR 0007's Follow-up.
+- **Main's run for `169d2f5`** (the owner pushed it on 2026-10-29) is held to the download budget against `dev` `44.20261029.1`. The cloud session's check run #19, on the same image with the exemption gone, already measured a rebuild at 40.8 MiB in 3 layers (ADR 0007's Follow-up), so this one should match. If it goes over 100 MiB, find out which files in the changed layers differ from the previous build's before raising anything.
 - How the next bump pull request got its checks, on Monday 2026-11-02 or by hand before then. Did GitHub run its `pull_request` checks straight away, hold them for approval, or make none, so that the job started them itself? Record the answer in versions.md, "How the pins move". Its image run is also the first to report the download for a new base.
 - Offered, not decided: skip the hour-long image build for commits that change only documentation (the lint workflow still checks them). Most of 2026-10-29's pushes were docs only.
 
@@ -155,6 +154,7 @@ Left over from 1.6, 1.5c and 1.5b:
   - **For 10.1:** deleting old `dev` builds must delete their `sha256-<digest>.sig` and `.att` tags too. A signature holds for a repository, not a tag, so decide whether channels need their own identity.
   - Since 2026-10-01, GitHub deletes workflow runs, and their summaries, after the retention period, at most 90 days for a public repository. The tags on ghcr.io keep the digests.
   - The research workflow's agents left test files in WSL's `/tmp` (`cosigntest`, `cosignsrc`, `cosignres`, `lr`, `cs`, `dl`) and the images `ghcr.io/sigstore/cosign/cosign:v3.1.4`, `registry:3` and `quay.io/libpod/alpine` in rootless Podman. None of it is needed.
+- 2026-10-29: a cloud session and a session on the owner's PC both finished 1.6 at the same time. The owner pushed the PC's commits; the cloud session's branch `ccr-aa9986c4-vir9s7` was rebuilt on them with only its extra findings: check run #19's budget result (ADR 0007), the SBOM's format checked with the pinned syft, and an openssl check of the signature (ADR 0008). Before starting a step, fetch and check that main and PROGRESS.md haven't moved. From a cloud session, GitHub's log and artifact storage (`*.blob.core.windows.net`) and ghcr.io's blob host (`pkg-containers.githubusercontent.com`) are blocked; the GitHub tools' job logs, ghcr.io manifests and github.com release downloads work, and the lint tools can be installed at the lint container's versions.
 
 ---
 
