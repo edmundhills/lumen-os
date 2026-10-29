@@ -335,12 +335,13 @@ Likelihood **Medium**. Impact **Medium**.
 **What can go wrong**
 
 - bootc downloads the image layers that changed. One Containerfile step that installs all of Lumen's packages makes one large layer that changes on every build, so every update downloads all of it even if one file changed. On slow or metered connections that breaks the promise of updates you don't notice.
+- Measured on 2026-10-28, before re-chunking: a rebuild with no change downloaded 113 MiB (dnf's layer, written afresh by each CI build), a daily base bump 487 MiB, and a change in how Podman compressed the base's layers all 3 GiB ([ADR 0007](decisions/0007-rechunking.md)).
 - A Fedora rebase or a new base digest changes many packages at once.
 
 **Mitigation**
 
-- Re-chunk the image after the build, so each layer holds a stable group of packages (rpm-ostree's chunked image build, or the re-chunker Universal Blue uses). Step 1.5c picks the tool.
-- **Step 1.5c:** CI measures the download from the current `stable` (until there is one, from the previous `dev`) to each candidate and fails above a budget set at that step.
+- Re-chunk the image after the build, so each layer holds a stable group of packages. Step 1.5c chose rpm-ostree's `build-chunked-oci`, run from the image itself, keeping the packing of the newest `dev` build, with the initramfs and os-release in layers of their own ([ADR 0007](decisions/0007-rechunking.md), `image/rechunk.sh`).
+- CI measures the download from the newest `dev` (from step 9.2, the current `stable`) to each build, and fails when a build on the same base image goes over the budget in `.github/workflows/build-image.yml`. A new base is reported, not held to the budget.
 - lumen-updated's metered-network and battery rules (step 5.5).
 
 **Steps:** 1.5, 5.5, 9.2.
@@ -376,6 +377,7 @@ Smaller risks, or ones already covered by a step. They move into the top 15 if t
 | Fedora drops 32-bit packages, which Steam and parts of Wine need on the host. A 2025 proposal to drop them was withdrawn | Fall back to Steam's Flatpak and Wine's WoW64 mode | 1.10 |
 | Losing a signing key or the GitHub account: one person holds every key | Protected environment for `main`, hardware-key 2FA, offline key backups, a written procedure to replace each key (architecture 9.7); consider keyless Sigstore signing for images at step 1.6 | 1.6, 8.2 |
 | Fedora's six-month cycle: each rebase moves KWin, Plasma, Qt, Mesa and the kernel at once, and each release is supported for about 13 months | Covered by risks 1 and 6, and Q14 | 9.1 |
+| Fedora is moving its re-chunking from rpm-ostree to chunkah, which can't yet keep an earlier build's packing ([ADR 0007](decisions/0007-rechunking.md)) | Lumen stays on rpm-ostree's `build-chunked-oci`, from the image itself. Revisit when Kinoite ships chunkah or chunkah gains that option; the download measurement shows any regression | 1.5c |
 | Kinoite's dated builds expire from quay.io four weeks after they are built (label `quay.expires-after: 4w`, found at step 0.7), so a pinned base digest stops resolving and CI can no longer build an older commit | The base workflow bumps the pin every week through a pull request and copies each pinned base, with its digest, to Lumen's own registry on ghcr.io, which CI pulls from first, so old builds stay reproducible (step 1.5b, [versions](versions.md#how-the-pins-move)). The bump waits for the owner to merge it, and GitHub turns off scheduled workflows after 60 days without activity in the repository | 1.2, 1.5b |
 
 Not ranked, because they aren't technical: one owner's time across about 170 steps, and the business gaps in the gap list (for example no shop preinstalls).

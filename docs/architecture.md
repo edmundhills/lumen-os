@@ -550,7 +550,7 @@ Building in stages avoids all three. COPR stays available for packages from outs
 - Each build stage copies in only the folders it builds. Podman can then run independent stages in parallel (`--jobs`) and reuse any stage whose inputs didn't change.
 - Translations (`.ts` and `.po` files, step 8.7) are compiled in the stage of the package that owns them.
 - Phase 1 has only `base` and `lumen`. Each later phase adds its build stage.
-- After the build, CI re-chunks the image, so that an update downloads only the packages that changed rather than one large layer holding everything Lumen added. This matters on slow and metered connections. rpm-ostree has a command for this; step 1.5c picks the tool.
+- After the build, CI re-chunks the image, so that an update downloads only the packages that changed rather than one large layer holding everything Lumen added. This matters on slow and metered connections. `image/rechunk.sh` runs `rpm-ostree compose build-chunked-oci` from the image itself, keeping the packing of the newest build on ghcr.io, then checks that the labels, settings, image checks and `bootc container lint` still hold. `image/layer_hints.py` gives files that change on their own, such as the initramfs and os-release, layers of their own ([ADR 0007](decisions/0007-rechunking.md)).
 
 ### 9.4 Matching the base image exactly
 
@@ -625,7 +625,7 @@ A red build of `main` is never signed or pushed. Promotion only moves tags to te
 | Workflow | Runs on | Does | Step |
 | --- | --- | --- | --- |
 | `lint` | Every push and pull request | Formatters and linters; schema checks for the tokens, the compatibility database and the hardware database | 0.6 |
-| `image` | Every push and pull request | Builds `lumen` and the variants and runs the unit, image lint, boot, session, glass and accessibility tests. On `main`, when green: re-chunks, signs, attaches the SBOM and pushes `dev`. The build is in `build-image.yml`, which `image.yml` calls from two jobs, so only the one for `main` can write to ghcr.io | 1.5, 1.9 |
+| `image` | Every push and pull request | Builds `lumen` and the variants, re-chunks them, and runs the unit, image lint, boot, session, glass and accessibility tests. Measures what an update from `dev` downloads, and fails over the budget for a build on the same base ([ADR 0007](decisions/0007-rechunking.md)). On `main`, when green: signs, attaches the SBOM and pushes `dev`. The build is in `build-image.yml`, which `image.yml` calls from two jobs, so only the one for `main` can write to ghcr.io | 1.5, 1.9 |
 | `promote` | Weekly for beta, every 2 weeks for stable, or on demand | Runs the update test on the candidate, moves the channel tag to its digest, and builds the ISO and qcow2 for the release | 9.1, 9.2 |
 | `compat` | Nightly | The Windows compatibility test, plus (from Phase 7) the ProtonDB and AreWeAntiCheatYet imports; opens a pull request with the results | 1.16, 7.2 |
 | `windows-setup` | Changes to `windows-setup/`, `hardware/` or the hardware-matching crate; releases | Builds Lumen Setup for Windows on a Windows runner; signs it for releases | 7.9 |
