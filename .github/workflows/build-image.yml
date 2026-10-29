@@ -74,12 +74,11 @@ jobs:
       # (ADR 0007). A change that needs more raises this in the same pull
       # request and says why.
       DOWNLOAD_BUDGET_MIB: 100
-      # The one earlier build that an update isn't held to the budget from:
-      # the first re-chunked dev (44.20261029). The trust policy, the new
-      # image checks and turning off Python's bytecode files during the build
-      # change files in its shared layers once (ADR 0007, Follow-up). When dev
-      # has moved on, this matches nothing and can go.
-      DOWNLOAD_BUDGET_EXEMPT: sha256:101c706b49f1f96e6a9b4d733228e8ebd1740bb18d4b4c50901f34df5171181c
+      # An earlier build, by digest, that an update isn't held to the budget
+      # from, for a change that alters many files once. It stops applying as
+      # soon as dev moves on. Empty: the last one was the first re-chunked
+      # dev, 44.20261029 (ADR 0007, Follow-up).
+      DOWNLOAD_BUDGET_EXEMPT: ""
     steps:
       - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -240,7 +239,7 @@ jobs:
           budget=$DOWNLOAD_BUDGET_MIB previous=
           # The previous manifest's bytes give its digest.
           [[ ! -f $dir/manifest.json ]] || previous=sha256:$(sha256sum <"$dir/manifest.json" | cut -d' ' -f1)
-          if [[ $previous == "$DOWNLOAD_BUDGET_EXEMPT" ]]; then
+          if [[ -n $DOWNLOAD_BUDGET_EXEMPT && $previous == "$DOWNLOAD_BUDGET_EXEMPT" ]]; then
             printf 'The update from %s is not held to the budget (DOWNLOAD_BUDGET_EXEMPT).\n\n' \
               "$DOWNLOAD_BUDGET_EXEMPT" | tee -a "$GITHUB_STEP_SUMMARY"
             budget=1000000

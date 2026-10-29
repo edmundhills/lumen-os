@@ -22,20 +22,14 @@ Claude reads CLAUDE.md automatically, does that step (plus any ➕ steps right a
 
 ## Current step
 
-**1.6** 👤 cosign signing and the SBOM, with ➕ **1.7**, the trust policy. Both are written, tested in WSL with the real public key, and committed but not pushed ([ADR 0008](docs/decisions/0008-image-signing.md)). The key and the `image-signing` environment with its two secrets exist (2026-10-29; ADR 0008's Follow-up).
+**1.8** ⚠️ CI: bootc-image-builder builds the qcow2, and the install ISO is a live ISO built from the image. Read architecture 4.8 and 9.6, ADR 0002, ADR 0008 (installs must record the signed transport) and the 1.4, 1.5a and 1.6 notes below for it first.
 
-1. **Owner:** keep `cosign.key` and `password` from `~/lumen-signing-key/` in WSL safe offline, such as on a USB drive and in a password manager, then delete those two files from WSL (ADR 0008, step 4 of ["How the key is made and kept"](docs/decisions/0008-image-signing.md#how-the-key-is-made-and-kept)).
-2. **Owner:** sign off the commits and push. **Claude:** first check the sign-offs in git.
-3. **Claude:** check main's first signed run. The `sign` job's checks must pass, ghcr.io must have the tags `sha256-<digest>.sig` and `.att`, and `dev` must have moved to the digest. Main's first two tries failed before pushing anything, and each was fixed, as ADRs 0007 and 0008 record in their Follow-ups:
-   - `929376e`: re-chunking from inside the image met the image's own trust policy;
-   - `2a7107c`: syft's full scan was too much for the runner, and the download budget turned out never to have been enforced.
+Left over from 1.6, 1.5c and 1.5b:
 
-   Once `dev` has moved on, remove `DOWNLOAD_BUDGET_EXEMPT` from `build-image.yml`. The build after that is the first held to the budget; if it goes over, find out which files change. Record it in ADR 0008's Follow-up, then tick 1.6 and 1.7. The syft facts in ADR 0008 came from the research's early output (rpm database found, `oci-dir:`, SPDX 2.3, `SYFT_FILE_METADATA_SELECTION=none`, the flags `--source-name` and `--source-version`); that run's "Make the SBOM" step confirms them or shows what to fix.
-
-Two things left over from 1.5c and 1.5b:
-
-- That push's image run is the first build held to the download budget. Record what its update downloads in ADR 0007's Follow-up.
+- **The first build held to the download budget** is main's run for the commit that ticked 1.6 and 1.7 (it compares with `dev` `44.20261029.1`, now that `DOWNLOAD_BUDGET_EXEMPT` is empty). If it goes over 100 MiB, find out which files in the changed layers differ from the previous build's before raising anything, and record it in ADR 0007's Follow-up.
+- **Owner:** keep `cosign.key` and `password` from `~/lumen-signing-key/` in WSL safe offline, such as on a USB drive and in a password manager, then delete those two files from WSL (ADR 0008, step 4 of ["How the key is made and kept"](docs/decisions/0008-image-signing.md#how-the-key-is-made-and-kept)).
 - How the next bump pull request got its checks, on Monday 2026-11-02 or by hand before then. Did GitHub run its `pull_request` checks straight away, hold them for approval, or make none, so that the job started them itself? Record the answer in versions.md, "How the pins move". Its image run is also the first to report the download for a new base.
+- Offered, not decided: skip the hour-long image build for commits that change only documentation (the lint workflow still checks them). Most of 2026-10-29's pushes were docs only.
 
 ## Notes for the next session
 
@@ -145,7 +139,7 @@ Two things left over from 1.5c and 1.5b:
   - GitHub refused the cloud session's push at first (403); the owner installed the Claude GitHub App on the repository, and pushes then worked. The commits' author is Claude (`noreply@anthropic.com`), as the cloud session requires. Before they reach main, the owner signs them off, as for every Claude commit. CONTRIBUTING.md wants the sign-off to match the author, so make yourself the author at the same time: `git rebase --exec 'git commit --amend --no-edit --reset-author --signoff' main`. The `Co-Authored-By:` trailers stay.
   - Checked in the cloud session, with Ubuntu 24.04's Podman 4.9.3 and skopeo 1.13.3 (the runners' versions): Podman records the base image annotations, and a `user.component` attribute set in a `RUN` step survives into the layer. The linters ran there with locally installed tools, and in CI's lint container (lint runs #11 to #13 green).
 - 1.5c's leftovers, checked 2026-10-29: the owner merged the branch, rebased with their sign-off, and main's image run for `02d400d` was green in 52 min. `dev` (`dev-44.20261029`, `sha256:101c706b…181c`) has 257 layers whose annotations name their packages, and its update from `dev-44.20261028.3` downloads 3,183.6 MiB once (ADR 0007's Follow-up).
-- 1.6 and 1.7 prepared 2026-10-29 ([ADR 0008](docs/decisions/0008-image-signing.md) has the facts and sources):
+- 1.6 and 1.7 done 2026-10-29 ([ADR 0008](docs/decisions/0008-image-signing.md) has the facts and sources). The first signed build is `44.20261029.1` (`sha256:f3b2f05d…54de3`), from main's run for `5ca3439`. The owner asked Claude to make the key; Claude made it in WSL with no network, and the owner set up the `image-signing` environment and its two secrets. Main's first two runs failed before pushing anything and were fixed (ADR 0007 and 0008, Follow-ups). The facts:
   - **What CI does:** every build makes an SPDX SBOM with syft 1.55.0 from the re-chunked layout, packages only, and `image/sbom.py` checks that it lists exactly the image's RPMs. Builds of main push `dev-<version>` and `sha-<commit>`. A separate `sign` job then opens the environment `image-signing` and runs these checks and steps in order:
     - checks that the image's trust policy refuses the unsigned digest;
     - signs it and attaches the SBOM with `image/sign.sh` (cosign 3.1.4);
@@ -191,8 +185,8 @@ Two things left over from 1.5c and 1.5b:
 - [x] **1.5a** 👤 CI: build the default image on every push and pull request (free runner disk space first; Kinoite images are large) and push builds of main to ghcr.io; os-release and the image labels (architecture 9.7). You make the `lumen` package on ghcr.io public after its first push. *Done when:* CI is green on main and `ghcr.io/edmundhills/lumen:dev` can be pulled without logging in.
 - [x] **1.5b** Bump the Kinoite pin at least every two weeks (Renovate or a scheduled job that opens a pull request) and copy each pinned base to ghcr.io, so older commits stay buildable (ADR 0004). Must land before the pinned build expires from quay.io (about 2026-11-24), and handle Fedora 45 (due 2026-11-03).
 - [x] **1.5c** Re-chunk the image before the push (architecture 9.3, risk 14): pick the tool, check that bootc's labels survive it, and measure each build's download from the previous `dev` build against a budget.
-- [ ] **1.6** 👤 cosign signing (you add the key as a repo secret) and SBOM with syft.
-- [ ] ➕ **1.7** `/etc/containers/policy.json` and sigstore config so the system accepts only our signed images.
+- [x] **1.6** 👤 cosign signing (you add the key as a repo secret) and SBOM with syft.
+- [x] ➕ **1.7** `/etc/containers/policy.json` and sigstore config so the system accepts only our signed images.
 - [ ] **1.8** ⚠️ CI: bootc-image-builder builds the qcow2; build the install ISO as a live ISO from our image (try Titanoboa first) that runs a live session and starts Anaconda WebUI (ADR 0002). Record the tool in an ADR. If no live ISO works, fall back to `anaconda-iso` with a partial kickstart and tell the owner.
 - [ ] **1.9** `tests/boot`: QEMU/KVM boot test in CI; the login screen within 60 s (`display-manager.service`, Plasma Login Manager, active and its greeter running; ADR 0005); `systemctl --failed` empty. Also boot once with Secure Boot (OVMF) and record whether kernel lockdown is on and hibernation is offered (`/sys/kernel/security/lockdown`, `/sys/power/state`) in ADR 0001's follow-up.
 - [ ] **1.10** Variant `lumen-gaming`: Steam, Gamescope session, MangoHud, controller udev rules, as a layer that 1.12 also puts on `lumen-nvidia`.
