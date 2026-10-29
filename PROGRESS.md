@@ -26,7 +26,11 @@ Claude reads CLAUDE.md automatically, does that step (plus any ➕ steps right a
 
 1. **Owner:** keep `cosign.key` and `password` from `~/lumen-signing-key/` in WSL safe offline, such as on a USB drive and in a password manager, then delete those two files from WSL (ADR 0008, step 4 of ["How the key is made and kept"](docs/decisions/0008-image-signing.md#how-the-key-is-made-and-kept)).
 2. **Owner:** sign off the commits and push. **Claude:** first check the sign-offs in git.
-3. **Claude:** check main's first signed run. The `sign` job's checks must pass, ghcr.io must have the tags `sha256-<digest>.sig` and `.att`, and `dev` must have moved to the digest. Record it in ADR 0008's Follow-up, then tick 1.6 and 1.7. The syft facts in ADR 0008 came from the research's early output (rpm database found, `oci-dir:`, SPDX 2.3, `SYFT_FILE_METADATA_SELECTION=none`, the flags `--source-name` and `--source-version`); that run's "Make the SBOM" step confirms them or shows what to fix.
+3. **Claude:** check main's first signed run. The `sign` job's checks must pass, ghcr.io must have the tags `sha256-<digest>.sig` and `.att`, and `dev` must have moved to the digest. Main's first two tries failed before pushing anything, and each was fixed, as ADRs 0007 and 0008 record in their Follow-ups:
+   - `929376e`: re-chunking from inside the image met the image's own trust policy;
+   - `2a7107c`: syft's full scan was too much for the runner, and the download budget turned out never to have been enforced.
+
+   Once `dev` has moved on, remove `DOWNLOAD_BUDGET_EXEMPT` from `build-image.yml`. The build after that is the first held to the budget; if it goes over, find out which files change. Record it in ADR 0008's Follow-up, then tick 1.6 and 1.7. The syft facts in ADR 0008 came from the research's early output (rpm database found, `oci-dir:`, SPDX 2.3, `SYFT_FILE_METADATA_SELECTION=none`, the flags `--source-name` and `--source-version`); that run's "Make the SBOM" step confirms them or shows what to fix.
 
 Two things left over from 1.5c and 1.5b:
 
