@@ -22,14 +22,12 @@ Claude reads CLAUDE.md automatically, does that step (plus any ➕ steps right a
 
 ## Current step
 
-**1.6** 👤 cosign signing and the SBOM, with ➕ **1.7**, the trust policy ([ADR 0008](docs/decisions/0008-image-signing.md)). Main's first signed build, image run #18 for `5ca3439`, passed every check of the `sign` job. `dev` is now `dev-44.20261029.1`, signed, with its SBOM attached, and the SBOM's syft facts are confirmed (ADR 0008's Follow-up, 2026-10-29).
+**1.8** ⚠️ CI: bootc-image-builder builds the qcow2, and the install ISO is a live ISO built from the image (the step's full text is in Phase 1 below; ADR 0002). Before starting, read the notes marked **1.8** under 1.4 (Anaconda's install profile), 1.5a (bootc-image-builder and `ID=lumen`) and 1.6 (installs must record the signed transport).
 
-1. **Owner:** keep `cosign.key` and `password` from `~/lumen-signing-key/` in WSL safe offline, such as on a USB drive and in a password manager, then delete those two files from WSL (ADR 0008, step 4 of ["How the key is made and kept"](docs/decisions/0008-image-signing.md#how-the-key-is-made-and-kept)).
-2. **Claude:** `DOWNLOAD_BUDGET_EXEMPT` is gone from `build-image.yml` (commit `1cebb27`, on the cloud session's branch `ccr-aa9986c4-vir9s7`). That branch's image run is the first build held to the 100 MiB budget. Read its "Measure the download". Within the budget: record the size in ADR 0007's Follow-up, then tick 1.6 and 1.7. Over it: find out which files change, by comparing the changed layers' file lists with `dev`'s.
-3. **Owner:** sign off the branch's commits and merge them into main, as for 1.5c (CONTRIBUTING.md).
+First, left over from 1.6 and 1.5b:
 
-One thing left over from 1.5b:
-
+- **Owner:** keep `cosign.key` and `password` from `~/lumen-signing-key/` in WSL safe offline, such as on a USB drive and in a password manager, then delete those two files from WSL (ADR 0008, step 4 of ["How the key is made and kept"](docs/decisions/0008-image-signing.md#how-the-key-is-made-and-kept)). Still open on 2026-10-29: without a backup, a lost key leaves every installed system unable to check its updates.
+- **Owner:** sign off the commits on the branch `ccr-aa9986c4-vir9s7` and merge them into main, as for 1.5c (the command is in the 1.5c note). Nothing waits on it: main's `DOWNLOAD_BUDGET_EXEMPT` names a build that is no longer `dev`, so main is already held to the budget.
 - How the next bump pull request got its checks, on Monday 2026-11-02 or by hand before then. Did GitHub run its `pull_request` checks straight away, hold them for approval, or make none, so that the job started them itself? Record the answer in versions.md, "How the pins move". Its image run is also the first to report the download for a new base.
 
 ## Notes for the next session
@@ -156,6 +154,12 @@ One thing left over from 1.5b:
   - **For 10.1:** deleting old `dev` builds must delete their `sha256-<digest>.sig` and `.att` tags too. A signature holds for a repository, not a tag, so decide whether channels need their own identity.
   - Since 2026-10-01, GitHub deletes workflow runs, and their summaries, after the retention period, at most 90 days for a public repository. The tags on ghcr.io keep the digests.
   - The research workflow's agents left test files in WSL's `/tmp` (`cosigntest`, `cosignsrc`, `cosignres`, `lr`, `cs`, `dl`) and the images `ghcr.io/sigstore/cosign/cosign:v3.1.4`, `registry:3` and `quay.io/libpod/alpine` in rootless Podman. None of it is needed.
+- 1.6 and 1.7 done 2026-10-29, checked in a claude.ai cloud session, with two commits on the branch `ccr-aa9986c4-vir9s7` (`1cebb27`, `4c16994`, plus the one with this note).
+  - The owner signed off and pushed the commits up to `5ca3439`. Main's image run #18 was green in 44 min. Its `sign` job ran every check in the order above, in 48 s. `dev` is now `dev-44.20261029.1` (`sha256:f3b2f05d…4de3`), and ghcr.io has its `.sig` and `.att` tags. The signature also verifies with openssl and `lumen.pub` (ADR 0008's Follow-up).
+  - The SBOM lists the image's 1,787 RPM packages as SPDX 2.3, 5.9 MB. Attached as an attestation, it is 8.0 MB.
+  - The download budget: the update from the exempt build was 315.5 MiB. With `DOWNLOAD_BUDGET_EXEMPT` removed, the branch's image run #19 was the first build held to the budget, and its update from `dev` is 40.8 MiB in 3 layers (ADR 0007's Follow-up).
+  - From a cloud session: GitHub's log and artifact storage (`*.blob.core.windows.net`) and ghcr.io's blob host (`pkg-containers.githubusercontent.com`) are blocked. The GitHub tools' job logs (with `return_content`), ghcr.io's anonymous token and manifests, and release downloads from github.com work. There is no Podman, so the lint tools were installed at the lint container's versions: lint 12 of 12, the self-test passes, and 133 unit tests pass, with 12 skipped that need the lint container. CI's lint run #19 ran them all, green.
+  - Still for the owner to confirm, from the 1.6 note above: "only accepts our signed images" is read as "Lumen's images only with Lumen's signature".
 
 ---
 
@@ -186,8 +190,8 @@ One thing left over from 1.5b:
 - [x] **1.5a** 👤 CI: build the default image on every push and pull request (free runner disk space first; Kinoite images are large) and push builds of main to ghcr.io; os-release and the image labels (architecture 9.7). You make the `lumen` package on ghcr.io public after its first push. *Done when:* CI is green on main and `ghcr.io/edmundhills/lumen:dev` can be pulled without logging in.
 - [x] **1.5b** Bump the Kinoite pin at least every two weeks (Renovate or a scheduled job that opens a pull request) and copy each pinned base to ghcr.io, so older commits stay buildable (ADR 0004). Must land before the pinned build expires from quay.io (about 2026-11-24), and handle Fedora 45 (due 2026-11-03).
 - [x] **1.5c** Re-chunk the image before the push (architecture 9.3, risk 14): pick the tool, check that bootc's labels survive it, and measure each build's download from the previous `dev` build against a budget.
-- [ ] **1.6** 👤 cosign signing (you add the key as a repo secret) and SBOM with syft.
-- [ ] ➕ **1.7** `/etc/containers/policy.json` and sigstore config so the system accepts only our signed images.
+- [x] **1.6** 👤 cosign signing (you add the key as a repo secret) and SBOM with syft.
+- [x] ➕ **1.7** `/etc/containers/policy.json` and sigstore config so the system accepts only our signed images.
 - [ ] **1.8** ⚠️ CI: bootc-image-builder builds the qcow2; build the install ISO as a live ISO from our image (try Titanoboa first) that runs a live session and starts Anaconda WebUI (ADR 0002). Record the tool in an ADR. If no live ISO works, fall back to `anaconda-iso` with a partial kickstart and tell the owner.
 - [ ] **1.9** `tests/boot`: QEMU/KVM boot test in CI; the login screen within 60 s (`display-manager.service`, Plasma Login Manager, active and its greeter running; ADR 0005); `systemctl --failed` empty. Also boot once with Secure Boot (OVMF) and record whether kernel lockdown is on and hibernation is offered (`/sys/kernel/security/lockdown`, `/sys/power/state`) in ADR 0001's follow-up.
 - [ ] **1.10** Variant `lumen-gaming`: Steam, Gamescope session, MangoHud, controller udev rules, as a layer that 1.12 also puts on `lumen-nvidia`.
