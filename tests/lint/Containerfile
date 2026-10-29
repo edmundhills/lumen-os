@@ -15,6 +15,9 @@
 FROM registry.fedoraproject.org/fedora:44@sha256:a329903517f5dbd709721cba0cb1b6d0cc05f01b9e5feb59c2b6bbe9eb083ade
 
 RUN dnf install -y --setopt=install_weak_deps=False \
+        # A container registry, which image/test_signatures.py runs as a
+        # stand-in for ghcr.io.
+        docker-distribution \
         git-core \
         just \
         markdownlint-cli2 \
@@ -24,10 +27,14 @@ RUN dnf install -y --setopt=install_weak_deps=False \
         # markdownlint uses to measure table cells that aren't plain ASCII.
         # The 24 is Node's major version: it must match the Node dnf installs.
         nodejs24-full-i18n \
+        openssl \
         python3 \
         reuse \
         ShellCheck \
         shfmt \
+        # The tool bootc uses to pull images, with the same containers/image
+        # library, for image/test_signatures.py.
+        skopeo \
         yamllint \
     && dnf clean all \
     # The checkout is mounted from the host, so its owner may differ from the
@@ -46,3 +53,16 @@ RUN curl --fail --silent --show-error --location --output /tmp/actionlint.tar.gz
     && printf '%s  %s\n' "$ACTIONLINT_SHA256" /tmp/actionlint.tar.gz | sha256sum --check --strict \
     && tar -xzf /tmp/actionlint.tar.gz -C /usr/local/bin actionlint \
     && rm /tmp/actionlint.tar.gz
+
+# cosign signs Lumen's images in CI (image/sign.sh), and image/test_signatures.py
+# signs test images with it the same way. Fedora doesn't package it, so this is
+# the x86_64 binary from its release page, checked against the checksum
+# published there (cosign_checksums.txt). The image workflow installs cosign
+# from these two lines, so CI signs with the version the tests use. It is
+# pinned (2026-10-29); Renovate will bump it from step 8.2.
+ARG COSIGN_VERSION=3.1.4
+ARG COSIGN_SHA256=424e2c97d0b45fd7a6b608a87f090f35633f4c23ece5f092d48bba11aaf4bbfa
+RUN curl --fail --silent --show-error --location --output /usr/local/bin/cosign \
+        "https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/cosign-linux-amd64" \
+    && printf '%s  %s\n' "$COSIGN_SHA256" /usr/local/bin/cosign | sha256sum --check --strict \
+    && chmod 0755 /usr/local/bin/cosign

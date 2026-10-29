@@ -12,7 +12,12 @@ lint_image := "localhost/lumen-lint"
 # The lint and test tools run in a container built from tests/lint/Containerfile,
 # so they give the same result in WSL and in CI. The container sees the
 # checkout read-only and has no network.
-lint_container := "podman run --rm --network=none --volume " + quote(justfile_directory() + ":/src:ro,z") + " --workdir /src " + lint_image
+lint_run := "podman run --rm --network=none --volume " + quote(justfile_directory() + ":/src:ro,z") + " --workdir /src"
+lint_container := lint_run + " " + lint_image
+
+# For the unit tests, ghcr.io is the container itself: image/test_signatures.py
+# runs a registry there that stands in for it.
+test_container := lint_run + " --add-host=ghcr.io:127.0.0.1 --env=LUMEN_SIGNATURE_TEST=1 " + lint_image
 
 # List the recipes
 default:
@@ -25,7 +30,7 @@ lint: _lint-image
 # Run the tests that work on this machine
 test: _lint-image
     {{ lint_container }} bash tests/lint/selftest.sh
-    {{ lint_container }} python3 -m unittest discover --start-directory image
+    {{ test_container }} python3 -m unittest discover --start-directory image
 
 # Build the OS image with Podman. The first build downloads Kinoite (2.9 GiB)
 build-image:
