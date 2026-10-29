@@ -20,12 +20,16 @@ Claude reads CLAUDE.md automatically, does that step (plus any ➕ steps right a
 
 ## Current step
 
-**1.6** 👤 cosign signing (you add the key as a repo secret) and SBOM with syft. Then ➕ **1.7**.
+**1.6** 👤 cosign signing and the SBOM, with ➕ **1.7**, the trust policy. Both are written and tested in WSL, and committed but not pushed ([ADR 0008](docs/decisions/0008-image-signing.md)). They wait for the owner's key:
 
-First, three things left over from 1.5c and 1.5b:
+0. **Claude, first:** the session hit its usage limit before re-running two checks after the last edits. `sign.sh` gained `verify`, `test_signatures.py` gained two tests, and `test_trust.py` no longer skips the real key. Put a stand-in key at `image/overlay/usr/share/pki/containers/lumen.pub` (don't commit it), then run `just test` and `just build-image` in WSL; the build runs the two new image checks. A build was started but its result wasn't read. Also unchecked: the syft facts in ADR 0008 came from the research's early output (rpm database found, `oci-dir:`, SPDX 2.3, `SYFT_FILE_METADATA_SELECTION=none`, and the flags `--source-name`/`--source-version`). The first CI run will show them.
+1. **Owner:** make the signing key and the `image-signing` environment as ADR 0008, ["How the key is made and kept"](docs/decisions/0008-image-signing.md#how-the-key-is-made-and-kept), says: steps 1, 2 and 4. Leave `cosign.pub` in `~/lumen-signing-key/` in WSL, and tell Claude. The private key and its password never go to Claude.
+2. **Claude:** copy `cosign.pub` to `image/overlay/usr/share/pki/containers/lumen.pub` and commit it, then run `just lint` and `just test`. Until that file exists, both fail on purpose: a policy that names a missing key would refuse every update.
+3. **Owner:** sign off the commits and push. **Claude:** check main's first signed run. The `sign` job's checks must pass, ghcr.io must have the tags `sha256-<digest>.sig` and `.att`, and `dev` must have moved to the digest. Record it in ADR 0008's Follow-up, then tick 1.6 and 1.7.
 
-- Whether the owner merged the branch `claude/next-step-zfy63s` (step 1.5c) into main. Until then, main builds as before.
-- After it is merged: the first `dev` build on main is the first to push a re-chunked image, with `skopeo copy` from the OCI layout, which no run has tried yet. Check that the push worked and that `ghcr.io/edmundhills/lumen:dev` has 257 layers whose annotations name their packages. That build downloads in full once. The next build on main is the first one held to the budget: record what its update downloads in ADR 0007's Follow-up.
+Two things left over from 1.5c and 1.5b:
+
+- That push's image run is the first build held to the download budget. Record what its update downloads in ADR 0007's Follow-up.
 - How the next bump pull request got its checks, on Monday 2026-11-02 or by hand before then. Did GitHub run its `pull_request` checks straight away, hold them for approval, or make none, so that the job started them itself? Record the answer in versions.md, "How the pins move". Its image run is also the first to report the download for a new base.
 
 ## Notes for the next session
@@ -135,6 +139,23 @@ First, three things left over from 1.5c and 1.5b:
   - Possible later saving: reuse the `base` stage between CI runs when neither the pin nor `packages.toml` changed. That would keep the rpm database the same and cut a rebuild's download from 41 MiB to about 8. Not scheduled: it needs a cache that pull requests can read and only main writes.
   - GitHub refused the cloud session's push at first (403); the owner installed the Claude GitHub App on the repository, and pushes then worked. The commits' author is Claude (`noreply@anthropic.com`), as the cloud session requires. Before they reach main, the owner signs them off, as for every Claude commit. CONTRIBUTING.md wants the sign-off to match the author, so make yourself the author at the same time: `git rebase --exec 'git commit --amend --no-edit --reset-author --signoff' main`. The `Co-Authored-By:` trailers stay.
   - Checked in the cloud session, with Ubuntu 24.04's Podman 4.9.3 and skopeo 1.13.3 (the runners' versions): Podman records the base image annotations, and a `user.component` attribute set in a `RUN` step survives into the layer. The linters ran there with locally installed tools, and in CI's lint container (lint runs #11 to #13 green).
+- 1.5c's leftovers, checked 2026-10-29: the owner merged the branch, rebased with their sign-off, and main's image run for `02d400d` was green in 52 min. `dev` (`dev-44.20261029`, `sha256:101c706b…181c`) has 257 layers whose annotations name their packages, and its update from `dev-44.20261028.3` downloads 3,183.6 MiB once (ADR 0007's Follow-up).
+- 1.6 and 1.7 prepared 2026-10-29 ([ADR 0008](docs/decisions/0008-image-signing.md) has the facts and sources):
+  - **What CI does:** every build makes an SPDX SBOM with syft 1.55.0 from the re-chunked layout, packages only, and `image/sbom.py` checks that it lists exactly the image's RPMs. Builds of main push `dev-<version>` and `sha-<commit>`. A separate `sign` job then opens the environment `image-signing` and runs these checks and steps in order:
+    - checks that the image's trust policy refuses the unsigned digest;
+    - signs it and attaches the SBOM with `image/sign.sh` (cosign 3.1.4);
+    - checks both with the image's public key, and that the policy now accepts the image;
+    - moves `dev`.
+  - **Signature format:** cosign 3 writes a format that Fedora 44's containers/image, and so bootc, can't read. `sign.sh` therefore passes `--new-bundle-format=false --use-signing-config=false --tlog-upload=false`, as Universal Blue does, and nothing goes to Sigstore's public log. cosign must stay on 3.x (versions.md).
+  - **The trust policy:** `/etc/containers/policy.json` rejects by default. Lumen's four repositories need Lumen's signature (`matchRepository`, key `/usr/share/pki/containers/lumen.pub`). Other registries and local transports are open, as on Fedora, so Toolbx, distrobox, `bootc install` and the installers keep working. `registries.d/lumen.yaml` points containers/image at the `.sig` tags. `20-lumen.toml` adds `enforce-container-sigpolicy = true`, so installs record `ostree-image-signed`.
+  - **Owner to confirm:** the spec's "only accepts our signed images" is read as "Lumen's images only with Lumen's signature". Read for every image, it would break Toolbx and distrobox. The spec is unchanged; say if it should spell this out.
+  - **Tests:** `image/trust.py` (lint, `check-image.sh`, 25 unit tests); `check-image.sh` also checks the install setting; `image/sbom.py` (10 unit tests); `image/test_signatures.py` (10 tests). That last one runs a registry inside the lint container that answers for ghcr.io (the justfile maps the name), signs with `sign.sh` and the pinned cosign, and pulls with Fedora 44's skopeo and the overlay's settings. The lint container gained `docker-distribution`, `openssl`, `skopeo` and cosign, by checksum. In WSL with a stand-in key: `just lint` 12 of 12, `just test` passes (127 unit tests). The runner's skopeo 1.13.3 parses the policy and refuses today's unsigned `dev` with the message the `sign` job looks for.
+  - **For 1.8:** Anaconda's `ostreecontainer` ignores the install setting and records the unverified transport. Use Anaconda's `bootc` kickstart command, or `%post bootc switch --mutate-in-place --enforce-container-sigpolicy --transport registry …` as Bazzite does. Whether bootc-image-builder reads the image's install config is inferred from bootc's source, not tested.
+  - **For Phase 5:** `lumen-updated` must pass `--enforce-container-sigpolicy` to `bootc switch` (architecture 4.4). A Health check should notice an edited `/etc/containers/policy.json`, which bootc's `/etc` merge then stops updating, or a `/root/.config/containers/policy.json`, which replaces it.
+  - **For 8.2:** whether to keep a second, offline key in `keyPaths` from the start, and whether CI should check Fedora's own cosign signature on each new Kinoite base before the base workflow pins it.
+  - **For 9.1:** deleting old `dev` builds must delete their `sha256-<digest>.sig` and `.att` tags too. A signature holds for a repository, not a tag, so decide whether channels need their own identity.
+  - Since 2026-10-01, GitHub deletes workflow runs, and their summaries, after the retention period, at most 90 days for a public repository. The tags on ghcr.io keep the digests.
+  - The research workflow's agents left test files in WSL's `/tmp` (`cosigntest`, `cosignsrc`, `cosignres`, `lr`, `cs`, `dl`) and the images `ghcr.io/sigstore/cosign/cosign:v3.1.4`, `registry:3` and `quay.io/libpod/alpine` in rootless Podman. None of it is needed.
 
 ---
 

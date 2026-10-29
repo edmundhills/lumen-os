@@ -49,6 +49,7 @@ Step 1.2 read the versions again on 2026-10-27: Fedora 45 was still in final fre
 - Fedora's mirrors keep only the release-day build and the newest update of each package, so the `-devel` packages for an older pin may have to come from Koji ([architecture 9.4](architecture.md#94-matching-the-base-image-exactly)).
 - CI re-chunks the image with the base's own rpm-ostree ([ADR 0007](decisions/0007-rechunking.md)), which needs version 2026.2 or later for `--previous-build`. Kinoite 44 has 2026.3.
 - Other pinned versions live next to the code that uses them: the lint container's base and tools in `tests/lint/Containerfile`, and the CI actions and tools in `.github/workflows/`.
+- **cosign must stay on version 3** (3.1.4 since step 1.6, pinned in `tests/lint/Containerfile`, which CI's `sign` job reads too). Fedora 44's containers/image, and so bootc, reads only cosign's original signature format, which cosign 3 writes only with flags it has marked deprecated, and which cosign 4 will drop. Move on when containers/image reads Sigstore bundles ([ADR 0008](decisions/0008-image-signing.md)). syft (1.55.0) is pinned in `.github/workflows/build-image.yml`.
 
 ## How the pins move
 

@@ -116,7 +116,7 @@ Some stock parts compete with a Lumen owner, so the image turns them off:
 
 How the image does it (step 1.3): Discover's packages are removed in `image/packages.toml`; the three timers are masked in the Containerfile; the stock layout gives way to Lumen's global theme `org.lumen.desktop`, made the default in `/etc/xdg/kdeglobals`. Its layout script starts new users with an interim 32 px top bar of stock widgets (app menu, open windows, system tray, clock) where lumen-shell's top bar will go, so Wi-Fi, sound and notifications work until lumen-shell replaces it at step 4.2 (the owner's choice over a bare desktop, 2026-10-27). The theme otherwise copies Fedora's settings until step 2.11 replaces it.
 
-Talks to: the image registry (`ghcr.io`) through bootc, with signatures checked against `/etc/containers/policy.json` and the sigstore settings in `/etc/containers/registries.d/` (step 1.7).
+Talks to: the image registry (`ghcr.io`) through bootc, with signatures checked against `/etc/containers/policy.json`, the sigstore settings in `/etc/containers/registries.d/lumen.yaml` and the public key `/usr/share/pki/containers/lumen.pub`. Images under Lumen's names need Lumen's signature; other images, such as Toolbx's, are accepted as on Fedora ([ADR 0008](decisions/0008-image-signing.md)).
 
 ### 4.2 lumen-glass (compositor effect)
 
@@ -223,6 +223,7 @@ Owns OS image updates (bootc), Flatpaks in the system installation, firmware, co
   - Signals: `UpdateReady(version, needsRestart)`, `BootHealthResult(ok, details)`.
 - **History:** bootc keeps only the booted, staged and rollback deployments, but Settings > Updates > History lists every installed version. So lumen-updated keeps its own log in `/var/lib/lumen/updates/`.
 - **Compatibility database refresh.** lumen-updated downloads the newer database, checks its signature, and only then replaces `/var/lib/lumen/compat/windows-apps.json`. Readers trust that file because only lumen-updated (root) can write it, so they never verify, download or look anything up online. Where the file is published is decided at step 7.3.
+- **Signatures:** bootc checks every image it pulls against the trust policy. `SwitchTo` and `SwitchVariant` must pass `bootc switch --enforce-container-sigpolicy`, or bootc records the image as unverified and stops refusing a policy that accepts anything ([ADR 0008](decisions/0008-image-signing.md)).
 - **Going back to an older version** needs CI to keep immutable dated tags (for example `stable-44.20261027`, [section 9.7](#97-versions-tags-and-keys)) next to the moving `stable` tag (release train, step 9.1). After a user goes back, the version they left is "held" so the next check doesn't offer it straight away; the hold lifts when a newer version appears.
 - **Low priority:** downloads run in a transient unit with idle CPU and I/O scheduling.
 - **Post-boot health check** (ADR 0002): within 2 minutes of boot and without waiting for a login, it checks that the login screen is up (`display-manager.service`, which is Plasma Login Manager, is active and its greeter is running), NetworkManager is running and no critical units failed. Two failed boots in a row fall back to the previous deployment; try greenboot for this before writing our own.
@@ -324,7 +325,7 @@ There is no Lumen app daemon. Flatpak's system helper already is the service, so
 
 The install media is a live ISO built from the Lumen image (ADR 0002; try Universal Blue's Titanoboa first, at step 1.8). It boots into a Lumen live session, which runs the hardware report through lumen-hwd and then starts Anaconda WebUI with Lumen's kickstart and theme from `installer/`. How the live ISO hands the image to Anaconda is worked out at step 1.8.
 
-- After install, the system must track `ghcr.io/<org>/lumen:<channel>` and enforce the signature policy from its first update.
+- After install, the system must track `ghcr.io/<org>/lumen:<channel>` and enforce the signature policy from its first update. The image's `bootc install` settings ask for that (`enforce-container-sigpolicy`), which covers `bootc install`, bootc-image-builder and Anaconda's `bootc` kickstart command. Anaconda's `ostreecontainer` command ignores it, so if step 1.8 uses that command, the kickstart's `%post` switches to the signed transport ([ADR 0008](decisions/0008-image-signing.md)).
 - "Install alongside Windows" uses free space made from inside Windows and never resizes a BitLocker volume (spec).
 - The live session must not run Welcome; that belongs to the installed system's first boot.
 - Fallback, if no live ISO works by Phase 6: bootc-image-builder's `anaconda-iso` with a partial kickstart, so the user picks the disk and mode. bootc-image-builder adds the `ostreecontainer` kickstart command that writes the image. This drops the live hardware report, so it needs the owner's approval first.
@@ -598,13 +599,15 @@ The dated tags never move. "Go back to this version" (section 4.5) switches to o
 
 | Key | Signs | Kept in | Step |
 | --- | --- | --- | --- |
-| Image key (cosign) | Image digests and their SBOM attestations | GitHub secret, `main` only. The public key ships in the image for `/etc/containers/policy.json` | 1.6, 1.7 |
+| Image key (cosign) | Image digests and their SBOM attestations | Secrets of the GitHub environment `image-signing`, which only `main` may use, with an offline backup. The public key ships in the image as `/usr/share/pki/containers/lumen.pub`, which `/etc/containers/policy.json` names ([ADR 0008](decisions/0008-image-signing.md)) | 1.6, 1.7 |
 | Release key | `SHA256SUMS` for the ISO and the other release files; the release index Lumen Setup reads | GitHub secret | 9.5 |
 | Compatibility database key | The published database file | GitHub secret. The public key ships in the image | 7.3 |
 | Module signing key | NVIDIA kernel modules | GitHub secret. The public certificate ships in the image; users enrol it as a MOK | 1.11, 1.12 |
 | Windows code-signing certificate | Lumen Setup for Windows | Provided by the owner, kept as a GitHub secret | 7.9 |
 
 Every pushed image gets an SPDX SBOM from syft, attached to the image as a signed attestation and published with each release (step 1.6). The image lint's package diff compares it with the last stable's.
+
+The signatures are in the form containers/image reads, under the tag `sha256-<digest>.sig` next to the image, and the SBOM attestation under `sha256-<digest>.att`. Neither goes to Sigstore's public log ([ADR 0008](decisions/0008-image-signing.md)).
 
 ### 9.8 CI and the release train
 
@@ -625,7 +628,7 @@ A red build of `main` is never signed or pushed. Promotion only moves tags to te
 | Workflow | Runs on | Does | Step |
 | --- | --- | --- | --- |
 | `lint` | Every push and pull request | Formatters and linters; schema checks for the tokens, the compatibility database and the hardware database | 0.6 |
-| `image` | Every push and pull request | Builds `lumen` and the variants, re-chunks them, and runs the unit, image lint, boot, session, glass and accessibility tests. Measures what an update from `dev` downloads, and fails over the budget for a build on the same base ([ADR 0007](decisions/0007-rechunking.md)). On `main`, when green: signs, attaches the SBOM and pushes `dev`. The build is in `build-image.yml`, which `image.yml` calls from two jobs, so only the one for `main` can write to ghcr.io | 1.5, 1.9 |
+| `image` | Every push and pull request | Builds `lumen` and the variants, re-chunks them, and runs the unit, image lint, boot, session, glass and accessibility tests. Measures what an update from `dev` downloads, and fails over the budget for a build on the same base ([ADR 0007](decisions/0007-rechunking.md)). Makes the SBOM. On `main`, when green: pushes the image, and a job of its own signs it with the key, attaches the SBOM, checks both with the key and trust policy the image ships, and only then moves `dev` ([ADR 0008](decisions/0008-image-signing.md)). The build is in `build-image.yml`, which `image.yml` calls from two jobs, so only the one for `main` can write to ghcr.io and gets the key | 1.5, 1.6, 1.9 |
 | `promote` | Weekly for beta, every 2 weeks for stable, or on demand | Runs the update test on the candidate, moves the channel tag to its digest, and builds the ISO and qcow2 for the release | 9.1, 9.2 |
 | `compat` | Nightly | The Windows compatibility test, plus (from Phase 7) the ProtonDB and AreWeAntiCheatYet imports; opens a pull request with the results | 1.16, 7.2 |
 | `windows-setup` | Changes to `windows-setup/`, `hardware/` or the hardware-matching crate; releases | Builds Lumen Setup for Windows on a Windows runner; signs it for releases | 7.9 |
