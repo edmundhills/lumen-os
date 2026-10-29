@@ -22,19 +22,14 @@ Claude reads CLAUDE.md automatically, does that step (plus any ➕ steps right a
 
 ## Current step
 
-**1.6** 👤 cosign signing and the SBOM, with ➕ **1.7**, the trust policy. Both are written, tested in WSL with the real public key, and committed but not pushed ([ADR 0008](docs/decisions/0008-image-signing.md)). The key and the `image-signing` environment with its two secrets exist (2026-10-29; ADR 0008's Follow-up).
+**1.6** 👤 cosign signing and the SBOM, with ➕ **1.7**, the trust policy ([ADR 0008](docs/decisions/0008-image-signing.md)). Main's first signed build, image run #18 for `5ca3439`, passed every check of the `sign` job. `dev` is now `dev-44.20261029.1`, signed, with its SBOM attached, and the SBOM's syft facts are confirmed (ADR 0008's Follow-up, 2026-10-29).
 
 1. **Owner:** keep `cosign.key` and `password` from `~/lumen-signing-key/` in WSL safe offline, such as on a USB drive and in a password manager, then delete those two files from WSL (ADR 0008, step 4 of ["How the key is made and kept"](docs/decisions/0008-image-signing.md#how-the-key-is-made-and-kept)).
-2. **Owner:** sign off the commits and push. **Claude:** first check the sign-offs in git.
-3. **Claude:** check main's first signed run. The `sign` job's checks must pass, ghcr.io must have the tags `sha256-<digest>.sig` and `.att`, and `dev` must have moved to the digest. Main's first two tries failed before pushing anything, and each was fixed, as ADRs 0007 and 0008 record in their Follow-ups:
-   - `929376e`: re-chunking from inside the image met the image's own trust policy;
-   - `2a7107c`: syft's full scan was too much for the runner, and the download budget turned out never to have been enforced.
+2. **Claude:** `DOWNLOAD_BUDGET_EXEMPT` is gone from `build-image.yml` (commit `1cebb27`, on the cloud session's branch `ccr-aa9986c4-vir9s7`). That branch's image run is the first build held to the 100 MiB budget. Read its "Measure the download". Within the budget: record the size in ADR 0007's Follow-up, then tick 1.6 and 1.7. Over it: find out which files change, by comparing the changed layers' file lists with `dev`'s.
+3. **Owner:** sign off the branch's commits and merge them into main, as for 1.5c (CONTRIBUTING.md).
 
-   Once `dev` has moved on, remove `DOWNLOAD_BUDGET_EXEMPT` from `build-image.yml`. The build after that is the first held to the budget; if it goes over, find out which files change. Record it in ADR 0008's Follow-up, then tick 1.6 and 1.7. The syft facts in ADR 0008 came from the research's early output (rpm database found, `oci-dir:`, SPDX 2.3, `SYFT_FILE_METADATA_SELECTION=none`, the flags `--source-name` and `--source-version`); that run's "Make the SBOM" step confirms them or shows what to fix.
+One thing left over from 1.5b:
 
-Two things left over from 1.5c and 1.5b:
-
-- That push's image run is the first build held to the download budget. Record what its update downloads in ADR 0007's Follow-up.
 - How the next bump pull request got its checks, on Monday 2026-11-02 or by hand before then. Did GitHub run its `pull_request` checks straight away, hold them for approval, or make none, so that the job started them itself? Record the answer in versions.md, "How the pins move". Its image run is also the first to report the download for a new base.
 
 ## Notes for the next session
