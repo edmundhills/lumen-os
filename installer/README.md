@@ -15,6 +15,6 @@ The install media is a live ISO built from the Lumen image ([ADR 0002](../docs/d
 | `anaconda/lumen.conf` | Anaconda's install profile for Lumen, installed in the live stage's `/etc/anaconda/profile.d/`: Btrfs with zstd compression, and `/home` as a subvolume of its own for snapper's snapshots. Without it, a system whose os-release says `ID=lumen` gets Anaconda's built-in LVM layout. Checked with Anaconda 44.30's own config loader | 1.4 |
 
 - **Ships as:** RPM `lumen-installer`, used only by the image's `live` stage, which makes the install media.
-- **Steps:** 1.8 (the live ISO; the tool that builds it is recorded in an ADR) and 6.10 (the theme and the three choices).
+- **Steps:** 1.8b (the live ISO; the tool that builds it is recorded in an ADR), 1.8c (installing the ISO's copy of the image, so the system checks signatures from the start) and 6.10 (the theme and the three choices).
 
 Spec: [Installer](../docs/spec.md#installer). Architecture: [4.8 Installer](../docs/architecture.md#48-installer), [9.6 Disk images and install media](../docs/architecture.md#96-disk-images-and-install-media). Risks: [5](../docs/risks.md#5-building-the-install-iso-as-a-live-iso-from-a-bootc-image).

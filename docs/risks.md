@@ -142,12 +142,13 @@ Likelihood **Medium**. Impact **High** (no way to install).
 
 **Mitigation**
 
-- Step 1.8 builds it early, before Phase 2 builds on it, and records the tool in an ADR. Titanoboa is pinned by digest and updated through Renovate.
-- The fallback stays ready: bootc-image-builder's `anaconda-iso` with a partial kickstart. Dropping the live hardware report then needs the owner's approval (ADR 0002).
-- From step 1.8 on, CI installs from the ISO in a VM in each install mode, rather than waiting for Phase 6.
+- Steps 1.8b and 1.8c build it early, before Phase 2 builds on it, and record the tool in an ADR. Whichever tool packs the ISO is pinned (Titanoboa has no releases, so by commit; image-builder by release and digest) and moved by Renovate.
+- Since 2026, the live system is the container's own work under the "container-native ISO contract", which both Titanoboa and image-builder's `generic-iso` pack, so the `live` stage doesn't depend on the tool and either can stand in for the other ([ADR 0011](decisions/0011-disk-images.md)).
+- The fallback: `anaconda-iso` with a partial kickstart, which now exists only in bootc-image-builder's deprecated command line, or `generic-iso` with a plain Anaconda environment and no live desktop. Dropping the live hardware report needs the owner's approval either way (ADR 0002).
+- From step 1.8c on, CI installs from the ISO in a VM, and from Phase 6 in each install mode.
 - The download host is chosen at step 10.5 (Q15). Until then CI keeps test ISOs as short-lived workflow artifacts.
 
-**Early warning:** the first build at step 1.8; issues in Universal Blue's ISO repositories.
+**Early warning:** the first ISO build at step 1.8b; issues in Universal Blue's and osbuild's ISO repositories.
 
 **Steps:** 1.8, 1.9, 6.10, 6.12, 10.5.
 

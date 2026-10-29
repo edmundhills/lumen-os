@@ -211,7 +211,7 @@ The OS is a single OCI container image built from a Containerfile, so the whole 
 1. Layer Lumen packages and remove unwanted defaults. Every package built from this repository is built as an RPM in a stage of the same Containerfile, against the stage it ships in, so one commit makes one image. Fedora packages come in through `image/packages.toml`. COPR is only for outside packages that Fedora lacks (ADR 0004).
 1. Copy config overlays from `image/overlay` into the image. Vendor defaults go in `/usr/lib` and `/usr/share` wherever the software reads them there (systemd, polkit, sysctl, udev, XDG data directories). Config that only exists in `/etc` goes in the image's `/etc`, which bootc treats as the default and 3-way merges with local changes on every update. Never create `/usr/etc`: it is a bootc implementation detail and `bootc container lint` rejects it (ADR 0002).
 1. Run `bootc container lint` to catch image mistakes.
-1. Push to `ghcr.io/<org>/lumen:<channel>` signed with cosign; build the qcow2 with `bootc-image-builder` and the live install ISO from the image (see "Installer", ADR 0002).
+1. Push to `ghcr.io/<org>/lumen:<channel>` signed with cosign; build the qcow2 with `bootc-image-builder` (since 2026 part of osbuild's `image-builder`, ADR 0011) and the live install ISO from the image (see "Installer", ADR 0002).
 
 ### Image variants
 
