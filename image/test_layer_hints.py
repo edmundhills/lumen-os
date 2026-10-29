@@ -43,8 +43,14 @@ class LayerHints(unittest.TestCase):
                                       setxattr=self.setxattr)
         return status, err.getvalue()
 
+    def add_build_state(self):
+        for path in ("usr/share/rpm/rpmdb.sqlite", "usr/lib/sysimage/libdnf5/system.toml",
+                     "usr/lib/fontconfig/cache/3830d5c3ddfd5cd38a049b759396e72e-le64.cache-9"):
+            self.add(self.root, path)
+
     def test_marks_os_release_and_the_overlay_files(self):
         self.add(self.root, "usr/lib/os-release")
+        self.add_build_state()
         for path in ("etc/xdg/kdeglobals", "usr/lib/systemd/system/lumen-home-snapshots.service"):
             self.add(self.root, path)
             self.add(self.overlay, path)
@@ -54,6 +60,10 @@ class LayerHints(unittest.TestCase):
         self.assertEqual(status, 0, err)
         self.assertEqual(self.marks, [
             ("usr/lib/os-release", "user.component", b"lumen-os-release"),
+            ("usr/share/rpm/rpmdb.sqlite", "user.component", b"lumen-build-state"),
+            ("usr/lib/sysimage/libdnf5/system.toml", "user.component", b"lumen-build-state"),
+            ("usr/lib/fontconfig/cache/3830d5c3ddfd5cd38a049b759396e72e-le64.cache-9", "user.component",
+             b"lumen-build-state"),
             ("etc/xdg/kdeglobals", "user.component", b"lumen-overlay"),
             ("usr/lib/systemd/system/lumen-home-snapshots.service", "user.component", b"lumen-overlay"),
         ])
@@ -61,6 +71,7 @@ class LayerHints(unittest.TestCase):
     def test_a_missing_file_or_a_link_fails(self):
         self.add(self.root, "usr/lib/os-release.d/lumen")
         self.add(self.root, "usr/lib/os-release", link_to="os-release.d/lumen")
+        self.add_build_state()
         self.add(self.overlay, "etc/xdg/kdeglobals")
         status, err = self.run_main()
         self.assertEqual(status, 1)
