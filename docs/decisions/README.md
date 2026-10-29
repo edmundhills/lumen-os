@@ -19,6 +19,9 @@ Architecture decision records (ADRs). Each one records a decision that changes t
 | [0007](0007-rechunking.md) | Re-chunk the image with rpm-ostree, against a download budget | Accepted |
 | [0008](0008-image-signing.md) | Sign images with a cosign key, attach a syft SBOM, and trust Lumen's images only with that signature | Accepted |
 | [0009](0009-games-blocked-by-anti-cheat.md) | Help with games that anti-cheat blocks: cloud gaming, "Play in Windows", and checked ratings | Accepted |
+| [0010](0010-hardware-phase.md) | A phase of its own for making full use of each device; the old Phases 8 and 9 become 9 and 10 | Accepted |
+
+ADRs 0001 to 0009 use the step numbers of their time. Since ADR 0010, the old Phase 8 is Phase 9 and the old Phase 9 is Phase 10, so their "step 8.2" is now step 9.2, and "step 9.1" is now step 10.1.
 
 ## Writing an ADR
 

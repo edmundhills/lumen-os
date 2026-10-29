@@ -45,7 +45,7 @@ RUN dnf install -y --setopt=install_weak_deps=False \
 # scripts. Fedora doesn't package it, so this is the x86_64 binary from its
 # release page, checked against the checksum published there. It is linked
 # statically, so it runs on Fedora. It is pinned (2026-10-27); Renovate will
-# bump it from step 8.2.
+# bump it from step 9.2.
 ARG ACTIONLINT_VERSION=1.7.12
 ARG ACTIONLINT_SHA256=8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
 RUN curl --fail --silent --show-error --location --output /tmp/actionlint.tar.gz \
@@ -59,7 +59,7 @@ RUN curl --fail --silent --show-error --location --output /tmp/actionlint.tar.gz
 # the x86_64 binary from its release page, checked against the checksum
 # published there (cosign_checksums.txt). The image workflow installs cosign
 # from these two lines, so CI signs with the version the tests use. It is
-# pinned (2026-10-29); Renovate will bump it from step 8.2.
+# pinned (2026-10-29); Renovate will bump it from step 9.2.
 ARG COSIGN_VERSION=3.1.4
 ARG COSIGN_SHA256=424e2c97d0b45fd7a6b608a87f090f35633f4c23ece5f092d48bba11aaf4bbfa
 RUN curl --fail --silent --show-error --location --output /usr/local/bin/cosign \

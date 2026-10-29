@@ -6,7 +6,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 # Lumen OS — step-by-step build plan
 
-The spec's 10 phases (0–9), cut into session-sized steps. Do **one step per session**.
+The spec's 11 phases (0–10), cut into session-sized steps. Do **one step per session**.
 
 ## How to resume
 
@@ -153,8 +153,8 @@ Two things left over from 1.5c and 1.5b:
   - **Tests:** `image/trust.py` (lint, `check-image.sh`, 25 unit tests); `check-image.sh` also checks the install setting; `image/sbom.py` (10 unit tests); `image/test_signatures.py` (10 tests). That last one runs a registry inside the lint container that answers for ghcr.io (the justfile maps the name), signs with `sign.sh` and the pinned cosign, and pulls with Fedora 44's skopeo and the overlay's settings. The lint container gained `docker-distribution`, `openssl`, `skopeo` and cosign, by checksum. In WSL with a stand-in key: `just lint` 12 of 12, `just test` passes (127 unit tests). The runner's skopeo 1.13.3 parses the policy and refuses today's unsigned `dev` with the message the `sign` job looks for.
   - **For 1.8:** Anaconda's `ostreecontainer` ignores the install setting and records the unverified transport. Use Anaconda's `bootc` kickstart command, or `%post bootc switch --mutate-in-place --enforce-container-sigpolicy --transport registry …` as Bazzite does. Whether bootc-image-builder reads the image's install config is inferred from bootc's source, not tested.
   - **For Phase 5:** `lumen-updated` must pass `--enforce-container-sigpolicy` to `bootc switch` (architecture 4.4). A Health check should notice an edited `/etc/containers/policy.json`, which bootc's `/etc` merge then stops updating, or a `/root/.config/containers/policy.json`, which replaces it.
-  - **For 8.2:** whether to keep a second, offline key in `keyPaths` from the start, and whether CI should check Fedora's own cosign signature on each new Kinoite base before the base workflow pins it.
-  - **For 9.1:** deleting old `dev` builds must delete their `sha256-<digest>.sig` and `.att` tags too. A signature holds for a repository, not a tag, so decide whether channels need their own identity.
+  - **For 9.2:** whether to keep a second, offline key in `keyPaths` from the start, and whether CI should check Fedora's own cosign signature on each new Kinoite base before the base workflow pins it.
+  - **For 10.1:** deleting old `dev` builds must delete their `sha256-<digest>.sig` and `.att` tags too. A signature holds for a repository, not a tag, so decide whether channels need their own identity.
   - Since 2026-10-01, GitHub deletes workflow runs, and their summaries, after the retention period, at most 90 days for a public repository. The tags on ghcr.io keep the digests.
   - The research workflow's agents left test files in WSL's `/tmp` (`cosigntest`, `cosignsrc`, `cosignres`, `lr`, `cs`, `dl`) and the images `ghcr.io/sigstore/cosign/cosign:v3.1.4`, `registry:3` and `quay.io/libpod/alpine` in rootless Podman. None of it is needed.
 
@@ -323,22 +323,39 @@ Two things left over from 1.5c and 1.5b:
 - [ ] **7.11** Tests: every top-100 app has a rating and a path; dialog, Store and CLI agree; offline lookup; sandbox defaults; a blocked game offers its cloud alternatives and, with a Windows entry, "Play in Windows".
 - [ ] **7.12** 👤 Phase 7 acceptance: a Windows user installs Lumen with Lumen Setup, sees their apps' status, and installs five Windows apps by double-clicking, with every rating correct; at least 80% of the top-100 list is covered.
 
-## Phase 8 — Hardening, accessibility, performance (spec: "Spec: security model", Phase 8)
+## Phase 8 — Hardware: full use of each device (spec: "Spec: hardware", Phase 8; ADR 0010)
 
-- [ ] **8.1** Security review part 1 (boot, disk, image) → `docs/security.md`; fix gaps.
-- [ ] **8.2** Security review part 2 (apps including Windows-app bottles and Lumen Setup, network, privilege, supply chain: SBOM, Renovate, pinned digests); fix gaps.
-- [ ] **8.3** Accessibility audit: shell surfaces.
-- [ ] ➕ **8.4** Accessibility audit: apps.
-- [ ] **8.5** Performance: boot < 10 s on NVMe.
-- [ ] ➕ **8.6** Performance: idle RAM < 1.5 GB.
-- [ ] **8.7** Translations: string extraction, Weblate config, pseudo-locale.
-- [ ] **8.8** 👤 Phase 8 acceptance on a real laptop.
+Every step here needs real hardware to finish. CI can only test what it can emulate, so these steps prepare everything in the image and leave the check on each reference laptop to the owner or a tester who has it.
 
-## Phase 9 — Release v0.1 (spec: "Testing, CI and release", Phase 9)
+- [ ] **8.1** 👤 `docs/hardware.md`: the device features Windows users rely on, class by class, with how well Linux supports each today and what Lumen must add: built-in and USB cameras (including the MIPI cameras of recent Intel and AMD laptops), speakers and microphones, fingerprint readers, touchpads, pens and touchscreens, 2-in-1 sensors, displays (HDR, refresh rates, ambient light), keyboard backlights and vendor keys, batteries, performance modes and fans, Wi-Fi and Bluetooth, docks and USB4, and GPUs' video engines and NPUs. Choose the reference laptops for the hardware lab (the spec names six kinds). You review the list.
+- [ ] **8.2** Device profiles: `hardware/hardware.json` (step 6.11) gains the best settings per model (kernel arguments, firmware, quirks, audio tuning, power settings). lumen-hwd applies them on the first boot and when hardware changes, and records what it did for Settings.
+- [ ] **8.3** ⚠️ Cameras: built-in MIPI cameras (Intel IPU6 and IPU7, AMD's camera processor) through libcamera and PipeWire, so browsers and call apps reach them through the camera portal; image tuning per sensor where libcamera has it; USB webcam controls in Settings. *Done when:* the reference laptops' cameras work in a browser video call with a picture that compares well with Windows.
+- [ ] **8.4** Sound: speaker and microphone tuning per laptop model (PipeWire filter chains, like the processing makers ship for Windows), noise suppression for calls, headset buttons, Bluetooth LE Audio.
+- [ ] **8.5** Displays: HDR, variable and high refresh rates on where they work, colour profiles, automatic brightness from the ambient light sensor, scaling per screen.
+- [ ] **8.6** Input: pens (pressure, tilt, buttons), touchscreens, 2-in-1 rotation and tablet mode, keyboard backlights, and vendor keys such as camera and microphone mute and performance mode.
+- [ ] **8.7** Power and heat: battery charge limits, the performance modes the firmware offers (and vendor tools where needed, each through the package manifest), reliable sleep, battery-life tuning per model.
+- [ ] **8.8** Graphics and accelerators: hardware video decode and encode in browsers and apps (with the codec choice of 1.14), GPU compute for creative apps, and NPUs where their drivers allow.
+- [ ] **8.9** Connections: fingerprint readers (enrolled in Welcome and Settings), Wi-Fi 7, Thunderbolt and USB4 docks and displays, printers and scanners without drivers (IPP Everywhere, eSCL).
+- [ ] **8.10** Settings > Drivers & Hardware: each device with what it can do, whether Lumen uses it, and a plain-English fix or reason when it can't; the hardware report (6.12) says the same before install.
+- [ ] **8.11** Tests: the profiles' schema; emulated devices in the VM (a virtual camera, touchpad and pen) for what can be emulated; the hardware report covers every device class in `docs/hardware.md`.
+- [ ] **8.12** 👤 Phase 8 acceptance on the reference laptops: every feature in `docs/hardware.md` works, or the hardware report says plainly why not; the cameras and sound compare well with Windows on the same laptop, and battery life is within 10% of Windows'.
 
-- [ ] **9.1** Release train in CI: dev on every merge, weekly beta, stable every 2 weeks after 7 days in beta.
-- [ ] **9.2** Update test job: install previous, upgrade, reboot, roll back, reboot.
-- [ ] **9.3** Docs: user guide and install guide.
-- [ ] ➕ **9.4** Docs: FAQ (including what won't come over from Windows), hardware notes, contributing guide.
-- [ ] **9.5** 👤 Publish v0.1 (you approve): signed images, ISO, SBOM, checksums, plain-English changelog.
-- [ ] **9.6** 👤 Install and run v0.1 on two real machines, one of them alongside Windows through Lumen Setup.
+## Phase 9 — Hardening, accessibility, performance (spec: "Spec: security model", Phase 9)
+
+- [ ] **9.1** Security review part 1 (boot, disk, image) → `docs/security.md`; fix gaps.
+- [ ] **9.2** Security review part 2 (apps including Windows-app bottles and Lumen Setup, network, privilege, supply chain: SBOM, Renovate, pinned digests); fix gaps.
+- [ ] **9.3** Accessibility audit: shell surfaces.
+- [ ] ➕ **9.4** Accessibility audit: apps.
+- [ ] **9.5** Performance: boot < 10 s on NVMe.
+- [ ] ➕ **9.6** Performance: idle RAM < 1.5 GB.
+- [ ] **9.7** Translations: string extraction, Weblate config, pseudo-locale.
+- [ ] **9.8** 👤 Phase 9 acceptance on a real laptop.
+
+## Phase 10 — Release v0.1 (spec: "Testing, CI and release", Phase 10)
+
+- [ ] **10.1** Release train in CI: dev on every merge, weekly beta, stable every 2 weeks after 7 days in beta.
+- [ ] **10.2** Update test job: install previous, upgrade, reboot, roll back, reboot.
+- [ ] **10.3** Docs: user guide and install guide.
+- [ ] ➕ **10.4** Docs: FAQ (including what won't come over from Windows), hardware notes, contributing guide.
+- [ ] **10.5** 👤 Publish v0.1 (you approve): signed images, ISO, SBOM, checksums, plain-English changelog.
+- [ ] **10.6** 👤 Install and run v0.1 on two real machines, one of them alongside Windows through Lumen Setup.

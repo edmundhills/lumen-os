@@ -16,20 +16,20 @@ This is a living document, like the [gap list](competing-with-windows.md). Updat
 
 | # | Risk | Likelihood | Impact | Main steps |
 | --- | --- | --- | --- | --- |
-| 1 | [KWin and Plasma change their internals every release](#1-kwin-and-plasma-change-their-internals-every-release) | High | High | 1.2, 3.1, 3.2, 4.1, 8.2 |
+| 1 | [KWin and Plasma change their internals every release](#1-kwin-and-plasma-change-their-internals-every-release) | High | High | 1.2, 3.1, 3.2, 4.1, 9.2 |
 | 2 | [Secure Boot's move to the Microsoft UEFI CA 2023](#2-secure-boots-move-to-the-microsoft-uefi-ca-2023) | High | High | 1.3, 1.9, 6.11, 7.9, 7.10 |
-| 3 | [BitLocker on Windows drives](#3-bitlocker-on-windows-drives) | High | High | 6.10, 7.8, 7.9, 9.6 |
-| 4 | [TPM2 automatic unlock: recovery, enrolment and strength](#4-tpm2-automatic-unlock-recovery-enrolment-and-strength) | High | High | 5.5, 6.6, 8.1 |
-| 5 | [Building the install ISO as a live ISO from a bootc image](#5-building-the-install-iso-as-a-live-iso-from-a-bootc-image) | Medium | High | 1.8, 6.10, 6.12, 9.5 |
-| 6 | [Rollback doesn't roll back state](#6-rollback-doesnt-roll-back-state) | Medium | High | 5.1, 5.6, 5.7, 9.2 |
+| 3 | [BitLocker on Windows drives](#3-bitlocker-on-windows-drives) | High | High | 6.10, 7.8, 7.9, 10.6 |
+| 4 | [TPM2 automatic unlock: recovery, enrolment and strength](#4-tpm2-automatic-unlock-recovery-enrolment-and-strength) | High | High | 5.5, 6.6, 9.1 |
+| 5 | [Building the install ISO as a live ISO from a bootc image](#5-building-the-install-iso-as-a-live-iso-from-a-bootc-image) | Medium | High | 1.8, 6.10, 6.12, 10.5 |
+| 6 | [Rollback doesn't roll back state](#6-rollback-doesnt-roll-back-state) | Medium | High | 5.1, 5.6, 5.7, 10.2 |
 | 7 | [NVIDIA drivers under Secure Boot](#7-nvidia-drivers-under-secure-boot) | High | Medium | 1.11, 1.12, 5.10 |
 | 8 | [Glass misses its frame-time and contrast budgets](#8-glass-misses-its-frame-time-and-contrast-budgets) | Medium | High | 3.3 to 3.11, 3.16, 3.17 |
-| 9 | [Windows code signing for Lumen Setup](#9-windows-code-signing-for-lumen-setup) | High | Medium | 0.4, 7.9, 9.5 |
+| 9 | [Windows code signing for Lumen Setup](#9-windows-code-signing-for-lumen-setup) | High | Medium | 0.4, 7.9, 10.5 |
 | 10 | [Codec patents and hardware video decoding](#10-codec-patents-and-hardware-video-decoding) | High | Medium | 1.14 |
 | 11 | [Hibernation under kernel lockdown](#11-hibernation-under-kernel-lockdown) | High | Medium | 1.9, 5.17, 6.11 |
 | 12 | [Licences of compatibility data](#12-licences-of-compatibility-data) | Medium | Medium | 1.15, 7.1, 7.2 |
 | 13 | [CI capacity: disk, time, KVM and no GPU](#13-ci-capacity-disk-time-kvm-and-no-gpu) | High | Medium | 0.6, 1.5, 1.8, 1.9 |
-| 14 | [Updates download too much](#14-updates-download-too-much) | Medium | Medium | 1.5, 5.5, 9.2 |
+| 14 | [Updates download too much](#14-updates-download-too-much) | Medium | Medium | 1.5, 5.5, 10.2 |
 | 15 | [Flatpak apps don't match the Lumen look](#15-flatpak-apps-dont-match-the-lumen-look) | High | Medium | 2.4 to 2.7, 2.13, 2.14 |
 
 Risks 2, 3 and 4 are linked: installing the 2023 Secure Boot certificates changes what the TPM measures, which makes both BitLocker and Lumen's disk unlock ask for their recovery keys.
@@ -55,7 +55,7 @@ Likelihood **High** (it happens every release). Impact **High**.
 
 **Early warning:** the canary job turns red; KDE's beta of each Plasma release, a few weeks before it ships.
 
-**Steps:** 1.2, 2.8, 3.1, 3.2, 3.15, 4.1, 8.2.
+**Steps:** 1.2, 2.8, 3.1, 3.2, 3.15, 4.1, 9.2.
 
 ## 2. Secure Boot's move to the Microsoft UEFI CA 2023
 
@@ -72,7 +72,7 @@ Likelihood **High** (it's happening now). Impact **High**.
 
 **Mitigation**
 
-- Check before anything changes. Lumen Setup for Windows reads the firmware's `db`. If the 2023 CA is missing, it tells the user to install Windows Update's Secure Boot certificate update, or the PC maker's firmware update, *before* going further (step 7.9). The install guide says the same for people who don't use Setup (9.3).
+- Check before anything changes. Lumen Setup for Windows reads the firmware's `db`. If the 2023 CA is missing, it tells the user to install Windows Update's Secure Boot certificate update, or the PC maker's firmware update, *before* going further (step 7.9). The install guide says the same for people who don't use Setup (10.3).
 - On installed systems, lumen-hwd reads `db` and `KEK` from the EFI variables, and a Health check reports a missing 2023 CA (6.11, 7.10). fwupd 2.0 and the LVFS deliver the KEK and `db` updates on Linux; lumen-updated offers them like any firmware update, with consent, and first warns about the recovery-key prompt (risk 4).
 - At step 1.9, and at every Fedora rebase, record which signatures the shim on our image and ISO carries (for example with `sbverify --list`). The boot test runs OVMF with three key sets: 2011 only, both, and 2023 only (variable stores made with virt-firmware's `virt-fw-vars`).
 - Confirm that bootupd's automatic update runs on our image (step 1.3), and show the installed shim version in `lumen hw report` (5.10).
@@ -80,7 +80,7 @@ Likelihood **High** (it's happening now). Impact **High**.
 
 **Early warning:** a new Fedora shim build; boot-test failures with the 2011-only or 2023-only key set; a hardware-lab PC that won't boot the ISO.
 
-**Steps:** 1.3, 1.8, 1.9, 5.4, 5.10, 6.11, 7.9, 7.10, 9.3.
+**Steps:** 1.3, 1.8, 1.9, 5.4, 5.10, 6.11, 7.9, 7.10, 10.3.
 
 ## 3. BitLocker on Windows drives
 
@@ -100,11 +100,11 @@ Likelihood **High**. Impact **High** (the user can lose Windows and its files).
 - Setup shrinks Windows with Windows' own tools, and says how much space it could free before the user commits.
 - **Step 6.10:** Lumen's boot menu starts Windows by asking the firmware to boot the Windows boot manager next (the EFI `BootNext` variable), not by chainloading it from GRUB. The dual-boot tests check on a real BitLocker PC that this avoids the recovery prompt.
 - The installer never resizes, formats or writes a BitLocker volume; "Install alongside Windows" uses only free space (6.10). Welcome's import opens the Windows drive read-only with the recovery key the user types, and refuses a hibernated drive with the Fast Startup explanation (7.8).
-- Test on a real Windows 11 install with device encryption on, not only in a VM (6.13, 7.12, 9.6).
+- Test on a real Windows 11 install with device encryption on, not only in a VM (6.13, 7.12, 10.6).
 
 **Early warning:** any recovery-key prompt during a hardware-lab dual-boot test.
 
-**Steps:** 6.10, 6.13, 7.8, 7.9, 7.10, 7.12, 9.6.
+**Steps:** 6.10, 6.13, 7.8, 7.9, 7.10, 7.12, 10.6.
 
 ## 4. TPM2 automatic unlock: recovery, enrolment and strength
 
@@ -127,7 +127,7 @@ Likelihood **High**. Impact **High** (lost keys mean lost data).
 
 **Early warning:** recovery prompts in the update test after a `db` update (OVMF with swtpm in CI).
 
-**Steps:** 5.5, 5.8, 6.6, 8.1.
+**Steps:** 5.5, 5.8, 6.6, 9.1.
 
 ## 5. Building the install ISO as a live ISO from a bootc image
 
@@ -145,11 +145,11 @@ Likelihood **Medium**. Impact **High** (no way to install).
 - Step 1.8 builds it early, before Phase 2 builds on it, and records the tool in an ADR. Titanoboa is pinned by digest and updated through Renovate.
 - The fallback stays ready: bootc-image-builder's `anaconda-iso` with a partial kickstart. Dropping the live hardware report then needs the owner's approval (ADR 0002).
 - From step 1.8 on, CI installs from the ISO in a VM in each install mode, rather than waiting for Phase 6.
-- The download host is chosen at step 9.5 (Q15). Until then CI keeps test ISOs as short-lived workflow artifacts.
+- The download host is chosen at step 10.5 (Q15). Until then CI keeps test ISOs as short-lived workflow artifacts.
 
 **Early warning:** the first build at step 1.8; issues in Universal Blue's ISO repositories.
 
-**Steps:** 1.8, 1.9, 6.10, 6.12, 9.5.
+**Steps:** 1.8, 1.9, 6.10, 6.12, 10.5.
 
 ## 6. Rollback doesn't roll back state
 
@@ -165,12 +165,12 @@ Likelihood **Medium**. Impact **High** (the "never breaks" promise depends on ro
 **Mitigation**
 
 - **Step 5.1:** Lumen's state files carry a format version. Each release reads the previous release's format, and a service never deletes data it doesn't understand. Each service has a unit test for this.
-- The update test (step 9.2) logs into a real session on the new version before rolling back, so the config migrations actually run. It then logs into the old version and runs the session test, not just a boot check.
+- The update test (step 10.2) logs into a real session on the new version before rolling back, so the config migrations actually run. It then logs into the old version and runs the session test, not just a boot check.
 - Keep image changes out of `/etc` wherever possible (ADR 0002); the image lint lists every file the image ships in `/etc`.
 - Snapper's hourly `/home` snapshots give users a way back for config files ("Previous versions", step 6.9).
 - A Fedora rebase spends 4 weeks in beta first ([Q14](architecture.md#8-spec-problems-and-open-questions)).
 
-**Steps:** 5.1, 5.6, 5.7, 6.9, 9.1, 9.2.
+**Steps:** 5.1, 5.6, 5.7, 6.9, 10.1, 10.2.
 
 ## 7. NVIDIA drivers under Secure Boot
 
@@ -188,12 +188,12 @@ Likelihood **High**. Impact **Medium**.
 
 - lumen-hwd explains enrolment before the switch, with a picture of the screen and the password to type (steps 1.12, 5.10). After the restart it checks that the key is enrolled (`mokutil`) and the driver loaded. If not, it explains what happened and offers to try again.
 - The desktop stays usable on the open drivers (nouveau and NVK) until the NVIDIA driver loads, never a black screen. A session test boots the NVIDIA image with no MOK enrolled and checks that it reaches the desktop.
-- The NVIDIA variant can fail on its own: its tag stays on the last good build while the other images move on, and CI opens an issue. That build misses security updates, so a failure lasting more than a week goes to the owner (step 9.1).
+- The NVIDIA variant can fail on its own: its tag stays on the last good build while the other images move on, and CI opens an issue. That build misses security updates, so a failure lasting more than a week goes to the owner (step 10.1).
 - The module key lives only in a protected GitHub environment for `main`, with an offline backup kept by the owner and a written procedure for replacing it (step 1.11).
 - Universal Blue's signed-akmods pipeline is prior art; reuse its approach where it fits.
 - `hardware.json` marks cards older than Turing amber.
 
-**Steps:** 1.11, 1.12, 5.10, 6.11, 9.1.
+**Steps:** 1.11, 1.12, 5.10, 6.11, 10.1.
 
 ## 8. Glass misses its frame-time and contrast budgets
 
@@ -242,7 +242,7 @@ The owner chooses the route at step 7.9. The licence chosen at step 0.4 decides 
 - Setup asks for administrator rights only for the steps that change Windows, each with its own confirm button (spec).
 - Never publish an unsigned build. CI builds unsigned ones for tests only.
 
-**Steps:** 0.4, 7.9, 9.5.
+**Steps:** 0.4, 7.9, 10.5.
 
 ## 10. Codec patents and hardware video decoding
 
@@ -260,9 +260,9 @@ Likelihood **High**. Impact **Medium** for users; the legal exposure is for the 
 - Flatpak apps (browsers, video players, editors) get codecs from Flathub's runtime extensions whatever the image does, and the Store installs Flatpaks, so most video plays either way. Step 1.14 also checks whether Flatpak apps get hardware decoding through Flathub's graphics drivers.
 - Step 1.14 writes the options and their legal trade-offs as an ADR, and the owner chooses: Fedora's codecs only; RPM Fusion's codecs in the image, as several Fedora-based images do; or a separate codecs variant.
 - If freeworld Mesa is chosen, the exact-version guard covers it, and CI holds a Mesa update until the matching freeworld build exists.
-- The hardware report and the FAQ say what plays out of the box (6.12, 9.4).
+- The hardware report and the FAQ say what plays out of the box (6.12, 10.4).
 
-**Steps:** 1.14, 6.12, 9.4.
+**Steps:** 1.14, 6.12, 10.4.
 
 ## 11. Hibernation under kernel lockdown
 
@@ -278,11 +278,11 @@ Likelihood **High** (it's how lockdown works). Impact **Medium**.
 **Mitigation**
 
 - The spec already promises suspend, tuned power profiles and a safe shutdown at critical battery, and offers hibernation only where lockdown allows it (5.17).
-- Step 1.9 records the lockdown state and `/sys/power/state` on our image under Secure Boot. If lockdown is off, step 8.1 fixes it.
+- Step 1.9 records the lockdown state and `/sys/power/state` on our image under Secure Boot. If lockdown is off, step 9.1 fixes it.
 - `hardware.json` records how much battery each model loses asleep, and the hardware report warns about laptops that drain badly (6.11).
 - Track the upstream designs. When a verified method reaches Fedora's kernel, an ADR adds a swap file and turns hibernation on.
 
-**Steps:** 1.9, 5.17, 6.11, 8.1.
+**Steps:** 1.9, 5.17, 6.11, 9.1.
 
 ## 12. Licences of compatibility data
 
@@ -341,10 +341,10 @@ Likelihood **Medium**. Impact **Medium**.
 **Mitigation**
 
 - Re-chunk the image after the build, so each layer holds a stable group of packages. Step 1.5c chose rpm-ostree's `build-chunked-oci`, run from the image itself, keeping the packing of the newest `dev` build, with the files that change on every build in layers of their own ([ADR 0007](decisions/0007-rechunking.md), `image/rechunk.sh`). A rebuild of an unchanged commit now downloads 41 MiB.
-- CI measures the download from the newest `dev` (from step 9.2, the current `stable`) to each build, and fails when a build on the same base image goes over the budget of 100 MiB in `.github/workflows/build-image.yml`. A new base is reported, not held to the budget.
+- CI measures the download from the newest `dev` (from step 10.2, the current `stable`) to each build, and fails when a build on the same base image goes over the budget of 100 MiB in `.github/workflows/build-image.yml`. A new base is reported, not held to the budget.
 - lumen-updated's metered-network and battery rules (step 5.5).
 
-**Steps:** 1.5, 5.5, 9.2.
+**Steps:** 1.5, 5.5, 10.2.
 
 ## 15. Flatpak apps don't match the Lumen look
 
@@ -375,9 +375,9 @@ Smaller risks, or ones already covered by a step. They move into the top 15 if t
 | Camera and microphone indicators miss programs that open the devices directly, bypassing PipeWire: host programs, and Flatpaks with `--device=all` (common for browsers and Steam) | Watch open handles on the video and audio devices as well as PipeWire streams; the Store flags `--device=all` as a risky permission | 4.3, 6.2 |
 | Ratings go stale as Wine and Proton change. Bottles is a small project, and `bottles-cli` may not apply every recipe field | The nightly compatibility job and the spec's 6-month rule; check `bottles-cli` before building on it | 1.16, 7.5 |
 | Fedora drops 32-bit packages, which Steam and parts of Wine need on the host. A 2025 proposal to drop them was withdrawn | Fall back to Steam's Flatpak and Wine's WoW64 mode | 1.10 |
-| Losing a signing key or the GitHub account: one person holds every key | Protected environment for `main`, hardware-key 2FA, offline key backups, a written procedure to replace each key (architecture 9.7). The image key is in the environment `image-signing` with an offline backup, and ADR 0008 says how to replace it. Keyless signing was ruled out at step 1.6: containers/image can't check a GitHub workflow's identity ([ADR 0008](decisions/0008-image-signing.md)) | 1.6, 8.2 |
-| cosign 4 drops the only signature format that Fedora's containers/image, and so bootc, can read; cosign 3 already marks the flags for it deprecated | cosign is pinned to 3.x and Renovate must not move it to 4 until containers/image reads Sigstore bundles (container-libs #388). If cosign 3 stops getting fixes first, skopeo signs in the same format, and the end-to-end test (`image/test_signatures.py`) shows any break before it reaches main ([ADR 0008](decisions/0008-image-signing.md)) | 1.6, 8.2 |
-| Fedora's six-month cycle: each rebase moves KWin, Plasma, Qt, Mesa and the kernel at once, and each release is supported for about 13 months | Covered by risks 1 and 6, and Q14 | 9.1 |
+| Losing a signing key or the GitHub account: one person holds every key | Protected environment for `main`, hardware-key 2FA, offline key backups, a written procedure to replace each key (architecture 9.7). The image key is in the environment `image-signing` with an offline backup, and ADR 0008 says how to replace it. Keyless signing was ruled out at step 1.6: containers/image can't check a GitHub workflow's identity ([ADR 0008](decisions/0008-image-signing.md)) | 1.6, 9.2 |
+| cosign 4 drops the only signature format that Fedora's containers/image, and so bootc, can read; cosign 3 already marks the flags for it deprecated | cosign is pinned to 3.x and Renovate must not move it to 4 until containers/image reads Sigstore bundles (container-libs #388). If cosign 3 stops getting fixes first, skopeo signs in the same format, and the end-to-end test (`image/test_signatures.py`) shows any break before it reaches main ([ADR 0008](decisions/0008-image-signing.md)) | 1.6, 9.2 |
+| Fedora's six-month cycle: each rebase moves KWin, Plasma, Qt, Mesa and the kernel at once, and each release is supported for about 13 months | Covered by risks 1 and 6, and Q14 | 10.1 |
 | Fedora is moving its re-chunking from rpm-ostree to chunkah, which can't yet keep an earlier build's packing ([ADR 0007](decisions/0007-rechunking.md)) | Lumen stays on rpm-ostree's `build-chunked-oci`, from the image itself. Revisit when Kinoite ships chunkah or chunkah gains that option; the download measurement shows any regression | 1.5c |
 | Kinoite's dated builds expire from quay.io four weeks after they are built (label `quay.expires-after: 4w`, found at step 0.7), so a pinned base digest stops resolving and CI can no longer build an older commit | The base workflow bumps the pin every week through a pull request and copies each pinned base, with its digest, to Lumen's own registry on ghcr.io, which CI pulls from first, so old builds stay reproducible (step 1.5b, [versions](versions.md#how-the-pins-move)). The bump waits for the owner to merge it, and GitHub turns off scheduled workflows after 60 days without activity in the repository | 1.2, 1.5b |
 

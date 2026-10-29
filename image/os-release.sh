@@ -15,7 +15,7 @@
 
 set -euo pipefail
 
-# Lumen's product version. The release step (9.5) moves it on.
+# Lumen's product version. The release step (10.5) moves it on.
 readonly PRODUCT_VERSION=0.1
 readonly REPO_URL=https://github.com/edmundhills/lumen-os
 

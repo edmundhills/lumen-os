@@ -76,6 +76,7 @@ These are the must-haves for v1, grouped by area. Each is testable, so Claude Co
 - Live USB runs a hardware compatibility report before install.
 - NVIDIA proprietary driver variant image; Intel/AMD out of the box.
 - Fingerprint, touchpad gestures (3- and 4-finger), pen input, printers (driverless IPP), Bluetooth audio codecs.
+- Lumen makes full use of each device, as its maker's drivers do on Windows: the built-in camera, speakers and microphones tuned for the model, HDR and high-refresh displays, pens and 2-in-1 tablet mode, vendor keys, battery charge limits and performance modes ("Spec: hardware").
 
 ### Security and privacy
 
@@ -524,6 +525,20 @@ Privileged actions use polkit with admin auth, cached 5 minutes. Services are wr
 
 All commands support `--json` output and shell completion for bash, zsh and fish.
 
+## Spec: hardware
+
+On Windows, a laptop's maker tunes the drivers for its camera, speakers, screen, keys and battery. Lumen does the same for each model it knows, so a device works at its best without the user asking, and says plainly what it can't do yet (ADR 0010).
+
+- **Device profiles.** `hardware/hardware.json` holds the best settings per model: kernel arguments, firmware, quirks, audio tuning, power settings. lumen-hwd applies them on the first boot and when hardware changes, and Settings > Drivers & Hardware says what it changed and why.
+- **Cameras.** Built-in MIPI cameras (Intel IPU6 and IPU7, AMD's camera processor) work through libcamera and PipeWire, so browsers and call apps reach them through the camera portal, with image tuning for each sensor where libcamera has it. USB webcams' controls (exposure, focus, white balance) are in Settings.
+- **Sound.** Speakers and microphones get the tuning made for the laptop model, as on Windows, plus noise suppression for calls. Bluetooth LE Audio works where the hardware supports it.
+- **Displays.** HDR, variable refresh and high refresh rates are on where they work; colour profiles; automatic brightness from the ambient light sensor; scaling set per screen.
+- **Input.** Pens with pressure, tilt and buttons; touchscreens; rotation and tablet mode on 2-in-1s; keyboard backlights; vendor keys such as camera and microphone mute and performance mode.
+- **Power and heat.** Battery charge limits, the performance modes the firmware offers, reliable sleep, and battery life within 10% of Windows on the reference laptops.
+- **Graphics and accelerators.** Hardware video decode and encode in browsers and apps, GPU compute for creative apps, and the NPUs of recent processors where their drivers allow.
+- **Connections.** Fingerprint readers, Wi-Fi 7, Thunderbolt and USB4 docks and displays, and printers and scanners without drivers (IPP Everywhere, eSCL).
+- **Reference laptops.** The hardware lab (see "Testing, CI and release") is where each of these is signed off, model by model.
+
 ## Spec: security model
 
 The system is secure by default with no settings changed: a stolen laptop reveals nothing, a malicious app is contained, and the OS itself cannot be silently modified.
@@ -750,7 +765,24 @@ Implement per "Spec: Windows apps and switching".
 Acceptance: every top-100 app has a rating and a path, and at least 80% are covered; the dialog, Store and CLI give the same rating; a lookup makes no network request; a Windows user installs Lumen with Lumen Setup, sees their apps' status, and installs five Windows apps by double-clicking, with every rating correct.
 ```
 
-### Phase 8: hardening, accessibility, performance
+### Phase 8: hardware
+
+```text
+Implement per "Spec: hardware" (ADR 0010).
+1. docs/hardware.md: the device features Windows users rely on, class by class, with how well Linux supports each today and what Lumen must add; choose the reference laptops. The owner reviews it.
+2. Device profiles in hardware/hardware.json, applied by lumen-hwd on first boot and when hardware changes.
+3. Cameras: built-in MIPI cameras through libcamera and PipeWire, image tuning per sensor, USB webcam controls.
+4. Sound: speaker and microphone tuning per laptop model, noise suppression for calls, Bluetooth LE Audio.
+5. Displays: HDR, variable and high refresh rates, colour profiles, automatic brightness, scaling per screen.
+6. Input: pens, touchscreens, 2-in-1 rotation and tablet mode, keyboard backlights and vendor keys.
+7. Power and heat: battery charge limits, the firmware's performance modes, reliable sleep, battery life per model.
+8. Graphics and accelerators: hardware video decode and encode, GPU compute, NPUs.
+9. Connections: fingerprint readers, Wi-Fi 7, Thunderbolt and USB4 docks, printers and scanners without drivers.
+10. Settings > Drivers & Hardware: what each device can do, whether Lumen uses it, and a fix or reason when it can't.
+Acceptance: on the reference laptops, every feature in docs/hardware.md works or the hardware report says plainly why not; the cameras and sound compare well with Windows on the same laptop, and battery life is within 10% of Windows'.
+```
+
+### Phase 9: hardening, accessibility, performance
 
 ```text
 1. Security review against the spec's threat table, including Windows-app bottles and Lumen Setup; fix gaps; document in docs/security.md.
@@ -760,7 +792,7 @@ Acceptance: every top-100 app has a rating and a path, and at least 80% are cove
 Acceptance: all budgets met in CI and on a real laptop; no failing accessibility checks.
 ```
 
-### Phase 9: release v0.1
+### Phase 10: release v0.1
 
 ```text
 1. Release train in CI: dev on every merge, weekly beta, stable every 2 weeks after 7 days in beta.

@@ -224,7 +224,7 @@ Owns OS image updates (bootc), Flatpaks in the system installation, firmware, co
 - **History:** bootc keeps only the booted, staged and rollback deployments, but Settings > Updates > History lists every installed version. So lumen-updated keeps its own log in `/var/lib/lumen/updates/`.
 - **Compatibility database refresh.** lumen-updated downloads the newer database, checks its signature, and only then replaces `/var/lib/lumen/compat/windows-apps.json`. Readers trust that file because only lumen-updated (root) can write it, so they never verify, download or look anything up online. Where the file is published is decided at step 7.3.
 - **Signatures:** bootc checks every image it pulls against the trust policy. `SwitchTo` and `SwitchVariant` must pass `bootc switch --enforce-container-sigpolicy`, or bootc records the image as unverified and stops refusing a policy that accepts anything ([ADR 0008](decisions/0008-image-signing.md)).
-- **Going back to an older version** needs CI to keep immutable dated tags (for example `stable-44.20261027`, [section 9.7](#97-versions-tags-and-keys)) next to the moving `stable` tag (release train, step 9.1). After a user goes back, the version they left is "held" so the next check doesn't offer it straight away; the hold lifts when a newer version appears.
+- **Going back to an older version** needs CI to keep immutable dated tags (for example `stable-44.20261027`, [section 9.7](#97-versions-tags-and-keys)) next to the moving `stable` tag (release train, step 10.1). After a user goes back, the version they left is "held" so the next check doesn't offer it straight away; the hold lifts when a newer version appears.
 - **Low priority:** downloads run in a transient unit with idle CPU and I/O scheduling.
 - **Post-boot health check** (ADR 0002): within 2 minutes of boot and without waiting for a login, it checks that the login screen is up (`display-manager.service`, which is Plasma Login Manager, is active and its greeter is running), NetworkManager is running and no critical units failed. Two failed boots in a row fall back to the previous deployment; try greenboot for this before writing our own.
 - **First-login check.** A user unit started at login waits for the shell. If the shell hasn't started, the unit opens a small standalone dialog ("The desktop didn't start after the update. Go back to the previous version?") that calls `Rollback()`. It can't use a notification, because Plasma's notification server runs inside the shell that failed.
@@ -259,6 +259,7 @@ The last four are the dual-boot checks (step 7.10); they only run when a Windows
 - **Compares with** `/usr/share/lumen/hardware.json`: known good, known issues with workarounds, known broken.
 - **Sketch:** `Report()` returns JSON with the same schema as `lumen hw report --json`; `DriverStatus()`; `SwitchToNvidiaImage()` explains MOK enrolment, then calls `org.lumen.Updates1.SwitchVariant("nvidia")`, because only lumen-updated runs bootc. Signal: `DevicesChanged`.
 - Also runs in the install USB's live session, for the hardware report (ADR 0002).
+- **Device profiles** (Phase 8, [ADR 0010](decisions/0010-hardware-phase.md)): `hardware.json` also holds the best settings per model (kernel arguments, firmware, quirks, audio tuning, power settings). lumen-hwd applies them on the first boot and when hardware changes, and keeps a record of what it changed for Settings > Drivers & Hardware. Kernel arguments need a new deployment, so it asks lumen-updated for that, as for the NVIDIA image.
 
 #### lumen-settingsd: `org.lumen.Settings1`
 
@@ -444,7 +445,7 @@ Lumen services call each other in one direction only: lumen-health and lumen-hwd
 | Lumen release files | HTTPS, checksums and signatures | Lumen Setup for Windows | Verified before writing the USB drive |
 | Backup destinations | Local disk, SMB, NFS, S3 over HTTPS | restic, through lumen-backupd | Encrypted before it leaves the machine |
 | Remote help | RDP on the local network | KRdp | Off until the user starts a session; same network only. RustDesk, if the user installs it, connects through RustDesk's servers |
-| NetworkManager connectivity check | HTTP to Fedora's check URL | NetworkManager | Needed for captive portals. Keep Fedora's or host our own: step 8.2 |
+| NetworkManager connectivity check | HTTP to Fedora's check URL | NetworkManager | Needed for captive portals. Keep Fedora's or host our own: step 9.2 |
 | Crash reports | HTTPS to KDE's crash tracker | DrKonqi | Off unless the user opts in at Welcome |
 | Telemetry | None | n/a | `rpm-ostree-countme` masked; KDE's user feedback stays off |
 
@@ -487,7 +488,7 @@ The owner accepted every proposal below as written ([ADR 0004](decisions/0004-ph
 | Q11 | The Store installs websites as apps. What runs them? | Use the user's browser where it can open a site in its own app window (Chromium-based browsers can; Firefox on Linux can't), else GNOME Web, a Flatpak with web apps built in. Create the launchers through the dynamic launcher portal, after checking that xdg-desktop-portal-kde implements it | 7.7 |
 | Q12 | The spec's build chain builds Lumen's packages in COPR. COPR builds against Fedora's current repositories, not against the pinned base image, which breaks the build rule for KWin and Plasma code and is risky for Qt apps ([section 9.2](#92-where-each-package-is-built)). Where should Lumen's own packages be built? | All of them in stages of the image build, so one commit makes one image and everything is compiled against what ships. COPR only for outside packages Fedora lacks (none yet). The spec's build chain now says so | 1.2 onwards |
 | Q13 | The variants are `lumen-nvidia` and `lumen-gaming`, so a gamer with an NVIDIA card (most PC gamers) has no image with both | Two choices instead of one: driver (open or NVIDIA) and edition (desktop or gaming). That adds a fourth image, `lumen-gaming-nvidia`, built from `lumen-nvidia` plus the gaming layer. `SwitchVariant` changes one choice and keeps the other | 1.10 to 1.12 |
-| Q14 | The variants table calls `lumen:beta` the "Next Fedora release", but the release train makes beta the build that becomes stable every 2 weeks. Both can't be true all the time | Beta is the weekly promotion of a green `dev` build, on the same Fedora as stable. During a Fedora rebase, `main` moves to the new release and beta carries it for the 4 weeks the spec asks for, while a maintenance branch keeps building and promoting stable on the old release | 9.1 |
+| Q14 | The variants table calls `lumen:beta` the "Next Fedora release", but the release train makes beta the build that becomes stable every 2 weeks. Both can't be true all the time | Beta is the weekly promotion of a green `dev` build, on the same Fedora as stable. During a Fedora rebase, `main` moves to the new release and beta carries it for the 4 weeks the spec asks for, while a maintenance branch keeps building and promoting stable on the old release | 10.1 |
 | Q15 | GitHub release files are limited to 2 GiB each and the ISO will be bigger ([section 9.6](#96-disk-images-and-install-media)). Where do people download it? | Choose a host as v0.1 nears; the options and their costs come to you at step 9.5. Until then CI keeps test ISOs as short-lived workflow artifacts | 9.5 |
 
 Q16 (what "match" means for Flatpak theming) and Q17 (TPM unlock bound to PCR 7 without a PIN) came out of the risk register and are listed in [docs/risks.md](risks.md#questions-for-the-owner). They were decided at step 0.8 too.
@@ -549,7 +550,7 @@ Building in stages avoids all three. COPR stays available for packages from outs
 - Installing Lumen's RPMs with the repositories turned off is what enforces rule 3. If a Lumen package needs something `base` doesn't have, the build stops and names it, and the fix is a line in `packages.toml`.
 - The RPMs reach the `lumen` stage through a bind mount from the build stages (`RUN --mount=type=bind,from=…`), so no copy of them stays behind in a layer.
 - Each build stage copies in only the folders it builds. Podman can then run independent stages in parallel (`--jobs`) and reuse any stage whose inputs didn't change.
-- Translations (`.ts` and `.po` files, step 8.7) are compiled in the stage of the package that owns them.
+- Translations (`.ts` and `.po` files, step 9.7) are compiled in the stage of the package that owns them.
 - Phase 1 has only `base` and `lumen`. Each later phase adds its build stage.
 - After the build, CI re-chunks the image, so that an update downloads only the packages that changed rather than one large layer holding everything Lumen added. This matters on slow and metered connections. `image/rechunk.sh` runs `rpm-ostree compose build-chunked-oci` from the image itself, keeping the packing of the newest build on ghcr.io, then checks that the labels, settings, image checks and `bootc container lint` still hold. `image/layer_hints.py` gives files that change on their own layers of their own: what the package step writes afresh on every build, os-release, and the overlay's files ([ADR 0007](decisions/0007-rechunking.md)).
 
@@ -593,14 +594,14 @@ The base image is pinned by digest, but Fedora's mirrors carry only the release-
 | `stable`, `stable-44.20261027` | A `beta` build after 7 days with no blocker | Every 2 weeks |
 | `sha-<commit>` | The build of that commit | Never |
 
-The dated tags never move. "Go back to this version" (section 4.5) switches to one of them, so CI keeps every beta and stable build. Builds that only ever reached `dev` are deleted after 30 days (step 9.1).
+The dated tags never move. "Go back to this version" (section 4.5) switches to one of them, so CI keeps every beta and stable build. Builds that only ever reached `dev` are deleted after 30 days (step 10.1).
 
 **Keys**, one per job, so a leaked key can sign only one kind of thing:
 
 | Key | Signs | Kept in | Step |
 | --- | --- | --- | --- |
 | Image key (cosign) | Image digests and their SBOM attestations | Secrets of the GitHub environment `image-signing`, which only `main` may use, with an offline backup. The public key ships in the image as `/usr/share/pki/containers/lumen.pub`, which `/etc/containers/policy.json` names ([ADR 0008](decisions/0008-image-signing.md)) | 1.6, 1.7 |
-| Release key | `SHA256SUMS` for the ISO and the other release files; the release index Lumen Setup reads | GitHub secret | 9.5 |
+| Release key | `SHA256SUMS` for the ISO and the other release files; the release index Lumen Setup reads | GitHub secret | 10.5 |
 | Compatibility database key | The published database file | GitHub secret. The public key ships in the image | 7.3 |
 | Module signing key | NVIDIA kernel modules | GitHub secret. The public certificate ships in the image; users enrol it as a MOK | 1.11, 1.12 |
 | Windows code-signing certificate | Lumen Setup for Windows | Provided by the owner, kept as a GitHub secret | 7.9 |
@@ -629,11 +630,11 @@ A red build of `main` is never signed or pushed. Promotion only moves tags to te
 | --- | --- | --- | --- |
 | `lint` | Every push and pull request | Formatters and linters; schema checks for the tokens, the compatibility database and the hardware database | 0.6 |
 | `image` | Every push and pull request | Builds `lumen` and the variants, re-chunks them, and runs the unit, image lint, boot, session, glass and accessibility tests. Measures what an update from `dev` downloads, and fails over the budget for a build on the same base ([ADR 0007](decisions/0007-rechunking.md)). Makes the SBOM. On `main`, when green: pushes the image, and a job of its own signs it with the key, attaches the SBOM, checks both with the key and trust policy the image ships, and only then moves `dev` ([ADR 0008](decisions/0008-image-signing.md)). The build is in `build-image.yml`, which `image.yml` calls from two jobs, so only the one for `main` can write to ghcr.io and gets the key | 1.5, 1.6, 1.9 |
-| `promote` | Weekly for beta, every 2 weeks for stable, or on demand | Runs the update test on the candidate, moves the channel tag to its digest, and builds the ISO and qcow2 for the release | 9.1, 9.2 |
+| `promote` | Weekly for beta, every 2 weeks for stable, or on demand | Runs the update test on the candidate, moves the channel tag to its digest, and builds the ISO and qcow2 for the release | 10.1, 10.2 |
 | `compat` | Nightly | The Windows compatibility test, plus (from Phase 7) the ProtonDB and AreWeAntiCheatYet imports; opens a pull request with the results | 1.16, 7.2 |
 | `windows-setup` | Changes to `windows-setup/`, `hardware/` or the hardware-matching crate; releases | Builds Lumen Setup for Windows on a Windows runner; signs it for releases | 7.9 |
 | `base` | Mondays; merges that change a pin | A pull request that moves the Kinoite pin and the lint container's Fedora pin to their newest builds, and Kinoite's to a new Fedora release once it is current. Copies each pinned base to ghcr.io with its digest ([versions](versions.md#how-the-pins-move)) | 1.5b |
-| Renovate | When upstream changes | Pull requests for the pinned tool images (bootc-image-builder, Titanoboa), GitHub Actions, the lint tools and Cargo dependencies | 8.2 |
+| Renovate | When upstream changes | Pull requests for the pinned tool images (bootc-image-builder, Titanoboa), GitHub Actions, the lint tools and Cargo dependencies | 9.2 |
 
 Until `promote` exists, the ISO is built on demand (step 1.8). GitHub's hosted runners have limited disk (step 1.5 frees space first) and a 6-hour limit per job; whether they expose KVM for the boot test is checked at step 1.9.
 

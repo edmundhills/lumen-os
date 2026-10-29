@@ -17,4 +17,4 @@ SPDX-License-Identifier: GPL-3.0-or-later
 | [dev-setup-windows.md](dev-setup-windows.md) | Setting up a Windows 11 Home PC for Lumen development |
 | [images/](images/) | Pictures used by the documents |
 
-`risks.md` and `competing-with-windows.md` are living documents: update an entry when what it describes changes. The user guide, the install guide and the FAQ come at steps 9.3 and 9.4.
+`risks.md` and `competing-with-windows.md` are living documents: update an entry when what it describes changes. The user guide, the install guide and the FAQ come at steps 10.3 and 10.4.
