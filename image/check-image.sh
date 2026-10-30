@@ -212,6 +212,56 @@ trust_policy() {
   python3 "$here/trust.py" check /
 }
 
+# tuned-ppd's power modes are Lumen's own tuned profiles, each a Fedora
+# profile that keeps tuned from running bootc, and tuned starts with Lumen's
+# Balanced before tuned-ppd picks a mode: no other recommendation comes first,
+# in the order tuned reads them (ADR 0013).
+tuned_profiles() {
+  python3 - <<'EOF'
+import configparser
+import os
+
+problems = []
+ppd = configparser.ConfigParser()
+ppd.read("/etc/tuned/ppd.conf")
+modes = dict(ppd["profiles"]) if ppd.has_section("profiles") else {}
+battery = dict(ppd["battery"]) if ppd.has_section("battery") else {}
+for mode in ("power-saver", "balanced", "performance"):
+    if mode not in modes:
+        problems.append(f"/etc/tuned/ppd.conf has no profile for the power mode {mode}")
+for name in sorted(set(modes.values()) | set(battery.values())):
+    path = f"/usr/lib/tuned/profiles/{name}/tuned.conf"
+    profile = configparser.ConfigParser()
+    if not name.startswith("lumen-") or not profile.read(path):
+        problems.append(f"tuned-ppd maps a power mode to {name}, which is not one of Lumen's profiles in {path}")
+        continue
+    if os.path.exists(f"/etc/tuned/profiles/{name}"):
+        problems.append(f"/etc/tuned/profiles/{name} takes the place of Lumen's profile")
+    if profile.get("bootloader", "skip_grub_config", fallback="") != "True":
+        problems.append(f"{path} doesn't set skip_grub_config=True, so tuned would run bootc")
+    include = profile.get("main", "include", fallback="")
+    if not os.path.isfile(f"/usr/lib/tuned/profiles/{include}/tuned.conf"):
+        problems.append(f"{path} includes {include or 'nothing'}, which is not a profile")
+if os.path.exists("/etc/tuned/recommend.conf"):
+    problems.append("/etc/tuned/recommend.conf comes before Lumen's recommendation")
+files = {}
+for d in ("/usr/lib/tuned/recommend.d", "/etc/tuned/recommend.d"):
+    for name in os.listdir(d) if os.path.isdir(d) else []:
+        files[name] = os.path.join(d, name)
+first = None
+for name in sorted(files):
+    config = configparser.ConfigParser(delimiters=("=",), inline_comment_prefixes=("#",), strict=False)
+    config.read(files[name])
+    if config.sections():
+        first = (files[name], config.sections()[0], config.options(config.sections()[0]))
+        break
+if not first or first[1:] != ("lumen-balanced", []):
+    problems.append(f"tuned's first recommendation is not lumen-balanced without conditions: {first}")
+print("\n".join(problems))
+raise SystemExit(1 if problems else 0)
+EOF
+}
+
 # bootc install, and the installers and bootc-image-builder with it, records
 # the image with its signatures checked (ostree-image-signed).
 signed_installs() {
@@ -236,6 +286,7 @@ check "Discover is removed" no_discover
 check "Lumen's global theme (interim top bar) is the default" global_theme
 check "os-release names Lumen and its build version" os_release
 check "Only images Lumen signed are trusted under Lumen's names" trust_policy
+check "Power modes use Lumen's tuned profiles, which don't run bootc" tuned_profiles
 check "bootc install follows the image with its signatures checked" signed_installs
 
 printf '\nPassed: %d   Failed: %d\n' "$passes" "$failures"

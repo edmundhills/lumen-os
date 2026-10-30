@@ -22,6 +22,7 @@ Architecture decision records (ADRs). Each one records a decision that changes t
 | [0010](0010-hardware-phase.md) | A phase of its own for making full use of each device; the old Phases 8 and 9 become 9 and 10 | Accepted |
 | [0011](0011-disk-images.md) | Make the disk images with osbuild's image-builder, which bootc-image-builder became | Accepted |
 | [0012](0012-install-iso.md) | Pack the install ISO with image-builder's generic-iso, and label its files for SELinux | Accepted |
+| [0013](0013-tuned-profiles.md) | Lumen's own tuned profiles, so tuned never runs bootc | Accepted |
 
 ADRs 0001 to 0009 use the step numbers of their time. Since ADR 0010, the old Phase 8 is Phase 9 and the old Phase 9 is Phase 10, so their "step 8.2" is now step 9.2, and "step 9.1" is now step 10.1.
 
