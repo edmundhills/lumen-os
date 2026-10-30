@@ -22,7 +22,7 @@ Claude reads CLAUDE.md automatically, does that step (plus any ➕ steps right a
 
 ## Current step
 
-**1.8b-3b**, in progress: both fixes are committed (1.8b-3b notes below). Left: the owner signs off, push, then check in CI. The tuned profiles are in the image overlay, so they reach the ISO only once the image run of the push has built and signed a new `dev`; the `iso` run that the push starts at the same time uses the old `dev` and still shows tuned's denials, but shows whether the bytecode fix works. After the new `dev` is signed, run the `iso` workflow again (Actions > iso > Run workflow) and check that the boot test passes; then record the result in ADR 0012's and ADR 0013's Follow-ups and tick the step.
+**1.8b-3b**, in progress: both fixes are pushed (`2b2c738`), and the bytecode fix works in CI (1.8b-3b notes below). The image build of that push went over the download budget once and wasn't published, so `build-image.yml` now exempts the update from `dev` `44.20261030.3` (ADR 0007, Follow-up). Left: the owner signs off that commit, push; once its image run has signed a new `dev` (about an hour), run the `iso` workflow (Actions > iso > Run workflow) and check that the boot test passes with no denials; then record the result in ADR 0012's and ADR 0013's Follow-ups and tick the step. If that build is still over the budget, the cause isn't the new folders: compare the shared layer's file list with the previous build's.
 
 Left over from 1.6, 1.5c and 1.5b:
 

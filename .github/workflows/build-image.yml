@@ -78,9 +78,10 @@ jobs:
       DOWNLOAD_BUDGET_MIB: 100
       # An earlier build, by digest, that an update isn't held to the budget
       # from, for a change that alters many files once. It stops applying as
-      # soon as dev moves on. Empty: the last one was the first re-chunked
-      # dev, 44.20261029 (ADR 0007, Follow-up).
-      DOWNLOAD_BUDGET_EXEMPT: ""
+      # soon as dev moves on. Now dev 44.20261030.3: Lumen's tuned profiles
+      # add folders no package owns, which change the shared layer once (ADR
+      # 0007 and 0013, Follow-up).
+      DOWNLOAD_BUDGET_EXEMPT: "sha256:aae3c743479712804d1233fb7a43b7285385b5f0545c64aee056c9c59ab572d7"
       # osbuild's image-builder, which bootc-image-builder became, makes the
       # qcow2 (ADR 0011): the container of its release 88.0.0, by digest.
       IMAGE_BUILDER: >-
