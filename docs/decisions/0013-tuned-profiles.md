@@ -40,5 +40,6 @@ The other choices were turning tuned off in the live session only, which leaves 
 
 ## Follow-up
 
-- 2026-10-30: the first build with the profiles went over the download budget, most likely because their four folders are new and no package owns them, which changes the shared layer once. The update from the `dev` before them is exempt ([ADR 0007](0007-rechunking.md), Follow-up), so it downloads about 315 MiB once.
+- 2026-10-30: the first build with the profiles went over the download budget, most likely because their four folders are new and no package owns them, which changes the shared layer once. The update from the `dev` before them is exempt ([ADR 0007](0007-rechunking.md), Follow-up): `dev` `44.20261030.4` (`4f319ba`) downloads 315.5 MiB once, as the failed build measured.
+- 2026-10-30: the ISO of that build passed the boot test with no SELinux denials (`iso` run 41107138247, [ADR 0012](0012-install-iso.md), Follow-up). The installed system runs the same tuned and profiles; step 1.9's boot test of the qcow2 can confirm it there.
 - Watch [tuned#895](https://github.com/redhat-performance/tuned/issues/895) and Fedora's tuned updates. When a fixed tuned is in the image, rerun the ISO's boot test with Fedora's profiles in `ppd.conf` before removing these.
