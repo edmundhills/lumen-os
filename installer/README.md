@@ -13,8 +13,9 @@ The install media is a live ISO built from the Lumen image ([ADR 0002](../docs/d
 | Path | What it is | Step |
 | --- | --- | --- |
 | `anaconda/lumen.conf` | Anaconda's install profile for Lumen, installed in the live stage's `/etc/anaconda/profile.d/`: Btrfs with zstd compression, and `/home` as a subvolume of its own for snapper's snapshots. Without it, a system whose os-release says `ID=lumen` gets Anaconda's built-in LVM layout. The live stage's checks (`image/live/check-live.sh`) run Anaconda 44.30's own config loader on it | 1.4, 1.8b |
+| `anaconda/interactive-defaults.ks` | The installer's kickstart, installed in the live stage as `/usr/share/anaconda/interactive-defaults.ks`, the one kickstart Anaconda reads in a live session. Its `bootc` command installs the copy of the Lumen build that the ISO carries in its container storage, so installing needs no network, and makes the system follow `ghcr.io/edmundhills/lumen:dev` with signatures checked. The live stage's checks read it with pykickstart, and the install test installs with it ([ADR 0014](../docs/decisions/0014-install-from-the-iso.md)) | 1.8c |
 
 - **Ships as:** RPM `lumen-installer`, used only by the image's `live` stage, which makes the install media. Until the image has build stages for RPMs, the `live` stage copies these files in directly.
-- **Steps:** 1.8b (the live ISO, [ADR 0012](../docs/decisions/0012-install-iso.md)), 1.8c (installing the ISO's copy of the image, so the system checks signatures from the start) and 6.10 (the theme and the three choices).
+- **Steps:** 1.8b (the live ISO, [ADR 0012](../docs/decisions/0012-install-iso.md)), 1.8c (installing the ISO's copy of the image, so the system checks signatures from the start, [ADR 0014](../docs/decisions/0014-install-from-the-iso.md)) and 6.10 (the theme and the three choices).
 
 Spec: [Installer](../docs/spec.md#installer). Architecture: [4.8 Installer](../docs/architecture.md#48-installer), [9.6 Disk images and install media](../docs/architecture.md#96-disk-images-and-install-media). Risks: [5](../docs/risks.md#5-building-the-install-iso-as-a-live-iso-from-a-bootc-image).
