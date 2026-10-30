@@ -29,12 +29,14 @@
 #       (installer/anaconda/interactive-defaults.ks) installs from the live
 #       system's container storage, which is also the image the installed
 #       system follows. Stops if its bootc command says otherwise (step 1.8c).
-#   python3 image/iso.py payload STORAGE NAME DIGEST VERSION
+#   python3 image/iso.py payload STORAGE NAME IMAGE_ID VERSION
 #       The container storage STORAGE, the live system's
 #       /var/lib/containers/storage in the ISO's squashfs, holds the image
-#       NAME, whose manifest has the digest DIGEST, the signed build the ISO
-#       was made from, with all its layers, and the build version VERSION.
-#       The installer installs it (step 1.8c).
+#       NAME with all its layers, and it is the signed build the ISO was made
+#       from: its image ID, the digest of its configuration, is IMAGE_ID, and
+#       its build version VERSION. The installer installs it (step 1.8c). Its
+#       manifest isn't the build's own: copying an image out of container
+#       storage rewrites the manifest with uncompressed layers (ADR 0014).
 #
 # image/make-iso.sh runs `label`, iso.yml runs `install-image`,
 # image/check-iso.sh runs `boot` and `payload`, and test_iso.py runs them all
@@ -252,7 +254,7 @@ def big_data_name(key):
     return "=" + base64.b64encode(key.encode()).decode()
 
 
-def payload(storage, name, digest, version):
+def payload(storage, name, image_id, version):
     """Return (problems, a report) for the image NAME in the container storage STORAGE."""
     root = Path(storage)
     images = load_json(root / "overlay-images/images.json")
@@ -263,19 +265,23 @@ def payload(storage, name, digest, version):
         return [f"The container storage has {len(found)} images named {name}, not one; it has {held}"], []
     image = found[0]
     problems = []
-    if digest not in {image.get("digest"), *(image.get("digests") or [])}:
-        problems.append(f"{name} has the digest {image.get('digest')}, not {digest}, the build's")
-    # The manifest it keeps is the signed build's, byte for byte, so bootc
-    # records the digest that the build has on ghcr.io.
+    # The build, by its configuration: containers/storage names an image by
+    # its configuration's digest, its manifest gives that digest, and the
+    # configuration kept has it.
+    if f"sha256:{image.get('id')}" != image_id:
+        problems.append(f"{name} has the image ID sha256:{image.get('id')}, not {image_id}, the build's")
     folder = root / "overlay-images" / image.get("id", "")
     try:
-        raw = (folder / big_data_name("manifest")).read_bytes()
-        manifest = json.loads(raw)
-        config = json.loads((folder / big_data_name(manifest["config"]["digest"])).read_bytes())
-    except (OSError, ValueError, KeyError, TypeError) as e:
+        manifest = json.loads((folder / big_data_name("manifest")).read_bytes())
+        raw = (folder / big_data_name(image_id)).read_bytes()
+        config = json.loads(raw)
+    except (OSError, ValueError) as e:
         return problems + [f"{name}'s manifest or configuration can't be read: {e}"], []
-    if f"sha256:{hashlib.sha256(raw).hexdigest()}" != digest:
-        problems.append(f"{name}'s manifest isn't the one with the digest {digest}")
+    if (manifest.get("config") or {}).get("digest") != image_id:
+        problems.append(f"{name}'s manifest names the configuration {(manifest.get('config') or {}).get('digest')}, "
+                        f"not {image_id}")
+    if f"sha256:{hashlib.sha256(raw).hexdigest()}" != image_id:
+        problems.append(f"{name}'s configuration doesn't have the digest {image_id}")
     have = ((config.get("config") or {}).get("Labels") or {}).get(VERSION_LABEL)
     if have != version:
         problems.append(f"{name} is build {have}, not {version}")
@@ -292,14 +298,14 @@ def payload(storage, name, digest, version):
     if len(chain) != len(manifest.get("layers", [])):
         problems.append(f"{name} has {len(chain)} layers in the container storage, but its manifest lists "
                         f"{len(manifest.get('layers', []))}")
-    return problems, [f"{name}: build {have}, {digest}, {len(chain)} layers"]
+    return problems, [f"{name}: build {have}, image ID {image_id}, manifest {image.get('digest')}, {len(chain)} layers"]
 
 
 def main(argv):
     commands = {"label": 1, "boot": 3, "install-image": 1, "payload": 4}
     if len(argv) < 2 or argv[1] not in commands or len(argv) != 2 + commands[argv[1]]:
         print("Usage: iso.py label MANIFEST | boot ISO_YAML ISO_DIR LABEL | install-image KICKSTART"
-              " | payload STORAGE NAME DIGEST VERSION", file=sys.stderr)
+              " | payload STORAGE NAME IMAGE_ID VERSION", file=sys.stderr)
         return 2
     command, args = argv[1], argv[2:]
     manifest, report = None, []

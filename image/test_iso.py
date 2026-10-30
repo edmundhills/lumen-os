@@ -240,16 +240,18 @@ class PayloadTest(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
         config = json.dumps({"config": {"Labels": {iso.VERSION_LABEL: self.VERSION}}}).encode()
-        self.config_digest = "sha256:" + hashlib.sha256(config).hexdigest()
-        self.manifest = json.dumps({"schemaVersion": 2, "config": {"digest": self.config_digest},
-                                    "layers": [{"digest": f"sha256:{n}"} for n in "abc"]}).encode()
-        self.digest = "sha256:" + hashlib.sha256(self.manifest).hexdigest()
+        self.image_id = "sha256:" + hashlib.sha256(config).hexdigest()
+        # As copied out of container storage: the layers uncompressed, so not the build's own manifest.
+        manifest = json.dumps({"schemaVersion": 2, "config": {"digest": self.image_id},
+                               "layers": [{"digest": f"sha256:{n}"} for n in "abc"]}).encode()
         self.layers = [{"id": "l1"}, {"id": "l2", "parent": "l1"}, {"id": "l3", "parent": "l2"}]
         for layer in self.layers:
             (self.root / "overlay" / layer["id"] / "diff").mkdir(parents=True)
-        self.image = {"id": "img", "digest": self.digest, "names": [NAME], "layer": "l3"}
-        put(self.root / "overlay-images/img/manifest", self.manifest)
-        put(self.root / "overlay-images/img" / iso.big_data_name(self.config_digest), config)
+        self.image = {"id": self.image_id.removeprefix("sha256:"), "digest": "sha256:" + "d" * 64,
+                      "names": [NAME], "layer": "l3"}
+        self.folder = self.root / "overlay-images" / self.image["id"]
+        put(self.folder / "manifest", manifest)
+        put(self.folder / iso.big_data_name(self.image_id), config)
         self.write()
 
     def tearDown(self):
@@ -259,13 +261,14 @@ class PayloadTest(unittest.TestCase):
         put(self.root / "overlay-images/images.json", [{"id": "other", "names": ["localhost/x:y"]}, self.image])
         put(self.root / "overlay-layers/layers.json", self.layers)
 
-    def check(self, digest=None, version=VERSION):
-        return iso.payload(self.root, NAME, digest or self.digest, version)
+    def check(self, image_id=None, version=VERSION):
+        return iso.payload(self.root, NAME, image_id or self.image_id, version)
 
     def test_the_build_with_its_layers(self):
         problems, report = self.check()
         self.assertEqual(problems, [])
-        self.assertEqual(report, [f"{NAME}: build {self.VERSION}, {self.digest}, 3 layers"])
+        self.assertEqual(report, [f"{NAME}: build {self.VERSION}, image ID {self.image_id}, "
+                                  f"manifest sha256:{'d' * 64}, 3 layers"])
 
     def test_big_data_names(self):
         self.assertEqual(iso.big_data_name("manifest"), "manifest")
@@ -273,13 +276,13 @@ class PayloadTest(unittest.TestCase):
 
     def test_another_build(self):
         self.assertIn(f"is build {self.VERSION}, not 44.1", " ".join(self.check(version="44.1")[0]))
-        problems = self.check(digest="sha256:" + "0" * 64)[0]
-        self.assertEqual(len(problems), 2)  # Not its digest, and its manifest isn't that digest's.
+        problems = self.check(image_id="sha256:" + "0" * 64)[0]
+        self.assertTrue(any("has the image ID" in p for p in problems), problems)
 
-    def test_a_changed_manifest(self):
-        # Copied with its manifest rewritten: the digest bootc records would differ from ghcr.io's.
-        put(self.root / "overlay-images/img/manifest", self.manifest + b" ")
-        self.assertIn("isn't the one with the digest", " ".join(self.check()[0]))
+    def test_a_changed_configuration(self):
+        put(self.folder / iso.big_data_name(self.image_id), b"{}")
+        problems = self.check()[0]
+        self.assertTrue(any("doesn't have the digest" in p for p in problems), problems)
 
     def test_no_such_image(self):
         self.image["names"] = ["ghcr.io/edmundhills/lumen:other"]
@@ -297,11 +300,11 @@ class PayloadTest(unittest.TestCase):
         self.assertTrue(any("Layer l1 of" in p and "isn't in" in p for p in problems), problems)
 
     def test_main(self):
-        args = ["iso.py", "payload", str(self.root), NAME, self.digest, self.VERSION]
+        args = ["iso.py", "payload", str(self.root), NAME, self.image_id, self.VERSION]
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()) as err:
             self.assertEqual(iso.main(args), 0)
             self.assertEqual(iso.main(args[:-1] + ["44.1"]), 1)
-            self.assertEqual(iso.main(["iso.py", "payload", str(self.root / "none"), NAME, self.digest, "1"]), 2)
+            self.assertEqual(iso.main(["iso.py", "payload", str(self.root / "none"), NAME, self.image_id, "1"]), 2)
         self.assertIn("3 layers", err.getvalue())
         out = io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):

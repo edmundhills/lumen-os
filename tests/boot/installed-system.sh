@@ -12,7 +12,8 @@
 #
 #   NAME     The image the installer's kickstart installs, which the system
 #            follows: ghcr.io/edmundhills/lumen:dev.
-#   DIGEST   The digest of the ISO's copy of it, the signed build.
+#   DIGEST   The digest of the ISO's copy of it, as the live system's container
+#            storage has it.
 #   VERSION  That build's version.
 #
 # Prints LUMEN-CHECKS-BEGIN first, which install_iso.py waits for. Exits 0 when
@@ -123,8 +124,8 @@ follows_signed() {
   return "$status"
 }
 
-# It runs the ISO's copy of the image, byte for byte: so the first update
-# downloads only what changed since.
+# It runs the ISO's copy of the image: the digest the live system's container
+# storage gave it, and its version.
 runs_the_build() {
   local fields
   mapfile -t fields < <(booted imageDigest version)

@@ -8,7 +8,7 @@
 # and the copy of the Lumen build its installer installs (step 1.8c,
 # docs/decisions/0014-install-from-the-iso.md).
 #
-# Usage: image/check-iso.sh ISO ISO_YAML KICKSTART VERSION DIGEST
+# Usage: image/check-iso.sh ISO ISO_YAML KICKSTART VERSION IMAGE_ID
 #
 #   ISO        The ISO.
 #   ISO_YAML   The label and boot menu it should have: image/live/iso.yaml.
@@ -16,8 +16,9 @@
 #              installer/anaconda/interactive-defaults.ks.
 #   VERSION    The build version of the Lumen image its live system is made
 #              from, such as 44.20261029.4.
-#   DIGEST     That build's digest on ghcr.io, the signed one, which the
-#              installer's copy must have.
+#   IMAGE_ID   That build's image ID, the digest of its configuration, as
+#              the signed build on ghcr.io has it, which the installer's copy
+#              must have.
 #
 # Run it as root inside the live system it was made from, as a privileged
 # container with the ISO and the checkout mounted, so that it reads the
@@ -29,10 +30,10 @@
 set -u
 
 if (($# != 5)) || [[ ! -f $1 || ! -f $2 || ! -f $3 ]]; then
-  printf 'Usage: %s ISO ISO_YAML KICKSTART VERSION DIGEST\n' "${0##*/}" >&2
+  printf 'Usage: %s ISO ISO_YAML KICKSTART VERSION IMAGE_ID\n' "${0##*/}" >&2
   exit 2
 fi
-readonly iso=$1 iso_yaml=$2 kickstart=$3 version=$4 digest=$5
+readonly iso=$1 iso_yaml=$2 kickstart=$3 version=$4 image_id=$5
 here=$(dirname -- "${BASH_SOURCE[0]}")
 readonly here
 # The checkout is mounted read-only.
@@ -130,13 +131,13 @@ live_system() {
 
 # The installer installs the build the ISO was made from, from the live
 # system's container storage, with no network: the squashfs has the
-# installer's kickstart, and holds the image it names, with the build's signed
-# manifest and all its layers (image/iso.py).
+# installer's kickstart, and holds the image it names, with the signed build's
+# image ID and version and all its layers (image/iso.py).
 installer_payload() {
   local name
   cmp -- "$kickstart" "$live/usr/share/anaconda/interactive-defaults.ks" || return 1
   name=$(python3 "$here/iso.py" install-image "$kickstart") || return 1
-  python3 "$here/iso.py" payload "$live/var/lib/containers/storage" "$name" "$digest" "$version"
+  python3 "$here/iso.py" payload "$live/var/lib/containers/storage" "$name" "$image_id" "$version"
 }
 
 # Every file in the squashfs has the label the live system's own policy gives
@@ -167,7 +168,7 @@ check "EFI system partition" esp
 check "Media checksum (checkisomd5)" media_checksum
 check "Kernel and initramfs" kernel
 check "Live system, build $version" live_system
-check "The installer's copy of build $version, $digest" installer_payload
+check "The installer's copy of build $version, image ID $image_id" installer_payload
 check "SELinux labels (setfiles)" selinux_labels
 
 printf '\nPassed: %d   Failed: %d\n' "$passes" "$failures"

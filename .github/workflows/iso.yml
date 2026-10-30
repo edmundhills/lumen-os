@@ -102,11 +102,18 @@ jobs:
           printf 'digest=%s\nversion=%s\n' "$digest" "$version" >>"$GITHUB_OUTPUT"
           printf '%s:%s is build %s, %s\n' "$REGISTRY_IMAGE" "$TAG" "$version" "$digest"
 
-      # Podman checks the signature before it pulls anything, with the trust
+      # skopeo checks the signature before it copies anything, with the trust
       # policy and registries.d from image/overlay, its key path pointing to
       # the key in the checkout, as the sign job checks it (ADR 0008). So the
       # ISO is only ever made from a build signed with Lumen's key.
+      #
+      # The signatures, once checked, aren't kept: image-builder copies the
+      # build out of container storage for the installer, which rewrites its
+      # manifest with uncompressed layers, and a copy that would invalidate
+      # signatures is refused (ADR 0014). The build's image ID, the digest of
+      # its configuration, which no copy changes, identifies it from here on.
       - name: Pull the build, checking its signature
+        id: pull
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
         run: |
@@ -114,7 +121,11 @@ jobs:
             >"$RUNNER_TEMP/policy.json"
           sudo mkdir -p /etc/containers/registries.d
           sudo cp image/overlay/etc/containers/registries.d/lumen.yaml /etc/containers/registries.d/
-          sudo podman pull --quiet --signature-policy "$RUNNER_TEMP/policy.json" "$REGISTRY_IMAGE@$DIGEST"
+          sudo skopeo --policy "$RUNNER_TEMP/policy.json" copy --quiet --remove-signatures \
+            "docker://$REGISTRY_IMAGE@$DIGEST" "containers-storage:$REGISTRY_IMAGE@$DIGEST"
+          id=$(sudo podman image inspect --format '{{.Id}}' "$REGISTRY_IMAGE@$DIGEST")
+          printf 'image-id=sha256:%s\n' "$id" >>"$GITHUB_OUTPUT"
+          printf 'Build %s has the image ID sha256:%s\n' "$DIGEST" "$id"
 
       # The installer installs this build from the live system's container
       # storage, under the name its kickstart gives it, which is also the
@@ -162,6 +173,7 @@ jobs:
       - name: Check the ISO
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
+          IMAGE_ID: ${{ steps.pull.outputs.image-id }}
           VERSION: ${{ steps.build.outputs.version }}
           NAME: ${{ steps.iso.outputs.name }}
         run: |
@@ -171,7 +183,7 @@ jobs:
           sudo podman run --rm --privileged --network=none \
             --volume "$RUNNER_TEMP/iso:/iso:ro" --volume "$PWD:/src:ro" "$LIVE_IMAGE" \
             bash /src/image/check-iso.sh "/iso/$NAME" /src/image/live/iso.yaml \
-            /src/installer/anaconda/interactive-defaults.ks "$VERSION" "$DIGEST" >"$report" 2>&1 || status=$?
+            /src/installer/anaconda/interactive-defaults.ks "$VERSION" "$IMAGE_ID" >"$report" 2>&1 || status=$?
           cat "$report"
           size=$(du --apparent-size --human-readable "$RUNNER_TEMP/iso/$NAME" | cut -f1)
           # The backticks are Markdown, for the run's summary page.
