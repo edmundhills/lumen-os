@@ -162,6 +162,15 @@ RUN sed -i 's/^livesys_session=.*/livesys_session=kde/' /etc/sysconfig/livesys \
 # package, and the ISO tools copy them from /boot/efi.
 RUN mkdir -p /boot/efi && cp -a /usr/lib/efi/*/*/EFI /boot/efi/
 
+# The ostree repository that every build carries, which the live system
+# doesn't use: it runs from the ISO's squashfs, not from an ostree deployment,
+# and the installer installs the image from container storage (step 1.8c).
+# The repository's files are hard links to those in /usr, and the SELinux
+# policy labels the two paths differently, so each such file would get
+# whichever label setfiles met first (image/check-iso.sh). Titanoboa leaves
+# them out of its squashfs too (ADR 0012).
+RUN rm -rf /sysroot/ostree /ostree
+
 # The installer's install profile (installer/anaconda/lumen.conf, step 1.4),
 # and the ISO's label and boot menu (image/live/iso.yaml).
 RUN --mount=type=bind,source=installer,target=/run/lumen/installer \

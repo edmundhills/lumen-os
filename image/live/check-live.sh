@@ -257,6 +257,19 @@ no_first_run_setup() {
   return "$status"
 }
 
+# The build's ostree repository is gone, so no file has a second path that the
+# SELinux policy labels differently (image/Containerfile).
+no_ostree_repo() {
+  local path status=0
+  for path in /sysroot/ostree /ostree; do
+    if [[ -e $path || -L $path ]]; then
+      printf '%s is still here\n' "$path"
+      status=1
+    fi
+  done
+  return "$status"
+}
+
 # The live stage leaves SELinux enforcing, as the installed system has it.
 selinux() {
   if ! grep -qx 'SELINUX=enforcing' /etc/selinux/config; then
@@ -275,6 +288,7 @@ check "livesys sets up a Plasma live session" livesys
 check "Anaconda uses Lumen's install profile" anaconda_profile
 check "WebUI's browser is here" webui_browser
 check "The first-run setup doesn't start in the live session" no_first_run_setup
+check "The build's ostree repository is gone" no_ostree_repo
 check "SELinux is enforcing" selinux
 
 printf '\nPassed: %d   Failed: %d\n' "$passes" "$failures"

@@ -61,16 +61,21 @@ done
 
 passes=0 failures=0
 
-# check NAME FUNCTION: run one check, and show its output only if it fails.
+# check NAME FUNCTION: run one check, and show its output only if it fails:
+# its first 40 lines, so that the report stays within the 1 MB a run's summary
+# page takes.
 check() {
-  local name=$1 out
+  local name=$1 out lines
   if out=$("$2" 2>&1); then
     passes=$((passes + 1))
     printf '  PASS  %s\n' "$name"
   else
     failures=$((failures + 1))
     printf '  FAIL  %s\n' "$name"
-    [[ -z $out ]] || printf '%s\n' "$out" | sed 's/^/        /'
+    [[ -n $out ]] || return 0
+    lines=$(wc -l <<<"$out")
+    head -n 40 <<<"$out" | sed 's/^/        /'
+    ((lines <= 40)) || printf '        (and %d more lines)\n' "$((lines - 40))"
   fi
 }
 
@@ -119,16 +124,24 @@ live_system() {
 
 # Every file in the squashfs has the label the live system's own policy gives
 # it: setfiles, asked to change nothing (-n), lists each file it would relabel.
-# -m: this host's mounts don't matter, -F: compare the whole label.
+# -m: this host's mounts don't matter, -F: compare the whole label. A warning
+# fails the check too: setfiles warns about a file with two paths that the
+# policy labels differently, and gives it whichever label it meets first.
 selinux_labels() {
-  local policy=("$live"/etc/selinux/targeted/policy/policy.*) wrong
+  local policy=("$live"/etc/selinux/targeted/policy/policy.*) wrong status=0 errors=$work/setfiles-errors
   wrong=$(setfiles -n -v -F -m -r "$live" -c "${policy[0]}" \
-    "$live/etc/selinux/targeted/contexts/files/file_contexts" "$live") || return 1
+    "$live/etc/selinux/targeted/contexts/files/file_contexts" "$live" 2>"$errors") || status=$?
+  if ((status != 0)) || [[ -s $errors ]]; then
+    printf 'setfiles ended with status %d and wrote %d lines of warnings or errors, for example:\n' "$status" "$(wc -l <"$errors")"
+    head -n 10 "$errors"
+    status=1
+  fi
   if [[ -n $wrong ]]; then
     printf '%d files would get another label, for example:\n' "$(wc -l <<<"$wrong")"
     head -n 10 <<<"$wrong"
-    return 1
+    status=1
   fi
+  return "$status"
 }
 
 printf 'Checking %s (%s, label %s)\n' "${iso##*/}" "$(du --apparent-size --human-readable -- "$iso" | cut -f1)" "$label"

@@ -32,13 +32,15 @@ The install ISO is a live ISO made from the Lumen image (ADR 0002). Step 1.8b-1 
 
 1. **image-builder's `generic-iso` packs the install ISO**, from the container that makes the qcow2, pinned by release and digest: `.github/workflows/iso.yml` pins the same one as `build-image.yml`, and `image/test_iso.py` checks that they agree. Titanoboa isn't used: the spec's "try Titanoboa first" is answered by the points above, of which the firmware boot entries and the lack of labels matter most.
 2. **Lumen labels the files with osbuild's own SELinux stage.** `image/make-iso.sh` asks image-builder for its manifest (`image-builder manifest --bootc-ref <live system> generic-iso`), `image/iso.py label` adds an `org.osbuild.selinux` stage at the end of the `os-tree` pipeline, which labels every file with the live system's own `file_contexts`, and the script runs osbuild from the same container. `iso.py` stops with a message if the manifest is no longer laid out this way, or if image-builder labels the tree itself, which would make the step unnecessary.
+
+   Before that, the `live` stage removes the ostree repository that every build carries (`/sysroot/ostree`, and `/ostree`, which points to it). The live system runs from the squashfs, not from an ostree deployment, and step 1.8c installs from container storage, so nothing uses it. Its files are hard links to those in `/usr`, and the policy labels the two paths differently, so each such file would get whichever label `setfiles` met first. Titanoboa leaves both folders out of its squashfs too. The second run in CI found this (Follow-up).
 3. **`image/check-iso.sh` checks every ISO**, inside the live system it was made from, so that it reads the labels with that system's `setfiles` and policy:
    - The label and boot menus are those of `iso.yaml`, and no entry turns SELinux off.
    - The files UEFI and BIOS firmware start are there, with no fallback loader, and the EFI system partition holds the same boot files as the ISO.
    - `checkisomd5` accepts the checksum.
    - The kernel and initramfs are the live system's own.
    - The squashfs holds the build named, with `SELINUX=enforcing`.
-   - Every file in the squashfs has the label the policy gives it.
+   - Every file in the squashfs has the label the policy gives it, and `setfiles` gives no warning, such as one about a file with two paths the policy labels differently.
 4. **The `iso` workflow makes the ISO** on demand, and on pushes to main that change the live system or how the ISO is made. It builds only the `live` stage, on a published build whose signature it checks first with the trust policy Lumen ships, and keeps the ISO for 7 days as a workflow artifact (Q15).
 5. **`iso.yaml` gets a "Check this USB, then try or install Lumen OS" entry** (`rd.live.check`), now that the ISO carries a checksum. The initramfs has `checkisomd5`, because the live stage installs `isomd5sum` before it runs dracut.
 
@@ -49,3 +51,11 @@ The install ISO is a live ISO made from the Lumen image (ADR 0002). Step 1.8b-1 
 - The ISO is larger than GitHub's 2 GiB limit for release files, so releases need another host (Q15, step 9.5).
 - Step 1.8c adds `--bootc-installer-payload-ref` to the manifest `make-iso.sh` asks for. image-builder copies the payload into `os-tree` before the SELinux stage, so its files are labelled too.
 - The spec, the architecture and the risk register now name image-builder as the ISO's packer, and Titanoboa is no longer one of the tool images Renovate will move.
+
+## Follow-up
+
+- 2026-10-30: the first two runs in CI, on `dev` `44.20261029.4`, both made the ISO, which is 3.53 GiB. The first (`iso` run 40974893727) stopped before the check, because `make-iso.sh` runs as root and made the output folder the runner then had to write the checksum into. The second (run 41022162696) passed 5 of the 6 checks and failed on the labels:
+  - `setfiles` warned about 131,591 files that have a second path in `/sysroot/ostree/repo/objects`, the build's ostree repository, which the policy labels `default_t`.
+  - osbuild's `setfiles` met the `/usr` paths first, so the files had their `/usr` labels, which is what the live system needs. The check reads the squashfs, which lists `sysroot` before `usr`, so it met the repository's paths first and found every one of those files mislabelled. Which label a file ends up with depended on the order osbuild's file system happened to list the folders in.
+  - The check also wrote all of `setfiles`'s warnings into the run's summary, 48.6 MB, which GitHub refused (it takes 1 MB). It now shows at most 40 lines of a failing check, and fails on any warning from `setfiles`.
+  - The fix is Decision 2's second paragraph: the `live` stage removes the repository, and `check-live.sh` checks that it is gone.
