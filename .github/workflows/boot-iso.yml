@@ -2,11 +2,16 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# The install ISO's boot test (step 1.8b-3, tests/README.md): boot the ISO in a
-# VM with UEFI and Secure Boot, as a PC boots the USB, through two entries of
-# its menu, and check the live session inside: SELinux enforcing with no
-# denials, the live user's Plasma, and "Check this USB" passing
-# (tests/boot/boot_iso.py).
+# The install ISO's boot and install tests (tests/README.md), in a VM with UEFI
+# and Secure Boot, as a PC boots the USB:
+#   - boot the ISO through two entries of its menu, and check the live session
+#     inside: SELinux enforcing with no denials, the live user's Plasma, and
+#     "Check this USB" passing (step 1.8b-3, tests/boot/boot_iso.py);
+#   - install Lumen from it onto the VM's empty disk with no network, as the
+#     live session's installer does, then start the installed system and check
+#     that it runs the ISO's copy of the image and follows
+#     ghcr.io/edmundhills/lumen:dev with signatures checked (step 1.8c,
+#     tests/boot/install_iso.py).
 #
 # The iso workflow calls it once the ISO is made and kept. To boot the ISO of
 # an earlier iso run again, while GitHub keeps it (7 days): Actions > boot-iso
@@ -43,7 +48,8 @@ jobs:
   boot:
     name: Boot the ISO
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    # Booting takes minutes; installing may take most of an hour.
+    timeout-minutes: 150
     permissions:
       # To download the ISO of another run.
       actions: read
@@ -93,6 +99,7 @@ jobs:
             sudo tee /etc/containers/registries.conf.d/50-lumen-bases.conf
 
       - name: Build the VM container
+        id: container
         run: |
           fedora=$(sed -n 's/^FROM //p' tests/lint/Containerfile)
           sudo podman build --build-arg "FEDORA=$fedora" --tag localhost/lumen-boot tests/boot
@@ -120,7 +127,32 @@ jobs:
           } >>"$GITHUB_STEP_SUMMARY"
           exit "$status"
 
-      # The serial port's and QEMU's logs and the screenshots of each boot.
+      # Install from the ISO even if the boot test failed: they find different
+      # faults. The VM's disk, 64 GiB of which about 10 are used, is a sparse
+      # file in the runner's temporary folder, not among the logs kept.
+      - name: Install from the ISO
+        if: ${{ !cancelled() && steps.container.outcome == 'success' }}
+        run: |
+          mapfile -t isos < <(find "$RUNNER_TEMP/iso" -type f -name 'lumen-*-live-x86_64.iso')
+          iso=${isos[0]} out=$RUNNER_TEMP/boot report=$RUNNER_TEMP/install-report status=0
+          mkdir -p "$out" "$RUNNER_TEMP/disk"
+          # The runner writes the report.
+          # shellcheck disable=SC2024
+          sudo podman run --rm --network=none --device /dev/kvm \
+            --volume "$iso:/iso/${iso##*/}:ro" --volume "$PWD:/src:ro" --volume "$out:/out" \
+            --volume "$RUNNER_TEMP/disk:/disk" \
+            localhost/lumen-boot python3 /src/tests/boot/install_iso.py --require-kvm \
+            "/iso/${iso##*/}" /src/image/live/iso.yaml /disk/lumen.raw /out >"$report" 2>&1 || status=$?
+          cat "$report"
+          {
+            printf '### The install test\n\n```text\n'
+            cat "$report"
+            printf '```\n'
+          } >>"$GITHUB_STEP_SUMMARY"
+          exit "$status"
+
+      # The serial ports' and QEMU's logs, Anaconda's logs and the screenshots
+      # of each boot.
       - name: Keep the logs and screenshots
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
