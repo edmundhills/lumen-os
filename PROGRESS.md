@@ -22,7 +22,7 @@ Claude reads CLAUDE.md automatically, does that step (plus any ➕ steps right a
 
 ## Current step
 
-**1.8b-2**, its first run in CI. The code is done ([ADR 0012](docs/decisions/0012-install-iso.md), 1.8b-2 notes below). Once the owner has signed off and pushed it, the push starts the `iso` workflow, because it changes `image/live/` and the workflow itself. Check that run: "Check the ISO" must pass 6 of 6. Record its step times, the ISO's size and `df` in ADR 0012's Follow-up, then tick 1.8b-2 and go on to 1.8b-3. If it fails, the notes say what was checked where. Build in CI, not in WSL.
+**1.8b-2**, its third run in CI. The code is done ([ADR 0012](docs/decisions/0012-install-iso.md), 1.8b-2 notes below). The second run failed on the labels, and the live stage now removes the build's ostree repository. Once the owner has signed off and pushed that, the push starts the `iso` workflow, because it changes the Containerfile and `image/live/`. Check that run: "Check the ISO" must pass 6 of 6, and the live stage's check must pass "The build's ostree repository is gone". Record its step times, the ISO's size and `df` in ADR 0012's Follow-up, then tick 1.8b-2 and go on to 1.8b-3. If it fails, the notes say what was checked where. Build in CI, not in WSL.
 
 Left over from 1.6, 1.5c and 1.5b:
 
@@ -187,7 +187,7 @@ Left over from 1.6, 1.5c and 1.5b:
     - the EFI system partition matches the ISO's `EFI/BOOT`;
     - `checkisomd5` accepts the checksum;
     - the kernel and initramfs are the live system's;
-    - the squashfs holds the build named, with `SELINUX=enforcing`, and `setfiles -n` finds no file to relabel.
+    - the squashfs holds the build named, with `SELINUX=enforcing`, and `setfiles -n` finds no file to relabel and gives no warning.
   - **`.github/workflows/iso.yml`** runs on demand (Actions > iso > Run workflow, any tag of `lumen`, default `dev`) and on pushes to main that change the live system or the ISO scripts. It works out the digest and version, and pulls the build with `podman pull --signature-policy` and the overlay's policy and registries.d. Then it builds only the `live` stage on that build, makes and checks the ISO, and keeps it 7 days (`archive: false`, so the download is the `.iso` itself). `test_iso.py` checks that it pins the same image-builder as `build-image.yml`.
   - `iso.yaml` has a third entry, "Check this USB, then try or install Lumen OS" (`rd.live.check`): the live initramfs has `checkisomd5`. `just build-iso` now says to use the workflow.
   - **Checked in WSL:**
@@ -208,6 +208,12 @@ Left over from 1.6, 1.5c and 1.5b:
     - osbuild took about 15 min: unpacking the live system took 272 s for the build environment and 227 s for `os-tree`, labelling `os-tree` 17 s, the squashfs 220 s (3,286 MB, 274,881 files), `xorriso` 27 s and `implantisomd5` 11 s;
     - the ISO is 1,849,056 sectors, 3.53 GiB;
     - the job's log is 40 MB, too big for the browser to show. Read it with `fetch()` and a `Range` header, or stream it and keep only the matching lines.
+  - **Second run in CI** (`iso` run 41022162696, for `ecbfa1c`): freeing disk 2 min 20 s, the pull 1 min 30 s, the live stage 25 min 47 s, "Make the ISO" 14 min 4 s. "Check the ISO" passed 5 of 6 and failed on the labels (ADR 0012, Follow-up):
+    - the squashfs still held the build's ostree repository, `/sysroot/ostree/repo`, whose 131,591 objects are hard links to files in `/usr`. The policy labels those paths `default_t`, so `setfiles` warned that each file had two labels and kept whichever path it met first. osbuild met `/usr` first; the check, reading the sorted squashfs, met `/sysroot` first and failed every one.
+    - Fixed: the live stage removes `/sysroot/ostree` and `/ostree` (Titanoboa leaves them out too, and 1.8c installs from container storage), `check-live.sh` checks they are gone, and `check-iso.sh` fails on any `setfiles` warning.
+    - The check's output, 48.6 MB, went into the run's summary, which GitHub caps at 1 MB, and into a 60 MB log. `check-iso.sh` now shows at most 40 lines of a failing check, and keeps `setfiles`'s warnings apart from its list of files to relabel.
+    - The Range request returned the whole log (status 200), so reading its end took about a minute: start the `fetch()` without waiting for it, keep the result in `window`, and read it in a second call.
+  - **Stuck:** main's image run for `ecbfa1c` (41022162826) built `44.20261030`, then its "Sign the image" job sat at "Starting job", queued for a runner, from 08:48 UTC on 2026-10-30, with no approval waiting and no GitHub incident. So `dev` stayed on `44.20261029.5`, and the run holds the `image` workflow's queue for main, so the next push's image run waits behind it. The owner can cancel the run and use "Re-run failed jobs", which runs the sign job alone (build-image.yml says so). Otherwise it waits until GitHub gives up on it. The `iso` workflow doesn't wait for it: it uses whatever `dev` names.
   - Left in WSL's rootful store, about 25 GB: `2debdb4e…` (`44.20261029.4`), the live stage's layers, Ubuntu 24.04 and image-builder 88. Delete them once 1.8b is done.
   - `just lint` 12 of 12, `just test` passes (172 unit tests).
 
