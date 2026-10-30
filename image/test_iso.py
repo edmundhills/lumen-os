@@ -10,6 +10,7 @@
 
 import contextlib
 import copy
+import hashlib
 import io
 import json
 import shutil
@@ -194,6 +195,118 @@ class BootTest(unittest.TestCase):
             self.assertEqual(iso.main(["iso.py", "boot", str(ISO_YAML), str(self.dir / "missing"), "x"]), 2)
             self.assertEqual(iso.main(["iso.py", "label"]), 2)
         self.assertEqual(out.getvalue(), "")
+
+
+KICKSTART = REPO / "installer/anaconda/interactive-defaults.ks"
+NAME = "ghcr.io/edmundhills/lumen:dev"
+
+
+class InstallImageTest(unittest.TestCase):
+    def test_the_installer_s_kickstart(self):
+        self.assertEqual(iso.install_image(KICKSTART.read_text(encoding="utf-8")), ([], NAME))
+
+    def test_forms_of_the_bootc_command(self):
+        ks = ("bootc --source-imgref containers-storage:x/y:z --target-imgref=x/y:z\n"
+              "%post\nbootc --source-imgref=registry:elsewhere\n%end\n# bootc --source-imgref=oci:a\n")
+        self.assertEqual(iso.install_image(ks), ([], "x/y:z"))
+
+    def test_what_it_refuses(self):
+        cases = {
+            "no bootc": "ostreecontainer --url=x --transport=containers-storage\n",
+            "two": "bootc --source-imgref=containers-storage:a --target-imgref=a\n" * 2,
+            "from a registry": "bootc --source-imgref=registry:ghcr.io/a:b --target-imgref=ghcr.io/a:b\n",
+            "another target": "bootc --source-imgref=containers-storage:a:b --target-imgref=c:d\n",
+            "no target": "bootc --source-imgref=containers-storage:a:b\n",
+            "not an option": "bootc containers-storage:a:b\n",
+        }
+        for case, ks in cases.items():
+            with self.subTest(case):
+                problems, name = iso.install_image(ks)
+                self.assertEqual(len(problems), 1)
+                self.assertIsNone(name)
+
+
+def put(path, data):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data if isinstance(data, bytes) else json.dumps(data).encode())
+
+
+class PayloadTest(unittest.TestCase):
+    """A stand-in for the live system's container storage, laid out as containers/storage lays it out."""
+
+    VERSION = "44.20261030.4"
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        config = json.dumps({"config": {"Labels": {iso.VERSION_LABEL: self.VERSION}}}).encode()
+        self.config_digest = "sha256:" + hashlib.sha256(config).hexdigest()
+        self.manifest = json.dumps({"schemaVersion": 2, "config": {"digest": self.config_digest},
+                                    "layers": [{"digest": f"sha256:{n}"} for n in "abc"]}).encode()
+        self.digest = "sha256:" + hashlib.sha256(self.manifest).hexdigest()
+        self.layers = [{"id": "l1"}, {"id": "l2", "parent": "l1"}, {"id": "l3", "parent": "l2"}]
+        for layer in self.layers:
+            (self.root / "overlay" / layer["id"] / "diff").mkdir(parents=True)
+        self.image = {"id": "img", "digest": self.digest, "names": [NAME], "layer": "l3"}
+        put(self.root / "overlay-images/img/manifest", self.manifest)
+        put(self.root / "overlay-images/img" / iso.big_data_name(self.config_digest), config)
+        self.write()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def write(self):
+        put(self.root / "overlay-images/images.json", [{"id": "other", "names": ["localhost/x:y"]}, self.image])
+        put(self.root / "overlay-layers/layers.json", self.layers)
+
+    def check(self, digest=None, version=VERSION):
+        return iso.payload(self.root, NAME, digest or self.digest, version)
+
+    def test_the_build_with_its_layers(self):
+        problems, report = self.check()
+        self.assertEqual(problems, [])
+        self.assertEqual(report, [f"{NAME}: build {self.VERSION}, {self.digest}, 3 layers"])
+
+    def test_big_data_names(self):
+        self.assertEqual(iso.big_data_name("manifest"), "manifest")
+        self.assertEqual(iso.big_data_name("sha256:ab"), "=c2hhMjU2OmFi")
+
+    def test_another_build(self):
+        self.assertIn(f"is build {self.VERSION}, not 44.1", " ".join(self.check(version="44.1")[0]))
+        problems = self.check(digest="sha256:" + "0" * 64)[0]
+        self.assertEqual(len(problems), 2)  # Not its digest, and its manifest isn't that digest's.
+
+    def test_a_changed_manifest(self):
+        # Copied with its manifest rewritten: the digest bootc records would differ from ghcr.io's.
+        put(self.root / "overlay-images/img/manifest", self.manifest + b" ")
+        self.assertIn("isn't the one with the digest", " ".join(self.check()[0]))
+
+    def test_no_such_image(self):
+        self.image["names"] = ["ghcr.io/edmundhills/lumen:other"]
+        self.write()
+        problems, _ = self.check()
+        self.assertEqual(len(problems), 1)
+        self.assertIn("0 images named", problems[0])
+
+    def test_missing_layers(self):
+        shutil.rmtree(self.root / "overlay/l2")
+        self.assertIn("Layer l2 of", " ".join(self.check()[0]))
+        self.layers = self.layers[1:]
+        self.write()
+        problems = self.check()[0]
+        self.assertTrue(any("Layer l1 of" in p and "isn't in" in p for p in problems), problems)
+
+    def test_main(self):
+        args = ["iso.py", "payload", str(self.root), NAME, self.digest, self.VERSION]
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(iso.main(args), 0)
+            self.assertEqual(iso.main(args[:-1] + ["44.1"]), 1)
+            self.assertEqual(iso.main(["iso.py", "payload", str(self.root / "none"), NAME, self.digest, "1"]), 2)
+        self.assertIn("3 layers", err.getvalue())
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(iso.main(["iso.py", "install-image", str(KICKSTART)]), 0)
+        self.assertEqual(out.getvalue(), NAME + "\n")
 
 
 class PinTest(unittest.TestCase):

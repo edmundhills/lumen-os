@@ -4,14 +4,20 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Check an install ISO that image/make-iso.sh made (step 1.8b,
-# docs/decisions/0012-install-iso.md): how it boots, and the live system in it.
+# docs/decisions/0012-install-iso.md): how it boots, the live system in it,
+# and the copy of the Lumen build its installer installs (step 1.8c,
+# docs/decisions/0014-install-from-the-iso.md).
 #
-# Usage: image/check-iso.sh ISO ISO_YAML VERSION
+# Usage: image/check-iso.sh ISO ISO_YAML KICKSTART VERSION DIGEST
 #
-#   ISO       The ISO.
-#   ISO_YAML  The label and boot menu it should have: image/live/iso.yaml.
-#   VERSION   The build version of the Lumen image its live system is made
-#             from, such as 44.20261029.4.
+#   ISO        The ISO.
+#   ISO_YAML   The label and boot menu it should have: image/live/iso.yaml.
+#   KICKSTART  The installer's kickstart it should have:
+#              installer/anaconda/interactive-defaults.ks.
+#   VERSION    The build version of the Lumen image its live system is made
+#              from, such as 44.20261029.4.
+#   DIGEST     That build's digest on ghcr.io, the signed one, which the
+#              installer's copy must have.
 #
 # Run it as root inside the live system it was made from, as a privileged
 # container with the ISO and the checkout mounted, so that it reads the
@@ -22,11 +28,11 @@
 
 set -u
 
-if (($# != 3)) || [[ ! -f $1 || ! -f $2 ]]; then
-  printf 'Usage: %s ISO ISO_YAML VERSION\n' "${0##*/}" >&2
+if (($# != 5)) || [[ ! -f $1 || ! -f $2 || ! -f $3 ]]; then
+  printf 'Usage: %s ISO ISO_YAML KICKSTART VERSION DIGEST\n' "${0##*/}" >&2
   exit 2
 fi
-readonly iso=$1 iso_yaml=$2 version=$3
+readonly iso=$1 iso_yaml=$2 kickstart=$3 version=$4 digest=$5
 here=$(dirname -- "${BASH_SOURCE[0]}")
 readonly here
 # The checkout is mounted read-only.
@@ -122,6 +128,17 @@ live_system() {
   return "$status"
 }
 
+# The installer installs the build the ISO was made from, from the live
+# system's container storage, with no network: the squashfs has the
+# installer's kickstart, and holds the image it names, with the build's signed
+# manifest and all its layers (image/iso.py).
+installer_payload() {
+  local name
+  cmp -- "$kickstart" "$live/usr/share/anaconda/interactive-defaults.ks" || return 1
+  name=$(python3 "$here/iso.py" install-image "$kickstart") || return 1
+  python3 "$here/iso.py" payload "$live/var/lib/containers/storage" "$name" "$digest" "$version"
+}
+
 # Every file in the squashfs has the label the live system's own policy gives
 # it: setfiles, asked to change nothing (-n), lists each file it would relabel.
 # -m: this host's mounts don't matter, -F: compare the whole label. A warning
@@ -150,6 +167,7 @@ check "EFI system partition" esp
 check "Media checksum (checkisomd5)" media_checksum
 check "Kernel and initramfs" kernel
 check "Live system, build $version" live_system
+check "The installer's copy of build $version, $digest" installer_payload
 check "SELinux labels (setfiles)" selinux_labels
 
 printf '\nPassed: %d   Failed: %d\n' "$passes" "$failures"

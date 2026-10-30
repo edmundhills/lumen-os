@@ -11,9 +11,11 @@
 # It builds only the live stage of image/Containerfile, on the build named
 # (LUMEN_LIVE_FROM), after checking that build's signature with the trust
 # policy Lumen ships. image/make-iso.sh packs it with image-builder, labelled
-# for SELinux, and image/check-iso.sh checks the result inside the live system.
-# Then boot-iso.yml boots the ISO in a VM with Secure Boot and checks the live
-# session (step 1.8b-3).
+# for SELinux, with that same build in the live system's container storage for
+# the installer to install (step 1.8c), and image/check-iso.sh checks the
+# result inside the live system. Then boot-iso.yml boots the ISO in a VM with
+# Secure Boot, checks the live session (step 1.8b-3), and installs Lumen from
+# it onto the VM's disk with no network (step 1.8c).
 
 name: iso
 
@@ -114,6 +116,20 @@ jobs:
           sudo cp image/overlay/etc/containers/registries.d/lumen.yaml /etc/containers/registries.d/
           sudo podman pull --quiet --signature-policy "$RUNNER_TEMP/policy.json" "$REGISTRY_IMAGE@$DIGEST"
 
+      # The installer installs this build from the live system's container
+      # storage, under the name its kickstart gives it, which is also the
+      # image the installed system follows (step 1.8c). make-iso.sh copies it
+      # there from root's storage under that name.
+      - name: Name the build as the installer's kickstart does
+        id: payload
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          name=$(python3 image/iso.py install-image installer/anaconda/interactive-defaults.ks)
+          sudo podman tag "$REGISTRY_IMAGE@$DIGEST" "$name"
+          printf 'name=%s\n' "$name" >>"$GITHUB_OUTPUT"
+          printf 'The installer installs %s, build %s\n' "$name" "$DIGEST"
+
       # Only the live stage: on the build pulled, Podman skips the stages
       # before it. image/live/check-live.sh runs as its last step.
       - name: Build the live system
@@ -129,11 +145,12 @@ jobs:
         id: iso
         env:
           VERSION: ${{ steps.build.outputs.version }}
+          PAYLOAD: ${{ steps.payload.outputs.name }}
         run: |
           name=lumen-$VERSION-live-x86_64.iso
           # Made here, so the runner can write the checksum next to the ISO.
           mkdir -p "$RUNNER_TEMP/iso"
-          sudo image/make-iso.sh "$IMAGE_BUILDER" "$LIVE_IMAGE" "$RUNNER_TEMP/iso/$name"
+          sudo image/make-iso.sh "$IMAGE_BUILDER" "$LIVE_IMAGE" "$PAYLOAD" "$RUNNER_TEMP/iso/$name"
           sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/iso/$name"
           (cd "$RUNNER_TEMP/iso" && sha256sum "$name" | tee "$name.sha256")
           ls -l "$RUNNER_TEMP/iso"
@@ -153,7 +170,8 @@ jobs:
           # shellcheck disable=SC2024
           sudo podman run --rm --privileged --network=none \
             --volume "$RUNNER_TEMP/iso:/iso:ro" --volume "$PWD:/src:ro" "$LIVE_IMAGE" \
-            bash /src/image/check-iso.sh "/iso/$NAME" /src/image/live/iso.yaml "$VERSION" >"$report" 2>&1 || status=$?
+            bash /src/image/check-iso.sh "/iso/$NAME" /src/image/live/iso.yaml \
+            /src/installer/anaconda/interactive-defaults.ks "$VERSION" "$DIGEST" >"$report" 2>&1 || status=$?
           cat "$report"
           size=$(du --apparent-size --human-readable "$RUNNER_TEMP/iso/$NAME" | cut -f1)
           # The backticks are Markdown, for the run's summary page.
@@ -178,9 +196,9 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
-  # Boot the ISO just kept in a VM with Secure Boot, and check its live
-  # session (boot-iso.yml, step 1.8b-3). A fresh runner: this one's disk is
-  # full of the build.
+  # Boot the ISO just kept in a VM with Secure Boot, check its live session
+  # (step 1.8b-3), and install from it (step 1.8c): boot-iso.yml. A fresh
+  # runner: this one's disk is full of the build.
   boot:
     name: Boot
     needs: iso

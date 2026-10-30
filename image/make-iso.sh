@@ -5,13 +5,20 @@
 #
 # Pack the live system, the image the live stage of image/Containerfile
 # builds, into the install ISO, with every file labelled for SELinux so that
-# the live session runs enforcing (step 1.8b, docs/decisions/0012-install-iso.md).
+# the live session runs enforcing (step 1.8b, docs/decisions/0012-install-iso.md),
+# and with the Lumen build the installer installs in the live system's
+# container storage, so that installing needs no network (step 1.8c,
+# docs/decisions/0014-install-from-the-iso.md).
 #
-# Usage: image/make-iso.sh IMAGE_BUILDER LIVE_IMAGE ISO
+# Usage: image/make-iso.sh IMAGE_BUILDER LIVE_IMAGE PAYLOAD ISO
 #
 #   IMAGE_BUILDER  image-builder's container, by release and digest, as
 #                  .github/workflows/iso.yml pins it.
 #   LIVE_IMAGE     The live system, in root's container storage.
+#   PAYLOAD        The Lumen build the installer installs, in root's container
+#                  storage under the name the installer's kickstart gives it
+#                  (`image/iso.py install-image installer/anaconda/interactive-defaults.ks`).
+#                  The live system holds it under the same name.
 #   ISO            Where to write the ISO.
 #
 # image-builder's generic-iso type packs it, the way the container-native ISO
@@ -23,11 +30,11 @@
 
 set -euo pipefail
 
-if (($# != 3)); then
-  printf 'Usage: %s IMAGE_BUILDER LIVE_IMAGE ISO\n' "${0##*/}" >&2
+if (($# != 4)); then
+  printf 'Usage: %s IMAGE_BUILDER LIVE_IMAGE PAYLOAD ISO\n' "${0##*/}" >&2
   exit 2
 fi
-readonly image_builder=$1 live=$2 iso=$3
+readonly image_builder=$1 live=$2 payload=$3 iso=$4
 here=$(dirname -- "${BASH_SOURCE[0]}")
 readonly here
 
@@ -48,7 +55,11 @@ run() {
     "$@"
 }
 
-run "$image_builder" manifest --bootc-ref "$live" generic-iso >"$work/output/generic-iso.json"
+# --bootc-installer-payload-ref copies the payload into the live system's
+# container storage, at the end of the os-tree pipeline, so the SELinux stage
+# that image/iso.py adds after it labels its files too.
+run "$image_builder" manifest --bootc-ref "$live" --bootc-installer-payload-ref "$payload" generic-iso \
+  >"$work/output/generic-iso.json"
 python3 "$here/iso.py" label "$work/output/generic-iso.json" >"$work/output/labelled.json"
 run --entrypoint osbuild "$image_builder" \
   --store /var/cache/image-builder/store --output-directory /output \

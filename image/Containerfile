@@ -181,10 +181,15 @@ RUN mkdir -p /boot/efi && cp -a /usr/lib/efi/*/*/EFI /boot/efi/
 RUN rm -rf /sysroot/ostree /ostree
 
 # The installer's install profile (installer/anaconda/lumen.conf, step 1.4),
-# and the ISO's label and boot menu (image/live/iso.yaml).
+# its kickstart, which installs the ISO's own copy of the Lumen image
+# (installer/anaconda/interactive-defaults.ks, step 1.8c), and the ISO's label
+# and boot menu (image/live/iso.yaml). The kickstart takes the place of
+# Anaconda's own, which has no commands.
 RUN --mount=type=bind,source=installer,target=/run/lumen/installer \
     --mount=type=bind,source=image/live,target=/run/lumen/live \
     install -D --mode=0644 /run/lumen/installer/anaconda/lumen.conf /etc/anaconda/profile.d/lumen.conf \
+    && install -D --mode=0644 /run/lumen/installer/anaconda/interactive-defaults.ks \
+        /usr/share/anaconda/interactive-defaults.ks \
     && install -D --mode=0644 /run/lumen/live/iso.yaml /usr/lib/bootc-image-builder/iso.yaml
 
 # Check all of it (image/live/check-live.sh).
