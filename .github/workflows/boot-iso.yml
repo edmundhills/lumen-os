@@ -59,6 +59,8 @@ jobs:
       # says in the run's summary what the runner has, and stops without it.
       - name: Check for KVM
         run: |
+          # The backticks are Markdown, for the run's summary page.
+          # shellcheck disable=SC2016
           {
             printf '### The runner\n\n'
             printf -- '- %s CPUs, %s of memory\n' "$(nproc)" "$(free --human | sed -n 's/^Mem: *\([^ ]*\).*/\1/p')"

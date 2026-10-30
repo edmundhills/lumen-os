@@ -12,6 +12,8 @@
 # (LUMEN_LIVE_FROM), after checking that build's signature with the trust
 # policy Lumen ships. image/make-iso.sh packs it with image-builder, labelled
 # for SELinux, and image/check-iso.sh checks the result inside the live system.
+# Then boot-iso.yml boots the ISO in a VM with Secure Boot and checks the live
+# session (step 1.8b-3).
 
 name: iso
 
@@ -27,6 +29,7 @@ on:
   push:
     branches: [main]
     paths:
+      - .github/workflows/boot-iso.yml
       - .github/workflows/iso.yml
       - image/Containerfile
       - image/check-iso.sh
@@ -34,6 +37,7 @@ on:
       - image/live/**
       - image/make-iso.sh
       - installer/**
+      - tests/boot/**
 
 permissions: {}
 
@@ -173,3 +177,14 @@ jobs:
           archive: false
           retention-days: 7
           if-no-files-found: error
+
+  # Boot the ISO just kept in a VM with Secure Boot, and check its live
+  # session (boot-iso.yml, step 1.8b-3). A fresh runner: this one's disk is
+  # full of the build.
+  boot:
+    name: Boot
+    needs: iso
+    uses: ./.github/workflows/boot-iso.yml
+    permissions:
+      actions: read
+      contents: read
