@@ -638,7 +638,7 @@ A red build of `main` is never signed or pushed. Promotion only moves tags to te
 | `base` | Mondays; merges that change a pin | A pull request that moves the Kinoite pin and the lint container's Fedora pin to their newest builds, and Kinoite's to a new Fedora release once it is current. Copies each pinned base to ghcr.io with its digest ([versions](versions.md#how-the-pins-move)) | 1.5b |
 | Renovate | When upstream changes | Pull requests for the pinned tool images (image-builder), GitHub Actions, the lint tools and Cargo dependencies | 9.2 |
 
-Until `promote` exists, the `iso` workflow makes test ISOs. GitHub's hosted runners have limited disk (step 1.5 frees space first) and a 6-hour limit per job; whether they expose KVM for the boot test is checked at step 1.9.
+Until `promote` exists, the `iso` workflow makes test ISOs. GitHub's hosted runners have limited disk (step 1.5 frees space first) and a 6-hour limit per job. They have KVM: the `boot-iso` workflow's runner (`ubuntu-24.04`, 4 AMD CPUs, 15 GiB) had `/dev/kvm` on 2026-10-30, and the ISO booted to Plasma in under a minute (step 1.8b-3).
 
 ### 9.9 Where each test layer runs
 
