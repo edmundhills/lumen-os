@@ -127,6 +127,8 @@ jobs:
           VERSION: ${{ steps.build.outputs.version }}
         run: |
           name=lumen-$VERSION-live-x86_64.iso
+          # Made here, so the runner can write the checksum next to the ISO.
+          mkdir -p "$RUNNER_TEMP/iso"
           sudo image/make-iso.sh "$IMAGE_BUILDER" "$LIVE_IMAGE" "$RUNNER_TEMP/iso/$name"
           sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/iso/$name"
           (cd "$RUNNER_TEMP/iso" && sha256sum "$name" | tee "$name.sha256")

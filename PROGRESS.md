@@ -201,6 +201,13 @@ Left over from 1.6, 1.5c and 1.5b:
     - Whether Podman 4.9.3 accepts the signature (the sign job checks it with skopeo 1.13.3).
     - Whether `actions/upload-artifact` with `archive: false` takes a file that size.
     - WSL's kernel can't mount zstd squashfs, but the live initramfs's kernel can.
+  - **First run in CI** (`iso` run 40974893727, for `97ada88`, on `dev` `44.20261029.4`): osbuild made the ISO, then the step failed. `make-iso.sh` runs as root and made the output folder, so the runner couldn't write the `.sha256` file next to the ISO. Fixed: the workflow makes the folder first. What the run showed:
+    - freeing disk took 3 min 53 s and left 123 GB;
+    - the pull took 1 min 47 s, and Podman 4.9.3 accepted the signature;
+    - building only the `live` stage took 21 min, with 115 GB left;
+    - osbuild took about 15 min: unpacking the live system took 272 s for the build environment and 227 s for `os-tree`, labelling `os-tree` 17 s, the squashfs 220 s (3,286 MB, 274,881 files), `xorriso` 27 s and `implantisomd5` 11 s;
+    - the ISO is 1,849,056 sectors, 3.53 GiB;
+    - the job's log is 40 MB, too big for the browser to show. Read it with `fetch()` and a `Range` header, or stream it and keep only the matching lines.
   - Left in WSL's rootful store, about 25 GB: `2debdb4e…` (`44.20261029.4`), the live stage's layers, Ubuntu 24.04 and image-builder 88. Delete them once 1.8b is done.
   - `just lint` 12 of 12, `just test` passes (172 unit tests).
 
