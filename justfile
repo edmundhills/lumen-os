@@ -32,6 +32,7 @@ lint: _lint-image
 test: _lint-image
     {{ lint_container }} bash tests/lint/selftest.sh
     {{ test_container }} python3 -m unittest discover --start-directory image
+    {{ lint_container }} python3 -m unittest discover --start-directory tests/boot
 
 # Build the OS image with Podman. The first build downloads Kinoite (2.9 GiB)
 build-image:
@@ -53,6 +54,18 @@ build-live from="":
 # Build the install ISO: CI's iso workflow does, with image/make-iso.sh
 build-iso:
     @echo "The iso workflow makes the ISO in CI: on GitHub, Actions > iso > Run workflow. By hand, as root: image/make-iso.sh IMAGE_BUILDER LIVE_IMAGE ISO (it takes hours in WSL)." >&2; exit 1
+
+# Boot an install ISO in a VM with Secure Boot and check its live session, as CI does after the iso workflow. Without /dev/kvm (WSL) it is very slow
+boot-iso iso *entries:
+    fedora=$(sed -n 's/^FROM //p' tests/lint/Containerfile) \
+    && podman build --quiet --build-arg "FEDORA=$fedora" --tag localhost/lumen-boot tests/boot >/dev/null \
+    && out=$(mktemp -d /var/tmp/lumen-boot.XXXXXX) \
+    && echo "The logs and screenshots go to $out" >&2 \
+    && podman run --rm --network=none {{ if path_exists("/dev/kvm") == "true" { "--device /dev/kvm" } else { "" } }} \
+        --volume {{ quote(justfile_directory() + ":/src:ro,z") }} \
+        --volume {{ quote(absolute_path(iso) + ":/iso/" + file_name(iso) + ":ro,z") }} \
+        --volume "$out:/out:z" localhost/lumen-boot \
+        python3 /src/tests/boot/boot_iso.py {{ quote("/iso/" + file_name(iso)) }} /src/image/live/iso.yaml /out {{ entries }}
 
 # Boot the OS image in a local VM
 run-vm:
