@@ -278,6 +278,10 @@ selinux() {
   fi
 }
 
+# No Python bytecode is stale, so no program writes new bytecode into the
+# live session's /usr (image/live/bytecode.py).
+bytecode() { python3 "$live/bytecode.py" check /; }
+
 printf 'Lumen live system checks\n'
 check "One kernel, with an initramfs that boots from the ISO" kernel
 check "shim and GRUB's EFI programs are in /boot/efi" efi_files
@@ -290,6 +294,7 @@ check "WebUI's browser is here" webui_browser
 check "The first-run setup doesn't start in the live session" no_first_run_setup
 check "The build's ostree repository is gone" no_ostree_repo
 check "SELinux is enforcing" selinux
+check "Python's bytecode matches its source" bytecode
 
 printf '\nPassed: %d   Failed: %d\n' "$passes" "$failures"
 ((failures == 0))

@@ -135,6 +135,15 @@ RUN --mount=type=bind,source=image/packages.py,target=/run/lumen/packages.py \
     PYTHONDONTWRITEBYTECODE=1 python3 /run/lumen/packages.py apply /run/lumen/packages.toml \
     && rm -rf /run/dnf /var/cache/* /var/lib/dnf /var/log/*
 
+# Python bytecode that matches its source. The image gives every file the
+# time 0, but Fedora's .pyc files record their source's real time, so Python
+# takes almost all of them for stale. The live session's /usr is writable, so
+# programs write new bytecode into it, which tuned-ppd's SELinux policy logs as
+# denials (ADR 0012, Follow-up). image/live/bytecode.py compiles the stale ones
+# again, checked by a hash of their source instead of its time.
+RUN --mount=type=bind,source=image/live/bytecode.py,target=/run/lumen/bytecode.py \
+    PYTHONDONTWRITEBYTECODE=1 python3 /run/lumen/bytecode.py fix /
+
 # An initramfs that boots from the ISO, in place of Kinoite's, which is made
 # for an installed system. dracut builds it from the image's own kernel, with
 # every driver (--no-hostonly) and the live modules: dmsquash-live finds the
