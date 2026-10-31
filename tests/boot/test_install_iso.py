@@ -29,20 +29,38 @@ KICKSTART = REPO / "installer/anaconda/interactive-defaults.ks"
 DIGEST = "sha256:" + "ab" * 32
 NAME = "ghcr.io/edmundhills/lumen:dev"
 
-# Anaconda's summary in its text interface, two parts to a row, as simpleline
-# draws it, then its prompt, on one line (simpleline's Prompt.__str__).
+# Anaconda 44.30's summary in its text interface, as the first install run
+# showed it on 2026-10-31: two parts to a row, and a prompt that simpleline
+# breaks over two lines.
 HUB = """================================================================================
 Installation
 
 1) [x] Language settings                 2) [x] Time settings
        (English (United States))                (Etc/UTC timezone)
-3) [x] Installation Destination          4) [{mark}] Root password
-       (Automatic partitioning                  (Root password is set)
-       selected)
-5) [ ] User creation
-       (No user will be created)
+3) [{mark}] Installation Destination
+       ({status})
 
-Please make a selection from the above ['b' to begin installation, 'h' to help, 'q' to quit, 'r' to refresh]: """
+Please make a selection from the above ['b' to begin installation, 'q' to quit,
+'r' to refresh]: """
+SCREEN_PROMPT = """
+Please make a selection from the above ['c' to continue, 'q' to quit, 'r' to
+refresh]: """
+# The disk's three screens, as Anaconda's text StorageSpoke, PartTypeSpoke and
+# PartitionSchemeSpoke draw them, with the kickstart's choices marked.
+SCREENS = [
+    "Installation Destination\n\n1) [x] Virtio Block Device (vda): 64 GiB free\n\n"
+    "1 disk selected; 64 GiB capacity; 64 GiB free\n" + SCREEN_PROMPT,
+    "Partitioning Options\n\n1) [ ] Replace Existing Linux system(s)\n2) [x] Use All Space\n"
+    "3) [ ] Use Free Space\n4) [ ] Manually assign mount points\n" + SCREEN_PROMPT,
+    "Partition Scheme Options\n\n1) [ ] Standard Partition\n2) [x] Btrfs\n3) [ ] LVM\n"
+    "4) [ ] LVM Thin Provisioning\n" + SCREEN_PROMPT,
+]
+
+
+def hub(mark="x", status="Automatic partitioning selected"):
+    return HUB.format(mark=mark, status=status)
+
+
 PREPARE = f"""LUMEN-CHECKS-BEGIN
   PASS  SELinux enforcing in the live session
   PASS  No network: the VM has no network card
@@ -152,17 +170,21 @@ class SettingsTest(unittest.TestCase):
 
 
 class TextInterfaceTest(unittest.TestCase):
-    def test_the_summary_prompt(self):
-        text = boot_iso.plain(HUB.format(mark="x"))
-        self.assertRegex(text, install_iso.SUMMARY)
+    def test_the_prompts(self):
+        self.assertRegex(boot_iso.plain(hub()), install_iso.SUMMARY)
         self.assertNotRegex("Please make a selection from the above ['h' to help]: ", install_iso.SUMMARY)
+        for screen in SCREENS:
+            self.assertRegex(screen, install_iso.SCREEN_PROMPT)
+            self.assertNotRegex(screen, install_iso.SUMMARY)
+        self.assertNotRegex(hub(), install_iso.SCREEN_PROMPT)
 
     def test_parts_of_the_summary(self):
-        spokes = install_iso.summary_spokes(HUB.format(mark="!"))
-        self.assertEqual(len(spokes), 3)
-        self.assertTrue(spokes[1].startswith("3) [x] Installation Destination"))
-        self.assertIn(install_iso.INCOMPLETE, spokes[1])
-        self.assertFalse(any(install_iso.INCOMPLETE in s for s in install_iso.summary_spokes(HUB.format(mark="x"))))
+        spokes = install_iso.summary_spokes(hub("!"))
+        self.assertEqual(spokes, ["1) [x] Language settings                 2) [x] Time settings",
+                                  "3) [!] Installation Destination"])
+        self.assertEqual(install_iso.DESTINATION.search(hub("!"))[1], "3")
+        self.assertIsNone(install_iso.DESTINATION.search(hub()))
+        self.assertFalse(any(install_iso.INCOMPLETE in s for s in install_iso.summary_spokes(hub())))
 
     def test_the_end(self):
         self.assertRegex("Installation complete\nInstallation complete. Press ENTER to quit: ", install_iso.INSTALLED)
@@ -193,12 +215,17 @@ class InstallTest(unittest.TestCase):
         names = "\n".join(f"  {name}" for name, _ in self.menu.entries)
         default = self.menu.entries[self.menu.default][0]
         prompt = "[root@localhost-live ~]# "
-        hubs = iter([HUB.format(mark="!"), HUB.format(mark="x")])
+        # Still checking the disk, then waiting for someone to go through its
+        # screens, then done.
+        hubs = iter([hub("!", install_iso.PROCESSING), hub("!"), hub()])
+        screens = iter(SCREENS[1:] + [hub()])
         return FakeVM([f"{names}\n", f"Booting `{default}'\n\nlocalhost-live login: "], [
             (r"^root$", prompt),
             (r"lumen\.install prepare", PREPARE + prompt),
             (r"liveinst", lambda: next(hubs)),
             (r"^r$", lambda: next(hubs)),
+            (r"^3$", SCREENS[0]),
+            (r"^c$", lambda: next(screens)),
             (r"^b$", install_ends),
             (r"^$", "\nLUMEN-INSTALL-0-DONE\n" + prompt),
             (r"lumen\.install report", "LUMEN-CHECKS-BEGIN\n  PASS  bootc\n\nLUMEN-CHECKS-0-DONE\n" + prompt),
@@ -216,9 +243,11 @@ class InstallTest(unittest.TestCase):
             vm.close()
         self.assertEqual(report.failures, 0, "\n".join(report.lines))
         self.assertEqual(payload, (NAME, DIGEST, "44.20261030.4"))
-        # It looked at the summary again while a part was left, then began.
-        typed = [t for t in vm.typed if t in ("r", "b")]
-        self.assertEqual(typed, ["r", "b"])
+        # It looked at the summary again while the disk was being checked,
+        # went through the disk's screens, and began.
+        typed = [t for t in vm.typed if t in ("r", "3", "c", "b")]
+        self.assertEqual(typed, ["r", "3", "c", "c", "c", "b"])
+        self.assertIn("        Partition Scheme Options: 2) [x] Btrfs", report.lines)
         self.assertIn(f"bash /run/credentials/@system/lumen.install report {NAME}; echo LUMEN-CHECKS-$?-DONE",
                       vm.typed)
         self.assertTrue(any("Anaconda installed Lumen" in line for line in report.lines))

@@ -27,8 +27,9 @@
 #    installer's kickstart, after the ISO's own. Then liveinst, which the live
 #    desktop's installer icon starts, runs Anaconda with its text interface in
 #    place of WebUI. In a live session Anaconda reads only that kickstart and
-#    waits at its summary, so the test checks that nothing is left to fill in
-#    and presses b. Anaconda's logs go to the VM's second serial port, which
+#    waits at its summary. The test goes through the disk's screens, where the
+#    kickstart has chosen everything already, as a person would, checks that
+#    nothing is left to fill in, and presses b. Anaconda's logs go to the VM's second serial port, which
 #    QEMU writes to OUT/install-anaconda.log. Then the VM is switched off.
 # 2. From the disk, with the firmware settings of the first run, which hold the
 #    boot entry the installer wrote. As root on the serial port, with the
@@ -67,8 +68,8 @@ ROOT_PASSWORD = "lumen-install-test"
 
 # How long each stage may take with KVM, in seconds. Installing copies the
 # whole image out of the live system's container storage.
-TIMEOUTS = {"prepare": 300, "summary": 900, "install": 3600, "quit": 300, "report": 300, "off": 300,
-            "checks": 600}
+TIMEOUTS = {"prepare": 300, "summary": 900, "screen": 300, "install": 3600, "quit": 300, "report": 300,
+            "off": 300, "checks": 600}
 
 # Anaconda's text interface: its summary's prompt, which it shows until
 # someone presses b; [!] before a part of the summary that is left to fill
@@ -88,6 +89,16 @@ PAYLOAD = re.compile(r"INFO  The ISO's copy: (\S+) (sha256:[0-9a-f]{64}) (\S+)\s
 RECHECK = 10
 # A part of the summary: its number, mark and title, as in " 5) [!] Root password".
 SPOKE = re.compile(r"^\s*\d+\) \[[x! ]\] .*$", re.MULTILINE)
+# What a part of the summary says while Anaconda is still checking it.
+PROCESSING = "Processing..."
+# The disk's part of the summary, left to fill in, and its number. In a live
+# session the text interface applies a kickstart's partitioning only once
+# someone has gone through that part's screens (Anaconda 44.30, the text
+# StorageSpoke: only an automated install applies it by itself).
+DESTINATION = re.compile(r"(\d+)\) \[!\] Installation Destination")
+# Its screens, in order, each with its choices marked [x] and this prompt.
+DESTINATION_SCREENS = ("Installation Destination", "Partitioning Options", "Partition Scheme Options")
+SCREEN_PROMPT = r"'c' to continue[^\]]*\]: *\Z"
 
 
 def install_settings(password=ROOT_PASSWORD):
@@ -126,6 +137,41 @@ def guest_command(credential, *args):
 def summary_spokes(text):
     """Return the parts of Anaconda's summary in TEXT, one line each."""
     return [m.group(0).strip() for m in SPOKE.finditer(text)]
+
+
+def wait_for_summary(steps, deadline):
+    """Wait for Anaconda's summary, looking again while a part of it is being checked; return (its parts, its text) or None."""
+    console = steps.console
+    while True:
+        start = console.mark
+        left = max(1, (deadline - time.monotonic()) / steps.scale)
+        m = steps.expect(rf"(?P<summary>{SUMMARY})|(?P<error>{ERROR})|{LIVEINST_DONE}", left)
+        if not m or not m.group("summary"):
+            return steps.failed("Anaconda didn't show its summary") or None
+        text = console.text()[start:console.mark]
+        if PROCESSING not in text or time.monotonic() > deadline:
+            return summary_spokes(text), text
+        time.sleep(RECHECK)
+        console.type("r\r")
+
+
+def choose_destination(steps, number):
+    """Go through the screens of the summary's part NUMBER, Installation Destination, taking what the kickstart chose on each."""
+    console, report = steps.console, steps.report
+    console.type(f"{number}\r")
+    for title in DESTINATION_SCREENS:
+        start = console.mark
+        m = steps.expect(rf"(?P<prompt>{SCREEN_PROMPT})|(?P<error>{ERROR})", TIMEOUTS["screen"])
+        if not m or not m.group("prompt"):
+            return steps.failed(f"Anaconda's {title} screen didn't show")
+        screen = console.text()[start:console.mark]
+        chosen = [line.strip() for line in screen.splitlines() if "[x]" in line]
+        if title not in screen or not chosen:
+            return steps.failed(f"Anaconda's {title} screen has nothing chosen:\n{screen.strip()}")
+        report.note(f"{title}: {'; '.join(chosen)}")
+        console.type("c\r")
+    report.step(True, "Installation Destination, with the kickstart's choice on each of its screens")
+    return True
 
 
 def write_credentials(folder, items):
@@ -172,21 +218,16 @@ def install(steps, menu):
     console.type(liveinst_command())
     started = steps.since()
     deadline = time.monotonic() + TIMEOUTS["summary"] * steps.scale
-    while True:
-        start = console.mark
-        left = max(1, (deadline - time.monotonic()) / steps.scale)
-        m = steps.expect(rf"(?P<summary>{SUMMARY})|(?P<error>{ERROR})|{LIVEINST_DONE}", left)
-        if not m or not m.group("summary"):
-            return steps.failed("Anaconda didn't show its summary") or None
-        spokes = summary_spokes(console.text()[start:console.mark])
-        if spokes and not any(INCOMPLETE in s for s in spokes):
-            break
-        if time.monotonic() > deadline:
-            return steps.failed("Anaconda's summary still has parts left to fill in:\n" + "\n".join(spokes)) or None
-        # Some parts may still be being checked: look again in a while.
-        time.sleep(RECHECK)
-        console.type("r\r")
-    report.step(True, f"Anaconda's summary, with nothing left to fill in (liveinst started {started})")
+    if not (shown := wait_for_summary(steps, deadline)):
+        return None
+    report.step(True, f"Anaconda's summary (liveinst started {started})")
+    if m := DESTINATION.search(shown[1]):
+        if not (choose_destination(steps, m[1]) and (shown := wait_for_summary(steps, deadline))):
+            return None
+    spokes = shown[0]
+    if not spokes or any(INCOMPLETE in s for s in spokes):
+        return steps.failed("Anaconda's summary has parts left to fill in:\n" + "\n".join(spokes)) or None
+    report.step(True, "Nothing left to fill in")
     report.note("\n".join(spokes))
 
     console.type("b\r")
