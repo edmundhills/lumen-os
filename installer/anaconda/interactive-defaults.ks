@@ -26,12 +26,17 @@ bootc --source-imgref=containers-storage:ghcr.io/edmundhills/lumen:dev --target-
 # Btrfs root, add rootflags=compress=zstd:1 to its kernel arguments; systemd
 # joins the two. A root of another file system, which Custom can make, gets
 # nothing, so it still boots. /mnt/sysimage is the disk's root as Anaconda
-# mounts it for an ostree system (conf.target.physical_root).
+# mounts it for an ostree system (conf.target.physical_root). ostree writes
+# the new arguments as a new boot entry on /boot, which bootc leaves mounted
+# read-only when it finishes, so it is made writable first.
 %post --nochroot --erroronfail
 set -eu
 physroot=/mnt/sysimage
 test -d "$physroot/ostree/deploy"
 if [ "$(findmnt --noheadings --output FSTYPE --target "$physroot")" = btrfs ]; then
+    if mountpoint -q "$physroot/boot"; then
+        mount -o remount,rw "$physroot/boot"
+    fi
     ostree admin --sysroot="$physroot" instutil set-kargs --merge --append=rootflags=compress=zstd:1
 fi
 %end
