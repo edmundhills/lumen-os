@@ -291,6 +291,20 @@ EOF
   return "$status"
 }
 
+# The installer runs with SELinux enforcing: liveinst no longer switches it to
+# permissive (image/Containerfile, docs/decisions/0015-installer-enforcing.md).
+installer_enforcing() {
+  local liveinst=/usr/bin/liveinst
+  if [[ ! -f $liveinst ]]; then
+    printf '%s is missing\n' "$liveinst"
+    return 1
+  fi
+  if grep -nE 'setenforce +(0|Permissive)' "$liveinst"; then
+    printf '%s still switches SELinux to permissive (the lines above)\n' "$liveinst"
+    return 1
+  fi
+}
+
 # The browser Anaconda's Fedora profile shows WebUI in (webui_web_engine).
 webui_browser() {
   if ! command -v slitherer >/dev/null; then
@@ -349,6 +363,7 @@ check "iso.yaml names the label and boots live with SELinux on" iso_config
 check "livesys sets up a Plasma live session" livesys
 check "Anaconda uses Lumen's install profile" anaconda_profile
 check "The installer installs the ISO's copy of the image, recorded as signed" installer_kickstart
+check "The installer runs with SELinux enforcing" installer_enforcing
 check "WebUI's browser is here" webui_browser
 check "The first-run setup doesn't start in the live session" no_first_run_setup
 check "The build's ostree repository is gone" no_ostree_repo

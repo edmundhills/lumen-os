@@ -192,6 +192,15 @@ RUN --mount=type=bind,source=installer,target=/run/lumen/installer \
         /usr/share/anaconda/interactive-defaults.ks \
     && install -D --mode=0644 /run/lumen/live/iso.yaml /usr/lib/bootc-image-builder/iso.yaml
 
+# The installer runs with SELinux enforcing, as the rest of the live session
+# does (the owner's choice, docs/decisions/0015-installer-enforcing.md).
+# Fedora's liveinst, which the desktop's installer icon starts, switches
+# SELinux to permissive before it starts Anaconda and back afterwards; this
+# removes the switch, and stops the build if liveinst no longer has it as
+# expected, so a change upstream is looked at rather than missed.
+RUN grep -qx '    /usr/sbin/setenforce 0' /usr/bin/liveinst \
+    && sed -i '\|^    /usr/sbin/setenforce 0$|d' /usr/bin/liveinst
+
 # Check all of it (image/live/check-live.sh).
 RUN --mount=type=bind,source=installer,target=/run/lumen/installer \
     --mount=type=bind,source=image/live,target=/run/lumen/live \

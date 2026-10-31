@@ -15,7 +15,8 @@
 #       own, and sends the installer's logs to the VM's second serial port.
 #   bash /run/credentials/@system/lumen.install report IMAGE
 #       Checks how the installer ran: bootc installed the image IMAGE from the
-#       live system's container storage, and SELinux is enforcing again.
+#       live system's container storage, and SELinux stayed enforcing, with no
+#       denials.
 #
 # Prints LUMEN-CHECKS-BEGIN first, which install_iso.py waits for. Exits 0 when
 # every check passes, 1 when one fails, and 2 on a usage error.
@@ -156,6 +157,34 @@ bootc_install() {
   fi
 }
 
+# SELinux stayed enforcing all along. The kernel logs each change of mode
+# ("enforcing=0 old_enforcing=1" for a switch to permissive); Fedora's liveinst
+# made one while Anaconda ran, Lumen's makes none
+# (docs/decisions/0015-installer-enforcing.md).
+stayed_enforcing() {
+  local permissive
+  permissive=$(journalctl --boot --no-pager --output=short-monotonic --grep 'enforcing=0 old_enforcing=1')
+  if [[ -n $permissive ]]; then
+    printf 'SELinux was switched to permissive since boot:\n%s\n' "$permissive"
+    return 1
+  fi
+}
+
+# No SELinux denial since the system started, in the journal or the audit
+# log, as tests/boot/live-session.sh checks: none while the installer ran.
+no_denials() {
+  {
+    journalctl --boot --no-pager --output=short-monotonic | grep -E 'avc: +denied|SELINUX_ERR|type=1401'
+    if [[ -s /var/log/audit/audit.log ]]; then
+      ausearch --message AVC,USER_AVC,SELINUX_ERR,USER_SELINUX_ERR 2>/dev/null | grep -v '^----$'
+    fi
+  } >"$work/denials"
+  if [[ -s $work/denials ]]; then
+    printf '%d lines of SELinux denials, the first 40 at the end of this report\n' "$(wc -l <"$work/denials")"
+    return 1
+  fi
+}
+
 if [[ $command == prepare ]]; then
   check "SELinux enforcing in the live session" selinux
   check "No network: the VM has no network card" no_network
@@ -166,14 +195,12 @@ if [[ $command == prepare ]]; then
   info "The ISO's copy" "$(install_name) $(cat "$work/payload" 2>/dev/null)"
 else
   check "Anaconda ran bootc install from the ISO's container storage" bootc_install
-  check "SELinux enforcing again once the installer has ended" selinux
+  check "SELinux stayed enforcing while the installer ran" stayed_enforcing
+  check "SELinux enforcing once the installer has ended" selinux
+  check "No SELinux denials, the installer's included" no_denials
   info "bootc install, as Anaconda ran it" "$(sed 's/^.*\(bootc install\)/\1/' "$work/bootc" 2>/dev/null)"
-  # liveinst, the installer's launcher, switches SELinux to permissive while
-  # Anaconda runs and back afterwards (docs/decisions/0014-install-from-the-iso.md).
   info "SELinux mode changes since boot" \
     "$(journalctl --boot --no-pager --grep 'enforcing=[01] old_enforcing=[01]' 2>/dev/null | grep -c 'old_enforcing')"
-  journalctl --boot --no-pager --output=short-monotonic | grep -E 'avc: +denied|SELINUX_ERR' >"$work/denials"
-  info "SELinux denials logged since boot" "$(wc -l <"$work/denials")"
   if [[ -s $work/denials ]]; then
     printf '\nSELinux denials, the first 40:\n'
     head -n 40 "$work/denials"
