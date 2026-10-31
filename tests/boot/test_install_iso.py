@@ -201,7 +201,7 @@ class InstallTest(unittest.TestCase):
 
     def setUp(self):
         self.menu = boot_iso.load_menu(ISO_YAML)
-        self.patches = [mock.patch.object(install_iso, "RECHECK", 0)]
+        self.patches = [mock.patch.object(install_iso, "RECHECK", 0), mock.patch.object(install_iso, "REPORT_WAIT", 0)]
         for p in self.patches:
             p.start()
         self.out = tempfile.TemporaryDirectory()
@@ -232,13 +232,19 @@ class InstallTest(unittest.TestCase):
             (r"systemctl poweroff", None),
         ])
 
+    def logs(self):
+        path = Path(self.out.name) / "install-anaconda.log"
+        path.write_text("12:00:01 INFO anaconda: starting\nanaconda 44.30 exception report\n"
+                        "Traceback (most recent call last):\n  File \"x\"\nPayloadInstallationError: mount failed\n")
+        return path
+
     def steps(self, vm, report):
         return boot_iso.Steps(vm, report, Path(self.out.name) / "t", 1)
 
     def test_installs_through_the_text_interface(self):
         vm, report = self.live_vm(), boot_iso.Report(0, "install")
         try:
-            payload = install_iso.install(self.steps(vm, report), self.menu)
+            payload = install_iso.install(self.steps(vm, report), self.menu, Path(self.out.name) / "logs")
         finally:
             vm.close()
         self.assertEqual(report.failures, 0, "\n".join(report.lines))
@@ -255,11 +261,16 @@ class InstallTest(unittest.TestCase):
     def test_stops_when_anaconda_fails(self):
         vm, report = self.live_vm("Traceback (most recent call last):\n  File ...\n"), boot_iso.Report(0, "install")
         try:
-            self.assertIsNone(install_iso.install(self.steps(vm, report), self.menu))
+            self.assertIsNone(install_iso.install(self.steps(vm, report), self.menu, self.logs()))
         finally:
             vm.close()
         self.assertEqual(report.failures, 1)
         self.assertTrue(any("Anaconda didn't finish installing" in line for line in report.lines))
+        # What explains it, from Anaconda's logs, starting at its error report.
+        self.assertIn("        From Anaconda's logs:", report.lines)
+        self.assertIn("        anaconda 44.30 exception report", report.lines)
+        self.assertIn("        PayloadInstallationError: mount failed", report.lines)
+        self.assertNotIn("        12:00:01 INFO anaconda: starting", report.lines)
         self.assertNotIn("systemctl poweroff", vm.typed)
 
     def test_checks_the_installed_system(self):

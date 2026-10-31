@@ -125,9 +125,13 @@ add_settings() {
 }
 
 # Anaconda's logs, as they grow, on the second serial port, which QEMU writes
-# to a file the test keeps.
+# to a file the test keeps; and, should Anaconda fail, the report of the error
+# it writes (/tmp/anaconda-tb-*), once it is there.
 stream_logs() {
   setsid --fork tail --lines=+1 --follow=name --retry -- "${LOGS[@]}" </dev/null >/dev/ttyS1 2>&1
+  # shellcheck disable=SC2016 # The glob is the inner shell's.
+  setsid --fork bash -c 'until compgen -G "/tmp/anaconda-tb-*" >/dev/null; do sleep 2; done
+    sleep 3; cat /tmp/anaconda-tb-*' </dev/null >/dev/ttyS1 2>&1
 }
 
 # bootc installed the image from the live system's container storage, as

@@ -87,6 +87,8 @@ PAYLOAD = re.compile(r"INFO  The ISO's copy: (\S+) (sha256:[0-9a-f]{64}) (\S+)\s
 # How long to wait before looking at Anaconda's summary again, while parts of
 # it are still being checked.
 RECHECK = 10
+# How long Anaconda takes to write its error report once it shows the error.
+REPORT_WAIT = 15
 # A part of the summary: its number, mark and title, as in " 5) [!] Root password".
 SPOKE = re.compile(r"^\s*\d+\) \[[x! ]\] .*$", re.MULTILINE)
 # What a part of the summary says while Anaconda is still checking it.
@@ -174,6 +176,19 @@ def choose_destination(steps, number):
     return True
 
 
+def log_excerpt(path, lines=60):
+    """Return what explains a failure in Anaconda's logs at PATH: the error report, a traceback, or their end."""
+    try:
+        text = Path(path).read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError as e:
+        return f"No logs at {path}: {e}"
+    # Anaconda's error report starts "anaconda <version> exception report";
+    # its logs hold tracebacks too.
+    starts = [n for n, line in enumerate(text) if "exception report" in line or "Traceback (most recent" in line]
+    start = starts[0] if starts else max(0, len(text) - lines)
+    return "\n".join(text[start:start + lines])
+
+
 def write_credentials(folder, items):
     """Write each (name, data) in ITEMS as a credential file in FOLDER; return their paths."""
     paths = []
@@ -198,8 +213,11 @@ def run_vm(command, sockets, prefix, run):
                 vm.stop()
 
 
-def install(steps, menu):
-    """Install from the live session; return (name, digest, version) of the ISO's copy once installed, or None."""
+def install(steps, menu, logs):
+    """Install from the live session; return (name, digest, version) of the ISO's copy once installed, or None.
+
+    LOGS is the file the VM's second serial port writes Anaconda's logs to.
+    """
     report, console = steps.report, steps.console
     if not (boot_iso.start_entry(steps, menu, menu.default) and boot_iso.log_in(steps)):
         return None
@@ -233,6 +251,9 @@ def install(steps, menu):
     console.type("b\r")
     m = steps.expect(rf"(?P<done>{INSTALLED})|(?P<error>{ERROR})|{LIVEINST_DONE}", TIMEOUTS["install"])
     if not m or not m.group("done"):
+        if m and m.group("error"):
+            time.sleep(REPORT_WAIT)  # For the error report to reach the log port.
+        steps.report.note("From Anaconda's logs:\n" + log_excerpt(logs))
         return steps.failed("Anaconda didn't finish installing: install-anaconda.log has its logs") or None
     report.step(True, f"Anaconda installed Lumen, {steps.since()}")
     console.type("\r")
@@ -280,11 +301,12 @@ def run_test(menu, iso, disk, firmware, out, kvm):
         sockets = (Path(run) / "serial", Path(run) / "qmp")
         credentials = write_credentials(run, [(LIVE_CREDENTIAL, LIVE_SCRIPT.read_bytes()),
                                               (SETTINGS_CREDENTIAL, install_settings().encode())])
+        logs = out / "install-anaconda.log"
         command = boot_iso.qemu_command(firmware, nvram, kvm, *sockets, credentials, cdrom=iso, disk=disk,
-                                        logs=out / "install-anaconda.log")
+                                        logs=logs)
         prefix = out / "install-live"
         try:
-            payload = run_vm(command, sockets, prefix, lambda vm: install(Steps(vm, live, prefix, scale), menu))
+            payload = run_vm(command, sockets, prefix, lambda vm: install(Steps(vm, live, prefix, scale), menu, logs))
         except (OSError, ValueError, BootError) as e:
             live.step(False, str(e))
 
