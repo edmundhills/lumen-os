@@ -24,11 +24,27 @@
 #       and the USB boots the way Fedora's do: shim, then GRUB for a CD,
 #       without shim's fallback loader, which would add a boot entry to the
 #       PC's firmware.
+#   python3 image/iso.py install-image KICKSTART
+#       Print the name of the image the installer's kickstart
+#       (installer/anaconda/interactive-defaults.ks) installs from the live
+#       system's container storage, which is also the image the installed
+#       system follows. Stops if its bootc command says otherwise (step 1.8c).
+#   python3 image/iso.py payload STORAGE NAME IMAGE_ID VERSION
+#       The container storage STORAGE, the live system's
+#       /var/lib/containers/storage in the ISO's squashfs, holds the image
+#       NAME with all its layers, and it is the signed build the ISO was made
+#       from: its image ID, the digest of its configuration, is IMAGE_ID, and
+#       its build version VERSION. The installer installs it (step 1.8c). Its
+#       manifest isn't the build's own: copying an image out of container
+#       storage rewrites the manifest with uncompressed layers (ADR 0014).
 #
-# image/make-iso.sh runs `label`, image/check-iso.sh runs `boot`, and
-# test_iso.py runs both on stand-ins. Exits 0 when all is well, 1 when
-# something isn't (saying why), and 2 when the input can't be read.
+# image/make-iso.sh runs `label`, iso.yml runs `install-image`,
+# image/check-iso.sh runs `boot` and `payload`, and test_iso.py runs them all
+# on stand-ins. Exits 0 when all is well, 1 when something isn't (saying why),
+# and 2 when the input can't be read.
 
+import base64
+import hashlib
 import json
 import re
 import shlex
@@ -64,6 +80,12 @@ FALLBACK = "EFI/BOOT/fbx64.efi"
 MENUS = ("EFI/BOOT/grub.cfg", "boot/grub2/grub.cfg")
 # Kernel arguments that would turn SELinux off or make it permissive.
 SELINUX_OFF = ("enforcing=0", "selinux=0")
+
+# The installer's source: Anaconda's bootc command installs from this
+# transport, the live system's container storage.
+LOCAL_STORAGE = "containers-storage:"
+# The label that carries a build's version (image/Containerfile).
+VERSION_LABEL = "org.opencontainers.image.version"
 
 MENUENTRY = re.compile(r"^\s*menuentry\s+'([^']*)'")
 LINUX = re.compile(r"^\s*linux(?:efi)?\s+(\S.*?)\s*$")
@@ -178,16 +200,126 @@ def boot(iso_yaml, iso_dir, iso_label):
     return problems, report
 
 
+def kickstart_commands(text, name):
+    """Return the arguments of each command NAME in the kickstart TEXT, outside its %pre, %post and other sections."""
+    commands, section = [], False
+    for line in text.splitlines():
+        if section:
+            # A script's lines are shell, not kickstart.
+            section = line.split()[:1] != ["%end"]
+            continue
+        words = shlex.split(line, comments=True)
+        if not words:
+            continue
+        if words[0].startswith("%") and words[0] not in ("%include", "%ksappend"):
+            section = words[0] != "%end"
+        elif words[0] == name:
+            commands.append(words[1:])
+    return commands
+
+
+def options(args):
+    """Return the --name=value and --name value options in ARGS as {name: value}."""
+    found, words = {}, iter(args)
+    for word in words:
+        if not word.startswith("--"):
+            raise ValueError(f"{word!r} isn't an option")
+        name, equals, value = word.partition("=")
+        found[name] = value if equals else next(words, "")
+    return found
+
+
+def install_image(text):
+    """Return (problems, the image name) for the kickstart TEXT's bootc command."""
+    try:
+        commands = kickstart_commands(text, "bootc")
+        if len(commands) != 1:
+            return [f"The kickstart has {len(commands)} bootc commands, not one"], None
+        found = options(commands[0])
+    except ValueError as e:
+        return [f"The kickstart's bootc command can't be read: {e}"], None
+    source, target = found.get("--source-imgref", ""), found.get("--target-imgref", "")
+    if not source.startswith(LOCAL_STORAGE):
+        return [f"bootc installs from {source!r}, not from the live system's {LOCAL_STORAGE}"], None
+    name = source.removeprefix(LOCAL_STORAGE)
+    if not name or name != target:
+        return [f"bootc installs {name!r} from container storage, but the system then follows {target!r}"], None
+    return [], name
+
+
+def big_data_name(key):
+    """Return the file name containers/storage keeps the data KEY of an image under (makeBigDataBaseName)."""
+    if re.fullmatch(r"[.0-9a-z]+", key):
+        return key
+    return "=" + base64.b64encode(key.encode()).decode()
+
+
+def payload(storage, name, image_id, version):
+    """Return (problems, a report) for the image NAME in the container storage STORAGE."""
+    root = Path(storage)
+    images = load_json(root / "overlay-images/images.json")
+    layers = {layer.get("id"): layer for layer in load_json(root / "overlay-layers/layers.json")}
+    found = [i for i in images if name in (i.get("names") or [])]
+    if len(found) != 1:
+        held = sorted(n for i in images for n in i.get("names") or [])
+        return [f"The container storage has {len(found)} images named {name}, not one; it has {held}"], []
+    image = found[0]
+    problems = []
+    # The build, by its configuration: containers/storage names an image by
+    # its configuration's digest, its manifest gives that digest, and the
+    # configuration kept has it.
+    if f"sha256:{image.get('id')}" != image_id:
+        problems.append(f"{name} has the image ID sha256:{image.get('id')}, not {image_id}, the build's")
+    folder = root / "overlay-images" / image.get("id", "")
+    try:
+        manifest = json.loads((folder / big_data_name("manifest")).read_bytes())
+        raw = (folder / big_data_name(image_id)).read_bytes()
+        config = json.loads(raw)
+    except (OSError, ValueError) as e:
+        return problems + [f"{name}'s manifest or configuration can't be read: {e}"], []
+    if (manifest.get("config") or {}).get("digest") != image_id:
+        problems.append(f"{name}'s manifest names the configuration {(manifest.get('config') or {}).get('digest')}, "
+                        f"not {image_id}")
+    if f"sha256:{hashlib.sha256(raw).hexdigest()}" != image_id:
+        problems.append(f"{name}'s configuration doesn't have the digest {image_id}")
+    have = ((config.get("config") or {}).get("Labels") or {}).get(VERSION_LABEL)
+    if have != version:
+        problems.append(f"{name} is build {have}, not {version}")
+    # Its layers, from the top one down, each with its files.
+    chain, layer = [], image.get("layer")
+    while layer and len(chain) <= len(layers):
+        chain.append(layer)
+        if layer not in layers:
+            problems.append(f"Layer {layer} of {name} isn't in the container storage")
+            break
+        if not (root / "overlay" / layer / "diff").is_dir():
+            problems.append(f"Layer {layer} of {name} has no files (overlay/{layer}/diff)")
+        layer = layers[layer].get("parent")
+    if len(chain) != len(manifest.get("layers", [])):
+        problems.append(f"{name} has {len(chain)} layers in the container storage, but its manifest lists "
+                        f"{len(manifest.get('layers', []))}")
+    return problems, [f"{name}: build {have}, image ID {image_id}, manifest {image.get('digest')}, {len(chain)} layers"]
+
+
 def main(argv):
-    commands = {"label": 1, "boot": 3}
+    commands = {"label": 1, "boot": 3, "install-image": 1, "payload": 4}
     if len(argv) < 2 or argv[1] not in commands or len(argv) != 2 + commands[argv[1]]:
-        print("Usage: iso.py label MANIFEST | boot ISO_YAML ISO_DIR LABEL", file=sys.stderr)
+        print("Usage: iso.py label MANIFEST | boot ISO_YAML ISO_DIR LABEL | install-image KICKSTART"
+              " | payload STORAGE NAME IMAGE_ID VERSION", file=sys.stderr)
         return 2
     command, args = argv[1], argv[2:]
     manifest, report = None, []
     try:
         if command == "label":
             problems, manifest = label(load_json(args[0]))
+        elif command == "install-image":
+            problems, name = install_image(Path(args[0]).read_text(encoding="utf-8"))
+            if name:
+                print(name)
+        elif command == "payload":
+            if not Path(args[0]).is_dir():
+                raise InputError(f"{args[0]} is not a folder")
+            problems, report = payload(*args)
         else:
             if not Path(args[1]).is_dir():
                 raise InputError(f"{args[1]} is not a folder")

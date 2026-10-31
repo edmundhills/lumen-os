@@ -193,7 +193,8 @@ livesys() {
 
 # Anaconda's install profile is installer/anaconda/lumen.conf, and Anaconda's
 # own loader picks it by the image's os-release and reads Lumen's storage
-# defaults from it.
+# defaults from it: Btrfs with zstd, and /home as a subvolume of its own but
+# not /var, which Anaconda's bootc install can't bind (step 1.8c).
 anaconda_profile() {
   local profile=/etc/anaconda/profile.d/lumen.conf
   if ! cmp -s -- "$installer/anaconda/lumen.conf" "$profile"; then
@@ -227,10 +228,88 @@ if scheme != "BTRFS":
     problems.append(f"the default scheme is {scheme}, not BTRFS")
 if conf.storage.btrfs_compression != "zstd:1":
     problems.append(f"Btrfs compression is {conf.storage.btrfs_compression!r}, not 'zstd:1'")
+mounts = [m["name"] for m in conf.storage.default_partitioning]
+if mounts[:1] != ["/"] or "/home" not in mounts or "/var" in mounts:
+    problems.append(f"the default layout is {mounts}: it needs / first and /home, and no /var")
 for problem in problems:
     print(problem)
 sys.exit(1 if problems else 0)
 EOF
+}
+
+# The installer installs the ISO's own copy of the Lumen image (step 1.8c):
+# Anaconda's kickstart for the live session is installer/anaconda's, the
+# kickstart parser Anaconda uses reads a bootc command from it that installs
+# from container storage under the name the system then follows, and bootc,
+# run from the live system, reads Lumen's setting that records the image as
+# signed. bootc and skopeo copy the image out of container storage, which
+# needs fuse-overlayfs on the live session's overlay root.
+installer_kickstart() {
+  local kickstart=/usr/share/anaconda/interactive-defaults.ks tool config status=0
+  if ! cmp -s -- "$installer/anaconda/interactive-defaults.ks" "$kickstart"; then
+    printf '%s is missing or differs from installer/anaconda/interactive-defaults.ks\n' "$kickstart"
+    return 1
+  fi
+  for tool in bootc skopeo fuse-overlayfs; do
+    if ! command -v -- "$tool" >/dev/null; then
+      printf '%s is missing\n' "$tool"
+      status=1
+    fi
+  done
+  config=$(bootc install print-configuration --all) || {
+    printf 'bootc install print-configuration failed\n'
+    return 1
+  }
+  python3 - "$kickstart" "$config" <<'EOF' || status=1
+import json
+import sys
+
+from pykickstart.parser import KickstartParser
+from pykickstart.version import makeVersion
+
+handler = makeVersion()
+KickstartParser(handler).readKickstart(sys.argv[1])
+problems = []
+bootc = handler.bootc
+if not bootc.seen:
+    problems.append("the kickstart has no bootc command")
+else:
+    source, target = bootc.sourceImgRef or "", bootc.targetImgRef or ""
+    if not source.startswith("containers-storage:"):
+        problems.append(f"bootc installs from {source!r}, not from the ISO's container storage")
+    elif source.removeprefix("containers-storage:") != target:
+        problems.append(f"bootc installs {source!r} but the system then follows {target!r}")
+for command in ("ostreecontainer", "ostreesetup", "liveimg", "url"):
+    if getattr(handler, command).seen:
+        problems.append(f"the kickstart also has {command}, another source")
+if json.loads(sys.argv[2]).get("enforce-container-sigpolicy") is not True:
+    problems.append(f"bootc, run from the live system, doesn't record the image as signed: {sys.argv[2]}")
+for problem in problems:
+    print(problem)
+sys.exit(1 if problems else 0)
+EOF
+  return "$status"
+}
+
+# The installer runs with SELinux enforcing: liveinst no longer switches it to
+# permissive, and Anaconda's bootc install mounts SELinux's file system into
+# the new system (image/Containerfile, docs/decisions/0015-installer-enforcing.md).
+installer_enforcing() {
+  local liveinst=/usr/bin/liveinst status=0 installation
+  installation=$(echo /usr/lib64/python3*/site-packages/pyanaconda/modules/payloads/payload/rpm_ostree/installation.py)
+  if [[ ! -f $liveinst ]]; then
+    printf '%s is missing\n' "$liveinst"
+    return 1
+  fi
+  if grep -nE 'setenforce +(0|Permissive)' "$liveinst"; then
+    printf '%s still switches SELinux to permissive (the lines above)\n' "$liveinst"
+    status=1
+  fi
+  if ! grep -qx '        for path in ("/proc", "/sys", "/sys/fs/selinux"):' "$installation"; then
+    printf "%s doesn't mount SELinux's file system into the new system\\n" "$installation"
+    status=1
+  fi
+  return "$status"
 }
 
 # The browser Anaconda's Fedora profile shows WebUI in (webui_web_engine).
@@ -290,6 +369,8 @@ check "The tools image-builder packs the ISO with are here" iso_tools
 check "iso.yaml names the label and boots live with SELinux on" iso_config
 check "livesys sets up a Plasma live session" livesys
 check "Anaconda uses Lumen's install profile" anaconda_profile
+check "The installer installs the ISO's copy of the image, recorded as signed" installer_kickstart
+check "The installer runs with SELinux enforcing, and the new system has SELinux's file system" installer_enforcing
 check "WebUI's browser is here" webui_browser
 check "The first-run setup doesn't start in the live session" no_first_run_setup
 check "The build's ostree repository is gone" no_ostree_repo

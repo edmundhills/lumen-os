@@ -67,6 +67,21 @@ boot-iso iso *entries:
         --volume "$out:/out:z" localhost/lumen-boot \
         python3 /src/tests/boot/boot_iso.py {{ quote("/iso/" + file_name(iso)) }} /src/image/live/iso.yaml /out {{ entries }}
 
+# Install Lumen from an install ISO onto a VM's empty disk with no network, and check the installed system, as CI does after the iso workflow. Needs /dev/kvm
+install-iso iso:
+    @test -e /dev/kvm || { echo "This machine has no /dev/kvm: the install would take many hours. The install test runs in CI." >&2; exit 1; }
+    fedora=$(sed -n 's/^FROM //p' tests/lint/Containerfile) \
+    && podman build --quiet --build-arg "FEDORA=$fedora" --tag localhost/lumen-boot tests/boot >/dev/null \
+    && out=$(mktemp -d /var/tmp/lumen-install.XXXXXX) \
+    && echo "The logs and screenshots go to $out, and the VM's disk to $out/disk" >&2 \
+    && mkdir "$out/disk" \
+    && podman run --rm --network=none --device /dev/kvm \
+        --volume {{ quote(justfile_directory() + ":/src:ro,z") }} \
+        --volume {{ quote(absolute_path(iso) + ":/iso/" + file_name(iso) + ":ro,z") }} \
+        --volume "$out:/out:z" localhost/lumen-boot \
+        python3 /src/tests/boot/install_iso.py --require-kvm {{ quote("/iso/" + file_name(iso)) }} \
+        /src/image/live/iso.yaml /out/disk/lumen.raw /out
+
 # Boot the OS image in a local VM
 run-vm:
     @test -e /dev/kvm || { echo "This machine has no /dev/kvm, so it can't run VMs. The boot test runs in CI." >&2; exit 1; }

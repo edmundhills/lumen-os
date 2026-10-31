@@ -163,9 +163,17 @@ def guest_command(args):
     return f"bash {CREDENTIALS}/{CREDENTIAL} {shlex.quote(' '.join(args))}{media}; echo LUMEN-CHECKS-$?-DONE\r"
 
 
-def qemu_command(firmware, nvram, iso, kvm, serial, monitor, credential_file):
-    """Return the command line that starts the VM, paused."""
-    return [
+def qemu_command(firmware, nvram, kvm, serial, monitor, credentials, cdrom=None, disk=None, logs=None,
+                 reboot=False):
+    """Return the command line that starts the VM, paused.
+
+    CREDENTIALS are files that each hold an SMBIOS type 11 string. CDROM is an
+    ISO in the CD drive, which the firmware boots first; DISK a raw disk image,
+    on the VM's first virtio disk. LOGS is a file the VM's second serial port
+    (ttyS1) writes to. With REBOOT, a reboot restarts the VM instead of
+    stopping QEMU.
+    """
+    command = [
         "qemu-system-x86_64",
         "-name", "lumen-boot-test",
         # SMM keeps the firmware's variables, the Secure Boot keys among them,
@@ -178,19 +186,32 @@ def qemu_command(firmware, nvram, iso, kvm, serial, monitor, credential_file):
         "-m", "6144",
         "-drive", f"if=pflash,unit=0,readonly=on,format={firmware.code_format},file={firmware.code}",
         "-drive", f"if=pflash,unit=1,format={firmware.nvram_format},file={nvram}",
-        "-drive", f"if=none,id=cd,media=cdrom,readonly=on,format=raw,file={iso}",
-        "-device", "ide-cd,drive=cd,bootindex=0",
+    ]
+    if cdrom:
+        command += ["-drive", f"if=none,id=cd,media=cdrom,readonly=on,format=raw,file={cdrom}",
+                    "-device", "ide-cd,drive=cd,bootindex=0"]
+    if disk:
+        command += ["-drive", f"if=none,id=disk,format=raw,discard=unmap,file={disk}",
+                    "-device", f"virtio-blk-pci,drive=disk,bootindex={1 if cdrom else 0}"]
+    command += [
         "-vga", "std",
         "-display", "none",
         "-nic", "none",
         "-chardev", f"socket,id=serial,path={serial},server=on,wait=off",
         "-serial", "chardev:serial",
+    ]
+    if logs:
+        command += ["-chardev", f"file,id=logs,path={logs}", "-serial", "chardev:logs"]
+    command += [
         "-qmp", f"unix:{monitor},server=on,wait=off",
         "-smbios", "type=11,value=io.systemd.credential:getty.ttys.serial=ttyS0",
-        "-smbios", f"type=11,path={credential_file}",
-        "-no-reboot",
-        "-S",
     ]
+    for path in credentials:
+        command += ["-smbios", f"type=11,path={path}"]
+    if not reboot:
+        command.append("-no-reboot")
+    command.append("-S")
+    return command
 
 
 def ppm_to_png(ppm):
@@ -404,7 +425,7 @@ def boot_entry(number, menu, iso, firmware, out, kvm):
         sockets = (Path(run) / "serial", Path(run) / "qmp")
         credential_file = Path(run) / "credential"
         credential_file.write_text(credential(CREDENTIAL, GUEST_SCRIPT.read_bytes()), encoding="ascii")
-        command = qemu_command(firmware, nvram, iso, kvm, *sockets, credential_file)
+        command = qemu_command(firmware, nvram, kvm, *sockets, [credential_file], cdrom=iso)
         with open(f"{prefix}-serial.log", "wb") as serial_log, open(f"{prefix}-qemu.log", "wb") as qemu_log:
             qemu_log.write(shlex.join(command).encode() + b"\n\n")
             qemu_log.flush()
@@ -422,74 +443,117 @@ def boot_entry(number, menu, iso, firmware, out, kvm):
     return report
 
 
-def run_boot(vm, report, number, menu, scale, prefix):
-    name, args = menu.entries[number]
-    console, started = vm.console, time.monotonic()
+class Steps:
+    """What a boot's steps share: the VM, its report, and its screenshots."""
 
-    def screenshot(shot):
-        if note := vm.screenshot(Path(f"{prefix}-{shot}.png")):
-            report.note(note)
+    def __init__(self, vm, report, prefix, scale):
+        self.vm, self.report, self.prefix, self.scale = vm, report, prefix, scale
+        self.console, self.started = vm.console, time.monotonic()
 
-    def failed(text):
-        report.step(False, text)
-        report.note("The serial port's last lines:\n" + console.tail())
-        screenshot("failed")
+    def since(self):
+        return f"{time.monotonic() - self.started:.0f} s after the VM started"
 
-    vm.monitor.run("cont")
+    def screenshot(self, shot):
+        if note := self.vm.screenshot(Path(f"{self.prefix}-{shot}.png")):
+            self.report.note(note)
+
+    def failed(self, text):
+        """Fail the step TEXT, with the serial port's last lines and a screenshot; return False."""
+        self.report.step(False, text)
+        self.report.note("The serial port's last lines:\n" + self.console.tail())
+        self.screenshot("failed")
+        return False
+
+    def expect(self, pattern, seconds):
+        """Wait up to SECONDS, longer without KVM, for PATTERN on the serial port."""
+        return self.console.expect(pattern, seconds * self.scale, self.vm.alive)
+
+
+def start_entry(steps, menu, number):
+    """Start the VM, start menu entry NUMBER from GRUB, and wait for a login on the serial port."""
+    report, console = steps.report, steps.console
+    name = menu.entries[number][0]
+    steps.vm.monitor.run("cont")
 
     # GRUB's menu, with every entry of iso.yaml, through the firmware's console.
     names = [n for n, _ in menu.entries]
-    if not console.wait(lambda text: all(n in text for n in names), TIMEOUTS["menu"] * scale, vm.alive):
-        return failed("GRUB's menu, with the entries of iso.yaml, didn't show on the serial port")
-    report.step(True, f"GRUB's menu on the serial port, {time.monotonic() - started:.0f} s after the VM started")
-    screenshot("menu")
+    if not console.wait(lambda text: all(n in text for n in names), TIMEOUTS["menu"] * steps.scale, steps.vm.alive):
+        return steps.failed("GRUB's menu, with the entries of iso.yaml, didn't show on the serial port")
+    report.step(True, f"GRUB's menu on the serial port, {steps.since()}")
+    steps.screenshot("menu")
     console.skip()
 
     # The default entry starts by itself when the menu's time runs out, and
     # GRUB says so; another entry is picked with keys, after which GRUB starts
     # it without a word.
     if number == menu.default:
-        timeout = (menu.timeout + TIMEOUTS["grub"]) * scale
-        if not console.expect(re.escape(f"Booting `{name}'"), timeout, vm.alive):
-            return failed(f"GRUB didn't start its default entry after {menu.timeout} s")
+        if not steps.expect(re.escape(f"Booting `{name}'"), menu.timeout + TIMEOUTS["grub"]):
+            return steps.failed(f"GRUB didn't start its default entry after {menu.timeout} s")
         report.step(True, f"GRUB starts its default entry after {menu.timeout} s")
     else:
         console.type(menu_keys(menu, number), gap=0.5)
+    return wait_for_login(steps, "the live system")
 
-    # A login on the serial port: systemd starts it because of the
-    # getty.ttys.serial credential, so the live system has booted.
-    if not console.expect(r"login: *\Z", TIMEOUTS["login"] * scale, vm.alive):
-        return failed("No login prompt on the serial port")
-    report.step(True, f"Login prompt on the serial port, {time.monotonic() - started:.0f} s after the VM started")
 
-    # The live session leaves root without a password. Until livesys has run,
-    # root is locked, so a login that comes too early is tried again.
-    deadline = time.monotonic() + TIMEOUTS["shell"] * scale
+def wait_for_login(steps, what):
+    """Wait for a login on the serial port: systemd starts it because of the getty.ttys.serial credential."""
+    if not steps.expect(r"login: *\Z", TIMEOUTS["login"]):
+        return steps.failed("No login prompt on the serial port")
+    steps.report.step(True, f"Login prompt on the serial port: {what} has booted, {steps.since()}")
+    return True
+
+
+def log_in(steps, password=""):
+    """Log in as root on the serial port, with PASSWORD.
+
+    The live session leaves root without a password. Until livesys has run,
+    root is locked, so a login that comes too early is tried again.
+    """
+    console = steps.console
+    prompts = r"(Password: *\Z)|(Login incorrect)|([#$] *\Z)"
+    deadline = time.monotonic() + TIMEOUTS["shell"] * steps.scale
     while True:
         console.type("root\r")
-        m = console.expect(r"(Password: *\Z)|(Login incorrect)|([#$] *\Z)", 30 * scale, vm.alive)
-        if m and m[1]:  # Asked for the empty password after all.
-            console.type("\r")
-            m = console.expect(r"(Password: *\Z)|(Login incorrect)|([#$] *\Z)", 30 * scale, vm.alive)
+        m = steps.expect(prompts, 30)
+        if m and m[1]:
+            console.type(password + "\r")
+            m = steps.expect(prompts, 30)
         if m and m[3]:
             break
-        if time.monotonic() > deadline or not vm.alive():
-            return failed("Could not log in as root on the serial port")
-        console.expect(r"login: *\Z", 30 * scale, vm.alive)
+        if time.monotonic() > deadline or not steps.vm.alive():
+            return steps.failed("Could not log in as root on the serial port")
+        steps.expect(r"login: *\Z", 30)
         time.sleep(5)
-    report.step(True, "Root login on the serial port")
+    steps.report.step(True, "Root login on the serial port")
+    return True
+
+
+def run_guest(steps, command, seconds):
+    """Type COMMAND, which prints BEGIN first and DONE last, at the root prompt; return its output and exit status.
+
+    Returns None, after failing the step, if it doesn't start or finish in time.
+    """
+    console = steps.console
+    console.skip()
+    console.type(command)
+    if not steps.expect(BEGIN, TIMEOUTS["begin"]):
+        return steps.failed(f"The checks didn't start: is the credential in {CREDENTIALS}?") or None
+    start = console.mark
+    done = steps.expect(DONE, seconds)
+    if not done:
+        return steps.failed("The checks inside the VM didn't finish") or None
+    return console.text()[start:console.mark - len(done[0])], int(done[1])
+
+
+def run_boot(vm, report, number, menu, scale, prefix):
+    steps = Steps(vm, report, prefix, scale)
+    if not (start_entry(steps, menu, number) and log_in(steps)):
+        return
 
     # The checks, from the credential the VM was given.
-    console.skip()
-    console.type(guest_command(args))
-    if not console.expect(BEGIN, TIMEOUTS["begin"] * scale, vm.alive):
-        return failed(f"The checks didn't start: is the credential {CREDENTIAL} in {CREDENTIALS}?")
-    start = console.mark
-    done = console.expect(DONE, TIMEOUTS["checks"] * scale, vm.alive)
-    if not done:
-        return failed("The checks inside the live session didn't finish")
-    report.guest(console.text()[start:console.mark - len(done[0])], int(done[1]))
-    screenshot("desktop")
+    if result := run_guest(steps, guest_command(menu.entries[number][1]), TIMEOUTS["checks"]):
+        report.guest(*result)
+        steps.screenshot("desktop")
 
 
 def main(argv):

@@ -132,19 +132,44 @@ class GuestTest(unittest.TestCase):
 
 
 class QemuTest(unittest.TestCase):
+    FIRMWARE = boot_iso.Firmware("x.json", "/fw/CODE.fd", "raw", "/fw/VARS.fd", "raw")
+
     def test_command(self):
-        fw = boot_iso.Firmware("x.json", "/fw/CODE.fd", "raw", "/fw/VARS.fd", "raw")
-        cmd = boot_iso.qemu_command(fw, "/out/vars.fd", "/iso/lumen.iso", True, "/r/serial", "/r/qmp", "/r/cred")
+        cmd = boot_iso.qemu_command(self.FIRMWARE, "/out/vars.fd", True, "/r/serial", "/r/qmp", ["/r/cred"],
+                                    cdrom="/iso/lumen.iso")
         joined = " ".join(cmd)
         self.assertIn("q35,smm=on,accel=kvm", joined)
         self.assertIn("driver=cfi.pflash01,property=secure,value=on", joined)
         self.assertIn("if=pflash,unit=0,readonly=on,format=raw,file=/fw/CODE.fd", joined)
         self.assertIn("if=pflash,unit=1,format=raw,file=/out/vars.fd", joined)
-        self.assertIn("file=/iso/lumen.iso", joined)
+        self.assertIn("media=cdrom,readonly=on,format=raw,file=/iso/lumen.iso", joined)
+        self.assertIn("ide-cd,drive=cd,bootindex=0", joined)
+        self.assertIn("-nic none", joined)
         self.assertIn("type=11,value=io.systemd.credential:getty.ttys.serial=ttyS0", joined)
         self.assertIn("type=11,path=/r/cred", joined)
+        self.assertNotIn("virtio-blk", joined)
+        self.assertEqual(cmd.count("-serial"), 1)
+        self.assertEqual(cmd[-2:], ["-no-reboot", "-S"])
+        self.assertIn("accel=tcg", " ".join(boot_iso.qemu_command(self.FIRMWARE, "v", False, "s", "q", ["c"])))
+
+    def test_disk_logs_and_reboot(self):
+        # The install: the CD boots first, then the disk; a second serial port for the logs.
+        cmd = boot_iso.qemu_command(self.FIRMWARE, "v", True, "s", "q", ["/r/a", "/r/b"], cdrom="/iso/l.iso",
+                                    disk="/d/lumen.raw", logs="/out/anaconda.log")
+        joined = " ".join(cmd)
+        self.assertIn("id=disk,format=raw,discard=unmap,file=/d/lumen.raw", joined)
+        self.assertIn("virtio-blk-pci,drive=disk,bootindex=1", joined)
+        self.assertIn("file,id=logs,path=/out/anaconda.log", joined)
+        self.assertEqual(cmd.count("-serial"), 2)
+        self.assertIn("type=11,path=/r/a", joined)
+        self.assertIn("type=11,path=/r/b", joined)
+        # The installed system: the disk alone, and a reboot restarts the VM.
+        cmd = boot_iso.qemu_command(self.FIRMWARE, "v", True, "s", "q", [], disk="/d/lumen.raw", reboot=True)
+        joined = " ".join(cmd)
+        self.assertNotIn("cdrom", joined)
+        self.assertIn("virtio-blk-pci,drive=disk,bootindex=0", joined)
+        self.assertNotIn("-no-reboot", cmd)
         self.assertEqual(cmd[-1], "-S")
-        self.assertIn("accel=tcg", " ".join(boot_iso.qemu_command(fw, "v", "i", False, "s", "q", "c")))
 
 
 class ScreenshotTest(unittest.TestCase):
