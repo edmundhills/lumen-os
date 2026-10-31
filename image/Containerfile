@@ -135,6 +135,17 @@ RUN --mount=type=bind,source=image/packages.py,target=/run/lumen/packages.py \
     PYTHONDONTWRITEBYTECODE=1 python3 /run/lumen/packages.py apply /run/lumen/packages.toml \
     && rm -rf /run/dnf /var/cache/* /var/lib/dnf /var/log/*
 
+# Anaconda's bootc install mounts SELinux's file system into the new system,
+# as its other installs do (the owner's choice, ADR 0015). It binds only /proc
+# and /sys there, without what is mounted below /sys, so programs it runs in
+# the new system, such as chage after it sets a password, log that they
+# can't read SELinux's mode. One line of Anaconda; the build stops if that
+# line has changed upstream. It comes before the bytecode step below, which
+# compiles the changed file again.
+RUN file=$(echo /usr/lib64/python3*/site-packages/pyanaconda/modules/payloads/payload/rpm_ostree/installation.py) \
+    && test "$(grep -cx '        for path in ("/proc", "/sys"):' "$file")" = 1 \
+    && sed -i 's|^        for path in ("/proc", "/sys"):$|        for path in ("/proc", "/sys", "/sys/fs/selinux"):|' "$file"
+
 # Python bytecode that matches its source. The image gives every file the
 # time 0, but Fedora's .pyc files record their source's real time, so Python
 # takes almost all of them for stale. The live session's /usr is writable, so
