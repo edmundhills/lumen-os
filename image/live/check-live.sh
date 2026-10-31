@@ -193,7 +193,8 @@ livesys() {
 
 # Anaconda's install profile is installer/anaconda/lumen.conf, and Anaconda's
 # own loader picks it by the image's os-release and reads Lumen's storage
-# defaults from it.
+# defaults from it: Btrfs with zstd, and /home as a subvolume of its own but
+# not /var, which Anaconda's bootc install can't bind (step 1.8c).
 anaconda_profile() {
   local profile=/etc/anaconda/profile.d/lumen.conf
   if ! cmp -s -- "$installer/anaconda/lumen.conf" "$profile"; then
@@ -227,6 +228,9 @@ if scheme != "BTRFS":
     problems.append(f"the default scheme is {scheme}, not BTRFS")
 if conf.storage.btrfs_compression != "zstd:1":
     problems.append(f"Btrfs compression is {conf.storage.btrfs_compression!r}, not 'zstd:1'")
+mounts = [m["name"] for m in conf.storage.default_partitioning]
+if mounts[:1] != ["/"] or "/home" not in mounts or "/var" in mounts:
+    problems.append(f"the default layout is {mounts}: it needs / first and /home, and no /var")
 for problem in problems:
     print(problem)
 sys.exit(1 if problems else 0)
