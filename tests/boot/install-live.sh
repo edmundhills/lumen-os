@@ -163,7 +163,8 @@ bootc_install() {
 # (docs/decisions/0015-installer-enforcing.md).
 stayed_enforcing() {
   local permissive
-  permissive=$(journalctl --boot --no-pager --output=short-monotonic --grep 'enforcing=0 old_enforcing=1')
+  # grep rather than journalctl --grep, which prints "-- No entries --".
+  permissive=$(journalctl --boot --no-pager --output=short-monotonic | grep 'enforcing=0 old_enforcing=1')
   if [[ -n $permissive ]]; then
     printf 'SELinux was switched to permissive since boot:\n%s\n' "$permissive"
     return 1
