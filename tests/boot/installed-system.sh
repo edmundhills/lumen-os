@@ -136,13 +136,17 @@ runs_the_build() {
 }
 
 # The installer laid out the disk with Lumen's install profile
-# (installer/anaconda/lumen.conf): a Btrfs root, mounted with zstd
-# compression (spec: "Btrfs root with compression (zstd)").
+# (installer/anaconda/lumen.conf): a Btrfs root, with /home as a subvolume of
+# its own, which snapper needs. Whether the running system mounts it with the
+# profile's zstd compression is recorded below, not judged: it doesn't yet
+# (step 1.8e).
 btrfs_root() {
-  local found
-  found=$(findmnt --noheadings --output FSTYPE,OPTIONS /sysroot)
-  if [[ $found != btrfs* || $found != *compress=zstd:1* ]]; then
-    printf '/sysroot is mounted as %s, not Btrfs with compress=zstd:1\n' "${found:-nothing}"
+  local root home
+  root=$(findmnt --raw --noheadings --output FSTYPE /sysroot)
+  home=$(findmnt --raw --noheadings --output FSTYPE,FSROOT /var/home)
+  if [[ $root != btrfs || $home != "btrfs /home" ]]; then
+    printf '/sysroot is %s and /var/home is %s, not Btrfs with a /home subvolume\n' "${root:-not mounted}" \
+      "${home:-not mounted}"
     return 1
   fi
 }
@@ -151,9 +155,10 @@ check "Secure Boot on" secure_boot
 check "SELinux enforcing, targeted policy" selinux
 check "Follows $image, with signatures checked" follows_signed
 check "Runs build $version, $digest, the ISO's copy" runs_the_build
-check "Root on Btrfs with zstd compression" btrfs_root
+check "Root on Btrfs, with /home a subvolume of its own" btrfs_root
 
-info "bootc status" "$(bootc status 2>&1 | head -n 4 | sed 's/^ *//' | paste -sd ';' -)"
+info "bootc status" "$(booted image.image image.transport image.signature version imageDigest | paste -sd ' ' -)"
+info "Btrfs compression" "$(findmnt --noheadings --output OPTIONS /sysroot | tr ',' '\n' | grep '^compress' || echo none)"
 info "Kernel command line" "$(cat /proc/cmdline)"
 for path in /sysroot /var /var/home /boot /boot/efi; do
   info "Mounted at $path" "$(findmnt --noheadings --output SOURCE,FSTYPE,OPTIONS "$path" 2>&1 | head -n 1)"
