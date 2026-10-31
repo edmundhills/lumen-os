@@ -297,7 +297,9 @@ jobs:
       # The qcow2 the boot test starts (step 1.9). image-builder installs the
       # re-chunked image on a disk with the image's own bootc, which records
       # the name it is given as the image the system follows, so the image
-      # gets the name Lumen systems follow (ADR 0011).
+      # gets the name Lumen systems follow (ADR 0011). image/disk.toml adds
+      # the kernel argument that mounts the Btrfs root with compression
+      # (ADR 0016).
       - name: Make the qcow2
         run: |
           dir=$RUNNER_TEMP/disk
@@ -307,9 +309,9 @@ jobs:
           sudo podman tag "$LOCAL_IMAGE-rechunked" "$REGISTRY_IMAGE:dev"
           sudo podman run --rm --privileged --security-opt label=type:unconfined_t \
             --volume /var/lib/containers/storage:/var/lib/containers/storage \
-            --volume "$dir:/output" \
+            --volume "$dir:/output" --volume "$PWD/image/disk.toml:/disk.toml:ro" \
             "$IMAGE_BUILDER" build --output-dir /output --progress verbose \
-            --bootc-ref "$REGISTRY_IMAGE:dev" qcow2
+            --blueprint /disk.toml --bootc-ref "$REGISTRY_IMAGE:dev" qcow2
           sudo podman untag "$LOCAL_IMAGE-rechunked" "$REGISTRY_IMAGE:dev"
           sudo find "$dir" -type f -exec ls -ls {} +
           df -h /

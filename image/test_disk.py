@@ -53,10 +53,11 @@ IMAGE_VERSION={VERSION}
 """
 
 # On a /boot partition of its own, an entry names its files from the top of
-# that partition.
+# that partition. bootc writes the subvolume's rootflags, image/disk.toml the
+# compression's.
 ENTRY = """title Lumen OS 0.1 (ostree:0)
 version 1
-options rw console=tty0 console=ttyS0 root=UUID=1234 ostree=/ostree/boot.1/default/abcd/0
+options root=UUID=1234 rootflags=subvol=/root rw console=tty0 console=ttyS0 rootflags=compress=zstd:1 ostree=/ostree/boot.1/default/abcd/0
 linux /ostree/default-abcd/vmlinuz-6.17.5-300.fc44.x86_64
 initrd /ostree/default-abcd/initramfs-6.17.5-300.fc44.x86_64.img
 """
@@ -188,6 +189,18 @@ class DiskTest(unittest.TestCase):
         status, _, err = self.run_main("boot", boot)
         self.assertEqual(status, 1)
         self.assertIn("the boot entry's linux, /ostree/default-abcd/vmlinuz-6.18.0", err)
+
+    def test_boot_mounts_the_root_compressed(self):
+        for options, ok in (("rootflags=subvol=/root rootflags=compress=zstd:1", True),
+                            ("rootflags=subvol=/root,compress=zstd:1", True),
+                            ("rootflags=subvol=/root", False),
+                            ("rootflags=subvol=/root rootflags=compress=zstd:3", False)):
+            with self.subTest(options):
+                entry = ENTRY.replace("rootflags=subvol=/root", "ROOT", 1).replace(" rootflags=compress=zstd:1", "")
+                status, _, err = self.run_main("boot", self.make_boot(entry.replace("ROOT", options)))
+                self.assertEqual(status, 0 if ok else 1, err)
+                if not ok:
+                    self.assertIn("without compress=zstd:1", err)
 
     def test_boot_needs_an_ostree_entry(self):
         status, _, err = self.run_main("boot", self.make_boot(ENTRY.replace(" ostree=", " root2=")))

@@ -133,6 +133,11 @@ def boot(root):
     options = entry.get("options", "").split()
     if not any(o.startswith("ostree=") for o in options):
         problems.append("the boot entry doesn't start an ostree deployment (no ostree= option)")
+    # The Btrfs root is mounted with zstd compression (image/disk.toml, ADR
+    # 0016): systemd joins every rootflags= into one list of mount options.
+    rootflags = ",".join(o.split("=", 1)[1] for o in options if o.startswith("rootflags="))
+    if "compress=zstd:1" not in rootflags.split(","):
+        problems.append(f"the kernel arguments mount the root without compress=zstd:1 (rootflags: {rootflags or 'none'})")
     return problems, [f"Boot entry {entries[0].name}: {entry.get('title', 'no title')}",
                       f"Kernel arguments: {' '.join(options)}"]
 
