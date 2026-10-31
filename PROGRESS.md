@@ -270,7 +270,7 @@ Left over from 1.6, 1.5c and 1.5b:
   - The "Fedora" boot entry label comes from bootupd's EFI vendor folder (Fedora's shim and GRUB); Lumen's own label is for later (Phase 4's boot look, or 9.x).
   - `just lint` 12 of 12 in the cloud session (tools at the lint container's versions), unit tests 190 (12 skipped without the lint container) + 29.
 - 1.8d, 2026-10-31, on the same branch (the owner said "continue" before merging it). [ADR 0015](docs/decisions/0015-installer-enforcing.md) has the facts and the decision.
-  - The live stage deletes `liveinst`'s `    /usr/sbin/setenforce 0` line (line 151 in Anaconda 44.30's `data/liveinst/liveinst`, installed as `/usr/bin/liveinst`) and stops the build if the line isn't there exactly. `check-live.sh` has a 14th check, that no `setenforce 0` is left. The install test's report now checks that SELinux stayed enforcing while the installer ran (no "enforcing=0 old_enforcing=1" in the journal) and that no denial was logged in the journal or the audit log.
+  - The live stage deletes `liveinst`'s `/usr/sbin/setenforce 0` line (indented by four spaces; line 151 in Anaconda 44.30's `data/liveinst/liveinst`, installed as `/usr/bin/liveinst`) and stops the build if the line isn't there exactly. `check-live.sh` has a 14th check, that no `setenforce 0` is left. The install test's report now checks that SELinux stayed enforcing while the installer ran (no "enforcing=0 old_enforcing=1" in the journal) and that no denial was logged in the journal or the audit log.
   - Known caveat: permissive mode doesn't log what the policy marks `dontaudit`, so 1.8c's zero denials made enforcing likely, not certain.
   - `iso` run 41203281496 (for `2001253`) makes the ISO with it and runs the boot and install tests.
 
