@@ -97,7 +97,12 @@ def install_settings(password=ROOT_PASSWORD):
         # The install test's settings (tests/boot/install_iso.py), after the
         # installer's own: what a person picks in the installer.
         lang en_US.UTF-8
-        keyboard us
+        # Both the console keymap and the X layouts, as the installer's own
+        # keyboard choice gives them. With one missing, Anaconda in a live
+        # session asks the live user's desktop for its layouts, through the
+        # user pkexec started it as, which the test, logged in as root, has
+        # none of (Anaconda 44.30, get_missing_keyboard_configuration).
+        keyboard --vckeymap=us --xlayouts=us
         timezone Etc/UTC
         # The VM's one disk, emptied and laid out by Lumen's install profile.
         ignoredisk --only-use=vda

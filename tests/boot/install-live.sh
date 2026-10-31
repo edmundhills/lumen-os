@@ -13,8 +13,8 @@
 #       Checks the ISO's copy of the Lumen image and the installer's
 #       kickstart, adds the test's settings to the kickstart, after the ISO's
 #       own, and sends the installer's logs to the VM's second serial port.
-#   bash /run/credentials/@system/lumen.install report NAME
-#       Checks how the installer ran: bootc installed the image NAME from the
+#   bash /run/credentials/@system/lumen.install report IMAGE
+#       Checks how the installer ran: bootc installed the image IMAGE from the
 #       live system's container storage, and SELinux is enforcing again.
 #
 # Prints LUMEN-CHECKS-BEGIN first, which install_iso.py waits for. Exits 0 when
@@ -24,10 +24,10 @@ set -u
 
 printf 'LUMEN-CHECKS-BEGIN\n'
 if ! { (($# == 1)) && [[ $1 == prepare ]]; } && ! { (($# == 2)) && [[ $1 == report ]]; }; then
-  printf 'Usage: %s prepare | report NAME\n' "${0##*/}" >&2
+  printf 'Usage: %s prepare | report IMAGE\n' "${0##*/}" >&2
   exit 2
 fi
-readonly command=$1 name=${2:-}
+readonly command=$1 image=${2:-}
 
 # The installer's kickstart, which Anaconda reads in the live session, and
 # the settings the test adds to it: the disk, the language and a root
@@ -146,8 +146,8 @@ bootc_install() {
     return 1
   fi
   printf '%s\n' "$line" >"$work/bootc"
-  if [[ $line != *"--source-imgref=containers-storage:$name "* || $line != *"--target-imgref=$name "* ]]; then
-    printf 'bootc did not install %s from container storage: %s\n' "$name" "$line"
+  if [[ $line != *"--source-imgref=containers-storage:$image "* || $line != *"--target-imgref=$image "* ]]; then
+    printf 'bootc did not install %s from container storage: %s\n' "$image" "$line"
     return 1
   fi
 }

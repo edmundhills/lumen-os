@@ -8,9 +8,9 @@
 # VM's firmware tables carry this script as the systemd credential
 # lumen.installed-check, and install_iso.py runs it as root on the serial port:
 #
-#   bash /run/credentials/@system/lumen.installed-check NAME DIGEST VERSION
+#   bash /run/credentials/@system/lumen.installed-check IMAGE DIGEST VERSION
 #
-#   NAME     The image the installer's kickstart installs, which the system
+#   IMAGE    The image the installer's kickstart installs, which the system
 #            follows: ghcr.io/edmundhills/lumen:dev.
 #   DIGEST   The digest of the ISO's copy of it, as the live system's container
 #            storage has it.
@@ -23,10 +23,10 @@ set -u
 
 printf 'LUMEN-CHECKS-BEGIN\n'
 if (($# != 3)); then
-  printf 'Usage: %s NAME DIGEST VERSION\n' "${0##*/}" >&2
+  printf 'Usage: %s IMAGE DIGEST VERSION\n' "${0##*/}" >&2
   exit 2
 fi
-readonly name=$1 digest=$2 version=$3
+readonly image=$1 digest=$2 version=$3
 
 work=$(mktemp -d)
 readonly work
@@ -104,21 +104,21 @@ for field in sys.argv[2:]:
 EOF
 }
 
-# The system follows NAME on its registry, and checks each update against the
+# The system follows IMAGE on its registry, and checks each update against the
 # trust policy, which wants Lumen's signature for it (ADR 0008): bootc says
 # so, and the deployment's origin file records ostree-image-signed, the
 # signed transport.
 follows_signed() {
   local fields origins status=0
   mapfile -t fields < <(booted image.image image.transport image.signature)
-  if [[ ${fields[0]} != "$name" || ${fields[1]} != registry || ${fields[2]} != containerPolicy ]]; then
+  if [[ ${fields[0]} != "$image" || ${fields[1]} != registry || ${fields[2]} != containerPolicy ]]; then
     printf 'bootc status says the system follows %s from %s, with signature checks %s; not %s from registry with containerPolicy\n' \
-      "${fields[@]:0:3}" "$name"
+      "${fields[@]:0:3}" "$image"
     status=1
   fi
   origins=$(grep -h '^container-image-reference=' /sysroot/ostree/deploy/*/deploy/*.origin)
-  if [[ $origins != "container-image-reference=ostree-image-signed:docker://$name" ]]; then
-    printf 'The origin file records %s, not ostree-image-signed:docker://%s\n' "${origins:-nothing}" "$name"
+  if [[ $origins != "container-image-reference=ostree-image-signed:docker://$image" ]]; then
+    printf 'The origin file records %s, not ostree-image-signed:docker://%s\n' "${origins:-nothing}" "$image"
     status=1
   fi
   return "$status"
@@ -149,7 +149,7 @@ btrfs_root() {
 
 check "Secure Boot on" secure_boot
 check "SELinux enforcing, targeted policy" selinux
-check "Follows $name, with signatures checked" follows_signed
+check "Follows $image, with signatures checked" follows_signed
 check "Runs build $version, $digest, the ISO's copy" runs_the_build
 check "Root on Btrfs with zstd compression" btrfs_root
 

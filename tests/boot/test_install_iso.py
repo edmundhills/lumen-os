@@ -119,6 +119,8 @@ class SettingsTest(unittest.TestCase):
         self.assertIn("ignoredisk --only-use=vda", lines)
         self.assertIn("autopart", lines)
         self.assertIn("rootpw --plaintext pw", lines)
+        # A whole keyboard setting, so Anaconda doesn't ask the live desktop for one.
+        self.assertIn("keyboard --vckeymap=us --xlayouts=us", lines)
         # The source stays the installer's own: the test adds no other.
         for command in ("bootc", "ostreecontainer", "ostreesetup", "liveimg", "url", "%include"):
             self.assertFalse([line for line in lines if line.split()[0] == command], command)
