@@ -51,6 +51,7 @@ What the overlay sets up so far:
 | `/etc/containers/policy.json` | The trust policy: images from Lumen's four repositories on ghcr.io need Lumen's signature; other registries' images and local transports are accepted as on Fedora; anything else is refused ([ADR 0008](../docs/decisions/0008-image-signing.md)). JSON has no comments, so the ADR explains it | 1.7 |
 | `/etc/containers/registries.d/lumen.yaml` | Tells containers/image to look for cosign's signatures (`sha256-<digest>.sig`) in Lumen's repositories | 1.7 |
 | `/usr/share/pki/containers/lumen.pub` | The public half of the key CI signs with. The owner makes the key ([ADR 0008](../docs/decisions/0008-image-signing.md#how-the-key-is-made-and-kept)) | 1.6 |
+| `/usr/lib/systemd/system/mcelog.service.d/50-lumen-cpu.conf` | Skips `mcelog.service` on AMD and Hygon processors, which mcelog refuses with an error, so it doesn't fail on every boot there; `check-image.sh` runs its condition on stand-ins ([ADR 0017](../docs/decisions/0017-boot-test.md)) | 1.9 |
 
 - Kinoite is pinned by digest. Every Lumen package that links KWin or Plasma is built in a stage of this Containerfile against that exact base (CLAUDE.md, "Critical build rule"). The base workflow (`.github/workflows/base.yml`) moves the pin every week through a pull request and keeps a copy of each pinned base on ghcr.io. Leave the `# Pinned:` line above the `FROM` line in place: the workflow rewrites it.
 - Everything in `overlay/` lands in the image's root folder, so `overlay/` holds only files meant for the image, and no README.

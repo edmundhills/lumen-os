@@ -262,6 +262,42 @@ raise SystemExit(1 if problems else 0)
 EOF
 }
 
+# mcelog.service skips itself on AMD and Hygon processors, which mcelog
+# refuses with an error (image/overlay/usr/lib/systemd/system/mcelog.service.d,
+# docs/decisions/0017-boot-test.md): systemd sees the drop-in, and its
+# condition, run on a stand-in /proc/cpuinfo, stops an AMD or Hygon processor
+# and lets an Intel one through.
+mcelog_on_amd() {
+  if ! systemctl cat mcelog.service | grep -q '^ExecCondition=.*AuthenticAMD'; then
+    printf "systemctl cat mcelog.service doesn't show Lumen's condition on the processor\n"
+    return 1
+  fi
+  python3 - <<'EOF'
+import shlex
+import subprocess
+import sys
+import tempfile
+
+dropin = "/usr/lib/systemd/system/mcelog.service.d/50-lumen-cpu.conf"
+lines = [line for line in open(dropin, encoding="utf-8") if line.startswith("ExecCondition=")]
+if len(lines) != 1:
+    print(f"{dropin} has {len(lines)} ExecCondition lines, not one")
+    sys.exit(1)
+command = shlex.split(lines[0].removeprefix("ExecCondition="))
+problems = []
+for vendor, family, runs in (("AuthenticAMD", 25, False), ("HygonGenuine", 24, False), ("GenuineIntel", 6, True)):
+    with tempfile.NamedTemporaryFile("w", suffix="-cpuinfo") as cpuinfo:
+        cpuinfo.write(f"processor\t: 0\nvendor_id\t: {vendor}\ncpu family\t: {family}\n")
+        cpuinfo.flush()
+        status = subprocess.run([c.replace("/proc/cpuinfo", cpuinfo.name) for c in command]).returncode
+    if (status == 0) != runs:
+        problems.append(f"on a processor from {vendor}, the condition {'stops' if runs else 'lets through'} mcelog")
+for problem in problems:
+    print(problem)
+sys.exit(1 if problems else 0)
+EOF
+}
+
 # bootc install, and the installers and bootc-image-builder with it, records
 # the image with its signatures checked (ostree-image-signed).
 signed_installs() {
@@ -288,6 +324,7 @@ check "os-release names Lumen and its build version" os_release
 check "Only images Lumen signed are trusted under Lumen's names" trust_policy
 check "Power modes use Lumen's tuned profiles, which don't run bootc" tuned_profiles
 check "bootc install follows the image with its signatures checked" signed_installs
+check "mcelog, which supports no recent AMD processor, skips itself on one" mcelog_on_amd
 
 printf '\nPassed: %d   Failed: %d\n' "$passes" "$failures"
 ((failures == 0))

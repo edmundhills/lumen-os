@@ -26,6 +26,7 @@ Architecture decision records (ADRs). Each one records a decision that changes t
 | [0014](0014-install-from-the-iso.md) | Install the ISO's own copy of the image with Anaconda's bootc command | Accepted |
 | [0015](0015-installer-enforcing.md) | Run the installer with SELinux enforcing | Accepted |
 | [0016](0016-btrfs-compression.md) | Mount the Btrfs root with compression through the kernel arguments | Accepted |
+| [0017](0017-boot-test.md) | Boot each build's qcow2 in CI, with the checks given as credentials, and skip mcelog on AMD | Accepted |
 
 ADRs 0001 to 0009 use the step numbers of their time. Since ADR 0010, the old Phase 8 is Phase 9 and the old Phase 9 is Phase 10, so their "step 8.2" is now step 9.2, and "step 9.1" is now step 10.1.
 

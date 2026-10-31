@@ -164,14 +164,15 @@ def guest_command(args):
 
 
 def qemu_command(firmware, nvram, kvm, serial, monitor, credentials, cdrom=None, disk=None, logs=None,
-                 reboot=False):
+                 reboot=False, disk_format="raw", snapshot=False, port=None):
     """Return the command line that starts the VM, paused.
 
     CREDENTIALS are files that each hold an SMBIOS type 11 string. CDROM is an
-    ISO in the CD drive, which the firmware boots first; DISK a raw disk image,
-    on the VM's first virtio disk. LOGS is a file the VM's second serial port
-    (ttyS1) writes to. With REBOOT, a reboot restarts the VM instead of
-    stopping QEMU.
+    ISO in the CD drive, which the firmware boots first; DISK a disk image in
+    DISK_FORMAT on the VM's first virtio disk, which with SNAPSHOT the VM's
+    writes leave as it is. The VM's second serial port (ttyS1) writes to the
+    file LOGS, or to the socket PORT. With REBOOT, a reboot restarts the VM
+    instead of stopping QEMU.
     """
     command = [
         "qemu-system-x86_64",
@@ -191,7 +192,8 @@ def qemu_command(firmware, nvram, kvm, serial, monitor, credentials, cdrom=None,
         command += ["-drive", f"if=none,id=cd,media=cdrom,readonly=on,format=raw,file={cdrom}",
                     "-device", "ide-cd,drive=cd,bootindex=0"]
     if disk:
-        command += ["-drive", f"if=none,id=disk,format=raw,discard=unmap,file={disk}",
+        command += ["-drive", f"if=none,id=disk,format={disk_format},discard=unmap,"
+                    f"{'snapshot=on,' if snapshot else ''}file={disk}",
                     "-device", f"virtio-blk-pci,drive=disk,bootindex={1 if cdrom else 0}"]
     command += [
         "-vga", "std",
@@ -202,6 +204,8 @@ def qemu_command(firmware, nvram, kvm, serial, monitor, credentials, cdrom=None,
     ]
     if logs:
         command += ["-chardev", f"file,id=logs,path={logs}", "-serial", "chardev:logs"]
+    elif port:
+        command += ["-chardev", f"socket,id=port,path={port},server=on,wait=off", "-serial", "chardev:port"]
     command += [
         "-qmp", f"unix:{monitor},server=on,wait=off",
         "-smbios", "type=11,value=io.systemd.credential:getty.ttys.serial=ttyS0",

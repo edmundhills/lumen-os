@@ -340,6 +340,46 @@ jobs:
           } >>"$GITHUB_STEP_SUMMARY"
           exit "$status"
 
+      # The boot test (step 1.9; spec, "Boot test"): start the qcow2 in a VM
+      # with Secure Boot and check, from inside, the login screen within 60 s
+      # and no failed units (tests/boot/boot_disk.py, ADR 0017). The VM needs
+      # KVM, which the runners have (step 1.8b-3); its writes go to a
+      # snapshot, so the disk stays as image-builder made it.
+      - name: Boot the qcow2
+        run: |
+          if [[ ! -c /dev/kvm ]]; then
+            echo "::error::This runner has no /dev/kvm, so it can't run the boot test's VM at a usable speed."
+            exit 1
+          fi
+          fedora=$(sed -n 's/^FROM //p' tests/lint/Containerfile)
+          sudo podman build --quiet --build-arg "FEDORA=$fedora" --tag localhost/lumen-boot tests/boot
+          dir=$RUNNER_TEMP/disk out=$RUNNER_TEMP/boot report=$RUNNER_TEMP/boot-report status=0
+          qcow2=$(sudo find "$dir" -name '*.qcow2' -printf '%P\n')
+          mkdir -p "$out"
+          # The runner writes the report.
+          # shellcheck disable=SC2024
+          sudo podman run --rm --network=none --device /dev/kvm \
+            --volume "$dir:/disk:ro" --volume "$PWD:/src:ro" --volume "$out:/out" \
+            localhost/lumen-boot python3 /src/tests/boot/boot_disk.py --require-kvm "/disk/$qcow2" /out \
+            >"$report" 2>&1 || status=$?
+          cat "$report"
+          {
+            printf '### The boot test\n\n```text\n'
+            cat "$report"
+            printf '```\n'
+          } >>"$GITHUB_STEP_SUMMARY"
+          exit "$status"
+
+      # The serial ports' and QEMU's logs and the screenshot of the boot test.
+      - name: Keep the boot test's logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: boot-qcow2
+          path: ${{ runner.temp }}/boot
+          retention-days: 7
+          if-no-files-found: ignore
+
       # The tags that never move. dev moves in the sign job, once the image is
       # signed. skopeo pushes the layout as it is, so the digest is the one
       # measured above, and the one the sign job signs.
