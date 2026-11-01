@@ -189,9 +189,8 @@ jobs:
 
       # The gaming edition (step 1.10a, ADR 0019), from the lumen stage just
       # built, which Podman reuses: only the lumen-gaming stage runs, with its
-      # checks and bootc's lint. Step 1.12 re-chunks, signs and pushes it, and
-      # boots its qcow2; until then the build is the test, and the image is
-      # deleted again to leave the disk to the steps below.
+      # checks and bootc's lint. Its qcow2 is made and booted below with
+      # lumen's (step 1.10c); step 1.12 re-chunks, signs and pushes it.
       - name: Build the gaming edition
         env:
           VERSION: ${{ steps.version.outputs.version }}
@@ -209,7 +208,6 @@ jobs:
             printf -- '- 32-bit packages: %s\n' "$(sudo podman run --rm --entrypoint rpm localhost/lumen-gaming:ci \
               --query --all --queryformat '%{ARCH}\n' | grep -cx i686)"
           } >>"$GITHUB_STEP_SUMMARY"
-          sudo podman rmi localhost/lumen-gaming:ci
 
       # Read the newest build on ghcr.io, as users would, without logging in.
       # Re-chunking keeps its layer plan once it is re-chunked itself, and the
@@ -318,26 +316,33 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
-      # The qcow2 the boot test starts (step 1.9). image-builder installs the
-      # re-chunked image on a disk with the image's own bootc, which records
-      # the name it is given as the image the system follows, so the image
-      # gets the name Lumen systems follow (ADR 0011). image/disk.toml adds
-      # the kernel argument that mounts the Btrfs root with compression
-      # (ADR 0016).
-      - name: Make the qcow2
+      # The qcow2s the boot test starts (steps 1.9 and 1.10c), one per edition,
+      # each in its own folder: lumen's from the re-chunked image, the gaming
+      # edition's from its build above. image-builder installs an image on a
+      # disk with the image's own bootc, which records the name it is given as
+      # the image the system follows, so each gets the name its systems follow
+      # (ADR 0011): ghcr.io/<owner>/lumen:dev and lumen-gaming:dev.
+      # image/disk.toml adds the kernel argument that mounts the Btrfs root with
+      # compression (ADR 0016). $RUNNER_TEMP/editions lists them for the steps
+      # below: edition, image, name.
+      - name: Make the qcow2s
         run: |
-          dir=$RUNNER_TEMP/disk
-          mkdir -p "$dir"
+          printf '%s\n' "lumen $LOCAL_IMAGE-rechunked $REGISTRY_IMAGE:dev" \
+            "gaming localhost/lumen-gaming:ci $REGISTRY_IMAGE-gaming:dev" >"$RUNNER_TEMP/editions"
           # osbuild mounts the new Btrfs root, which needs the host's module.
           sudo modprobe btrfs
-          sudo podman tag "$LOCAL_IMAGE-rechunked" "$REGISTRY_IMAGE:dev"
-          sudo podman run --rm --privileged --security-opt label=type:unconfined_t \
-            --volume /var/lib/containers/storage:/var/lib/containers/storage \
-            --volume "$dir:/output" --volume "$PWD/image/disk.toml:/disk.toml:ro" \
-            "$IMAGE_BUILDER" build --output-dir /output --progress verbose \
-            --blueprint /disk.toml --bootc-ref "$REGISTRY_IMAGE:dev" qcow2
-          sudo podman untag "$LOCAL_IMAGE-rechunked" "$REGISTRY_IMAGE:dev"
-          sudo find "$dir" -type f -exec ls -ls {} +
+          while read -r edition image name; do
+            dir=$RUNNER_TEMP/disk/$edition
+            mkdir -p "$dir"
+            sudo podman tag "$image" "$name"
+            sudo podman run --rm --privileged --security-opt label=type:unconfined_t \
+              --volume /var/lib/containers/storage:/var/lib/containers/storage \
+              --volume "$dir:/output" --volume "$PWD/image/disk.toml:/disk.toml:ro" \
+              "$IMAGE_BUILDER" build --output-dir /output --progress verbose \
+              --blueprint /disk.toml --bootc-ref "$name" qcow2 </dev/null
+            sudo podman untag "$image" "$name"
+            sudo find "$dir" -type f -exec ls -ls {} +
+          done <"$RUNNER_TEMP/editions"
           df -h /
 
       # image-builder runs bootc and bootupd where SELinux is off, so two
@@ -345,41 +350,53 @@ jobs:
       # an install from the ISO has (ADR 0018). Then image/check-disk.sh reads
       # the disk read-only: the partitions, the boot files and those labels,
       # and what the deployment follows. The boot test starts the qcow2 made
-      # again from the labeled disk.
-      - name: Label and check the qcow2
+      # again from the labeled disk. Each edition's disk is checked even when
+      # another's fails.
+      - name: Label and check the qcow2s
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          dir=$RUNNER_TEMP/disk
-          qcow2=$(sudo find "$dir" -name '*.qcow2' -printf '%P\n')
-          qemu_img() { sudo podman run --rm --volume "$dir:/output" --entrypoint qemu-img "$IMAGE_BUILDER" "$@"; }
-          qemu_img convert -O raw "/output/$qcow2" /output/check.raw
-          report=$RUNNER_TEMP/disk-report status=0
-          # shellcheck disable=SC2024
-          sudo image/label-disk.sh "$dir/check.raw" >"$report" 2>&1 || status=$?
-          # shellcheck disable=SC2024
-          sudo image/check-disk.sh "$dir/check.raw" "$REGISTRY_IMAGE:dev" "$VERSION" >>"$report" 2>&1 || status=$?
-          if ((status == 0)); then
-            qemu_img convert -O qcow2 /output/check.raw /output/labeled.qcow2
-            sudo mv "$dir/labeled.qcow2" "$dir/$qcow2"
-          fi
-          sudo rm "$dir/check.raw"
-          cat "$report"
-          # The backticks are Markdown, for the run's summary page.
-          # shellcheck disable=SC2016
-          {
-            printf '### The qcow2\n\n```text\n'
+          status=0
+          while read -r edition image name; do
+            dir=$RUNNER_TEMP/disk/$edition
+            qcow2=$(sudo find "$dir" -name '*.qcow2' -printf '%P\n')
+            qemu_img() {
+              sudo podman run --rm --volume "$dir:/output" --entrypoint qemu-img "$IMAGE_BUILDER" "$@" </dev/null
+            }
+            qemu_img convert -O raw "/output/$qcow2" /output/check.raw
+            report=$RUNNER_TEMP/disk-report-$edition result=0
+            # shellcheck disable=SC2024
+            sudo image/label-disk.sh "$dir/check.raw" >"$report" 2>&1 </dev/null || result=$?
+            # shellcheck disable=SC2024
+            sudo image/check-disk.sh "$dir/check.raw" "$name" "$VERSION" >>"$report" 2>&1 </dev/null || result=$?
+            if ((result == 0)); then
+              qemu_img convert -O qcow2 /output/check.raw /output/labeled.qcow2
+              sudo mv "$dir/labeled.qcow2" "$dir/$qcow2"
+            else
+              status=1
+            fi
+            sudo rm "$dir/check.raw"
+            printf '%s (%s):\n' "$edition" "$image"
             cat "$report"
-            printf '```\n'
-          } >>"$GITHUB_STEP_SUMMARY"
+            # The backticks are Markdown, for the run's summary page.
+            # shellcheck disable=SC2016
+            {
+              printf '### The qcow2: %s\n\n```text\n' "$edition"
+              cat "$report"
+              printf '```\n'
+            } >>"$GITHUB_STEP_SUMMARY"
+          done <"$RUNNER_TEMP/editions"
           exit "$status"
 
-      # The boot test (step 1.9; spec, "Boot test"): start the qcow2 in a VM
-      # with Secure Boot and check, from inside, the login screen within 60 s
-      # and no failed units (tests/boot/boot_disk.py, ADR 0017). The VM needs
-      # KVM, which the runners have (step 1.8b-3); its writes go to a
-      # snapshot, so the disk stays as image-builder made it.
-      - name: Boot the qcow2
+      # The boot test (steps 1.9 and 1.10c; spec, "Boot test"): start each
+      # qcow2 in a VM with Secure Boot and check, from inside, the first-run
+      # screen and the login screen within 60 s each, no failed units, and for
+      # the gaming edition that the login screen offers the Gamescope session
+      # (tests/boot/boot_disk.py, ADR 0017). The VM needs KVM, which the
+      # runners have (step 1.8b-3); its writes go to a snapshot, so the disk
+      # stays as image-builder made it. Each edition boots even when another's
+      # fails.
+      - name: Boot the qcow2s
         run: |
           if [[ ! -c /dev/kvm ]]; then
             echo "::error::This runner has no /dev/kvm, so it can't run the boot test's VM at a usable speed."
@@ -387,24 +404,29 @@ jobs:
           fi
           fedora=$(sed -n 's/^FROM //p' tests/lint/Containerfile)
           sudo podman build --quiet --build-arg "FEDORA=$fedora" --tag localhost/lumen-boot tests/boot
-          dir=$RUNNER_TEMP/disk out=$RUNNER_TEMP/boot report=$RUNNER_TEMP/boot-report status=0
-          qcow2=$(sudo find "$dir" -name '*.qcow2' -printf '%P\n')
-          mkdir -p "$out"
-          # The runner writes the report.
-          # shellcheck disable=SC2024
-          sudo podman run --rm --network=none --device /dev/kvm \
-            --volume "$dir:/disk:ro" --volume "$PWD:/src:ro" --volume "$out:/out" \
-            localhost/lumen-boot python3 /src/tests/boot/boot_disk.py --require-kvm "/disk/$qcow2" /out \
-            >"$report" 2>&1 || status=$?
-          cat "$report"
-          {
-            printf '### The boot test\n\n```text\n'
+          status=0
+          while read -r edition _ name; do
+            dir=$RUNNER_TEMP/disk/$edition out=$RUNNER_TEMP/boot/$edition report=$RUNNER_TEMP/boot-report-$edition
+            qcow2=$(sudo find "$dir" -name '*.qcow2' -printf '%P\n')
+            mkdir -p "$out"
+            # The runner writes the report.
+            # shellcheck disable=SC2024
+            sudo podman run --rm --network=none --device /dev/kvm \
+              --volume "$dir:/disk:ro" --volume "$PWD:/src:ro" --volume "$out:/out" \
+              localhost/lumen-boot python3 /src/tests/boot/boot_disk.py --require-kvm "/disk/$qcow2" /out \
+              >"$report" 2>&1 </dev/null || status=1
+            printf '%s (%s):\n' "$edition" "$name"
             cat "$report"
-            printf '```\n'
-          } >>"$GITHUB_STEP_SUMMARY"
+            {
+              printf '### The boot test: %s\n\n```text\n' "$edition"
+              cat "$report"
+              printf '```\n'
+            } >>"$GITHUB_STEP_SUMMARY"
+          done <"$RUNNER_TEMP/editions"
           exit "$status"
 
-      # The serial ports' and QEMU's logs and the screenshot of the boot test.
+      # The serial ports' and QEMU's logs and the screenshots of the boot
+      # test, a folder per edition.
       - name: Keep the boot test's logs
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2

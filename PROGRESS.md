@@ -312,6 +312,9 @@ Left over from 1.6, 1.5c and 1.5b:
   - `image/gaming/overlay/usr/bin/steamos-update` (Lumen's): exit 0 for `--supports-duplicate-detection`, 7 ("no update") otherwise. No `os-session-select` hook: "Switch to Desktop" ends the session and the login screen comes back.
   - The dnf step now mounts only the four files it reads from `image/gaming/`, so session changes don't rerun dnf. `check-gaming.sh` takes the image folder and has three more checks (9).
   - **Done:** image run 41322623199 (for `2ff7ec0`) green, 73.8 minutes: the gaming edition with the session in 17.8, its nine checks and bootc's lint passing; lint green. Main's runs after the merge: lint, base and iso green, image still publishing then.
+- 1.10c, 2026-11-01. Main's image run after the merge (41322043137) published main's first Fedora 45 build.
+  - `build-image.yml`: the gaming image now stays after its build; "Make the qcow2s", "Label and check the qcow2s" and "Boot the qcow2s" loop over `$RUNNER_TEMP/editions` (edition, image, name): `lumen` from the re-chunked image as `ghcr.io/<owner>/lumen:dev`, `gaming` from `localhost/lumen-gaming:ci` as `ghcr.io/<owner>/lumen-gaming:dev`, each in `$RUNNER_TEMP/disk/<edition>` and `boot/<edition>`, every edition checked even when another fails. Commands in the loops read `/dev/null`, so none eats the list.
+  - `booted-disk.sh`: on the second boot, when `VARIANT_ID=gaming`, "The login screen offers the Gamescope session" (an entry in `/usr/share/wayland-sessions` that isn't hidden and whose TryExec, if any, is installed, plus `gamescope-session-plus`, `gamescope` and `steam` on `PATH`); both editions record "Sessions offered". Tried on stand-in entries here.
 
 ---
 

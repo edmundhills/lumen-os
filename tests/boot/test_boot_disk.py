@@ -47,6 +47,11 @@ class CredentialsTest(unittest.TestCase):
         self.assertEqual(script.count("systemctl reboot"), 1)
         self.assertIn("touch /etc/plasma-setup-done", script)
 
+    def test_the_gaming_edition_must_offer_its_session(self):
+        script = boot_disk.CHECK_SCRIPT.read_text()
+        self.assertIn("if grep -qx 'VARIANT_ID=gaming' /usr/lib/os-release; then", script)
+        self.assertIn("(gamescope-session-steam.desktop)", script)
+
 
 class CommandTest(unittest.TestCase):
     def test_a_qcow2_as_a_snapshot_with_a_port_for_the_report(self):

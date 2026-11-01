@@ -156,6 +156,37 @@ first_run_screen() { on_screen "Plasma Setup" user plasma-setup; }
 # session of the class "greeter" (ADR 0005).
 login_screen() { on_screen "the greeter" greeter; }
 
+# The sessions the login screen offers: Plasma Login Manager lists each entry
+# in /usr/share/wayland-sessions that isn't hidden and whose TryExec, if it
+# names one, is installed. One line per session: its name and file.
+sessions_offered() {
+  local entry tryexec
+  for entry in /usr/share/wayland-sessions/*.desktop; do
+    [[ -f $entry ]] || continue
+    grep -qiE '^(Hidden|NoDisplay)=true' "$entry" && continue
+    tryexec=$(sed -n 's/^TryExec=//p' "$entry")
+    [[ -z $tryexec ]] || command -v "$tryexec" >/dev/null || continue
+    printf '%s (%s)\n' "$(sed -n 's/^Name=//p' "$entry" | head -n 1)" "${entry##*/}"
+  done
+}
+
+# The gaming edition's login screen offers the Gamescope session, and what it
+# starts is installed (step 1.10c, ADR 0020).
+gamescope_session_offered() {
+  local program status=0
+  if ! sessions_offered | grep -qF '(gamescope-session-steam.desktop)'; then
+    printf 'The login screen offers no Gamescope session. It offers:\n%s\n' "$(sessions_offered)"
+    status=1
+  fi
+  for program in gamescope-session-plus gamescope steam; do
+    command -v "$program" >/dev/null || {
+      printf '%s is not installed\n' "$program"
+      status=1
+    }
+  done
+  return "$status"
+}
+
 # Finish Plasma Setup as its wizard does when someone completes it
 # (plasma-setup's src/auth/authhelper.cpp): create the first user with
 # useradd -m -U, create /etc/plasma-setup-done, which stops
@@ -270,9 +301,13 @@ read -r passes failures <"$STATE"
 printf 'LUMEN-CHECKS-SECOND-BOOT\n'
 printf '\nThe second boot, with a user\n'
 check "The login screen within $LOGIN_BUDGET s: Plasma Login Manager's greeter" login_screen
+if grep -qx 'VARIANT_ID=gaming' /usr/lib/os-release; then
+  check "The login screen offers the Gamescope session (Steam Big Picture)" gamescope_session_offered
+fi
 check "No failed units" no_failed_units
 check "No SELinux denials" no_denials
 boot_info "Login screen"
+info "Sessions offered" "$(sessions_offered | paste -sd ';' -)"
 show_denials
 
 printf '\nPassed: %d   Failed: %d\n' "$passes" "$failures"
