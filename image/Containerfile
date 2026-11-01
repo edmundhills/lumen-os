@@ -34,8 +34,8 @@ ARG LUMEN_GAMING_FROM=lumen
 # made, so the base workflow (.github/workflows/base.yml) moves the pin to the
 # newest build every week through a pull request, rewriting the "Pinned:" line,
 # and keeps a copy of each pinned base on ghcr.io (step 1.5b, ADR 0004).
-# Pinned: Kinoite 44.20261028.0, built 2026-10-28, with KWin 6.7.5, Plasma 6.7.5 and Qt 6.11.2.
-FROM quay.io/fedora-ostree-desktops/kinoite:44@sha256:93139a85f048799787b472307c8da8b5304bbfe247c2fae75cfeafc7035b38ac AS base
+# Pinned: Kinoite 45.20261101.0, built 2026-11-01, with KWin 6.8.2, Plasma 6.8.2 and Qt 6.11.2.
+FROM quay.io/fedora-ostree-desktops/kinoite:45@sha256:bfe08b1033bfc1736f47eb377b8dc83163605cc140502c0631b80f0f19b1be34 AS base
 
 # Install and remove packages. packages.py stops the build if the manifest
 # doesn't match the base image, or if dnf removes a package it doesn't list.
