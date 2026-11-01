@@ -140,11 +140,14 @@ FROM ${LUMEN_GAMING_FROM} AS lumen-gaming
 # anything the packages' scripts left in /run, which only exists at runtime:
 # systemd-tmpfiles and the services make it at boot, and bootc container lint
 # rejects content there. The step names each entry and the package that owns
-# it; on Kinoite 45 that was /run/setrans. Only what this step reads is
-# mounted, so other changes to image/ don't rerun dnf.
+# it; on Kinoite 45 that was /run/setrans. Only the files this step reads are
+# mounted, so other changes to image/ don't rerun dnf (about 10 minutes).
 RUN --mount=type=bind,source=image/packages.py,target=/run/lumen/packages.py \
     --mount=type=bind,source=image/multilib.py,target=/run/lumen/multilib.py \
-    --mount=type=bind,source=image/gaming,target=/run/lumen/gaming \
+    --mount=type=bind,source=image/gaming/packages.toml,target=/run/lumen/gaming/packages.toml \
+    --mount=type=bind,source=image/gaming/rpmfusion-nonfree.repo,target=/run/lumen/gaming/rpmfusion-nonfree.repo \
+    --mount=type=bind,source=image/gaming/RPM-GPG-KEY-rpmfusion-nonfree-fedora-2020,target=/run/lumen/gaming/RPM-GPG-KEY-rpmfusion-nonfree-fedora-2020 \
+    --mount=type=bind,source=image/gaming/keys.sha256,target=/run/lumen/gaming/keys.sha256 \
     cd /run/lumen/gaming && sha256sum --check --strict keys.sha256 \
     && before=$(ls -A /run) \
     && cp /run/lumen/gaming/rpmfusion-nonfree.repo /etc/yum.repos.d/lumen-rpmfusion-nonfree.repo \
@@ -158,6 +161,18 @@ RUN --mount=type=bind,source=image/packages.py,target=/run/lumen/packages.py \
     done \
     && rm -rf /var/cache/* /var/lib/dnf /var/log/*
 
+# The Gamescope session (step 1.10b, docs/decisions/0020-gamescope-session.md):
+# Steam's Big Picture mode as a session on the login screen, from ChimeraOS's
+# gamescope-session and gamescope-session-steam. session.py downloads each file
+# from its repository at a pinned commit, checks its SHA-256 and installs it
+# unchanged (image/gaming/session.toml), without SteamOS's update and firmware
+# helpers. Then the edition's overlay: Lumen's own steamos-update, which tells
+# Steam there is no system update, as lumen-updated owns those (Phase 5).
+RUN --mount=type=bind,source=image/gaming,target=/run/lumen/gaming \
+    PYTHONDONTWRITEBYTECODE=1 python3 /run/lumen/gaming/session.py install /run/lumen/gaming/session.toml \
+    && cp --recursive --no-preserve=mode,ownership /run/lumen/gaming/overlay/. / \
+    && chmod 0755 /usr/bin/steamos-update
+
 # os-release names the edition (image/os-release.sh).
 ARG LUMEN_BUILD_VERSION
 RUN --mount=type=bind,source=image/os-release.sh,target=/run/lumen/os-release.sh \
@@ -168,7 +183,7 @@ RUN --mount=type=bind,source=image/os-release.sh,target=/run/lumen/os-release.sh
 # the lumen stage.
 RUN --mount=type=bind,source=image,target=/run/lumen/image \
     bash /run/lumen/image/check-image.sh /run/lumen/image/overlay \
-    && bash /run/lumen/image/gaming/check-gaming.sh /run/lumen/image/multilib.py
+    && bash /run/lumen/image/gaming/check-gaming.sh /run/lumen/image
 RUN rm -rf /run/lumen && bootc container lint --fatal-warnings
 
 ARG LUMEN_COMMIT

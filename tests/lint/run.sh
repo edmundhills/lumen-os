@@ -118,7 +118,8 @@ layout() {
 # The package manifests of the image, its live system and the gaming edition.
 manifests() {
   python3 image/packages.py check && python3 image/packages.py check image/live/packages.toml &&
-    python3 image/packages.py check image/gaming/packages.toml
+    python3 image/packages.py check image/gaming/packages.toml &&
+    python3 image/gaming/session.py check image/gaming/session.toml
 }
 
 printf 'Lumen OS lint\n'

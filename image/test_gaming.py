@@ -82,7 +82,8 @@ class Repository(unittest.TestCase):
 
     def test_the_containerfile_mounts_it_there(self):
         containerfile = (HERE / "Containerfile").read_text()
-        self.assertIn("--mount=type=bind,source=image/gaming,target=/run/lumen/gaming", containerfile)
+        for name in ("packages.toml", "rpmfusion-nonfree.repo", KEY.name, "keys.sha256"):
+            self.assertIn(f"--mount=type=bind,source=image/gaming/{name},target=/run/lumen/gaming/{name}", containerfile)
         self.assertIn("sha256sum --check --strict keys.sha256", containerfile)
         # The repository is gone again by the end of the same step.
         step = re.search(r"cp /run/lumen/gaming/rpmfusion-nonfree.repo (\S+).*?rm (\S+)", containerfile, re.DOTALL)
