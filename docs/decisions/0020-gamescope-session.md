@@ -34,3 +34,7 @@ The spec's gaming image "adds Steam, Gamescope session, MangoHud, controller ude
 - The session's files belong to no RPM, as the overlay's don't.
 - The login-screen entry's name, "Steam Big Picture", is ChimeraOS's English and isn't translated. When Welcome and Lumen's own session work arrive (Phase 6), a Lumen entry with translations can replace it.
 - "Switch to Desktop" returns to the login screen rather than straight to the desktop.
+
+## Follow-up
+
+- 2026-11-01: image run 41322623199 (for `2ff7ec0`) built the gaming edition with the session in 17.8 minutes and passed: all ten files downloaded and matched their pins, and `check-gaming.sh`'s nine checks and bootc's lint passed. Whether the login screen offers the session, and whether it starts, is step 1.10c's boot test.
