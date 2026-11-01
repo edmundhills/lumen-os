@@ -313,6 +313,26 @@ signed_installs() {
   fi
 }
 
+# KWin and the Plasma desktop are the same release: KDE releases them together,
+# and lumen-glass is built against KWin (docs/architecture.md, section 9.4).
+# The base stage installs from Fedora's mirrors, which carry only the newest
+# builds, so a package it adds can pull in a new Plasma release while the
+# pinned Kinoite keeps its KWin; on 2026-11-01 dnf moved plasma-workspace and
+# 23 other Plasma packages to 6.8.2 with KWin still 6.7.5. A Plasma release
+# arrives with the weekly bump of the Kinoite pin instead.
+same_plasma_release() {
+  local kwin workspace
+  kwin=$(rpm --query --queryformat '%{VERSION}' kwin) || return 1
+  workspace=$(rpm --query --queryformat '%{VERSION}' plasma-workspace) || return 1
+  if [[ $kwin != "$workspace" ]]; then
+    printf 'KWin is %s but plasma-workspace is %s: a package the image adds pulled in another Plasma release.\n' \
+      "$kwin" "$workspace"
+    printf 'Wait for the Kinoite pin to move to a build with Plasma %s (the base workflow), or pin what pulled it.\n' \
+      "$workspace"
+    return 1
+  fi
+}
+
 printf 'Lumen image checks\n'
 check "Overlay files are in place, owned and writable only by root" overlay_files
 check "Units that Lumen's presets enable are enabled" enabled_units
@@ -327,6 +347,7 @@ check "Only images Lumen signed are trusted under Lumen's names" trust_policy
 check "Power modes use Lumen's tuned profiles, which don't run bootc" tuned_profiles
 check "bootc install follows the image with its signatures checked" signed_installs
 check "mcelog, which supports no recent AMD processor, skips itself on one" mcelog_on_amd
+check "KWin and Plasma are the same release" same_plasma_release
 
 printf '\nPassed: %d   Failed: %d\n' "$passes" "$failures"
 ((failures == 0))
