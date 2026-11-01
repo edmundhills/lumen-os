@@ -15,6 +15,7 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import disk
 
@@ -63,10 +64,29 @@ initrd /ostree/default-abcd/initramfs-6.17.5-300.fc44.x86_64.img
 """
 
 
+BOOT_T = "system_u:object_r:boot_t:s0"
+ROOT_T = "system_u:object_r:root_t:s0"
+
+
 class DiskTest(unittest.TestCase):
     def setUp(self):
         self.work = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.work)
+        # SELinux labels, which a test can't write without privileges: by path.
+        self.labels = {}
+        for name, fake in (("read_label", lambda path: self.labels.get(str(path))),
+                           ("write_label", lambda path, label: self.labels.__setitem__(str(path), label))):
+            patcher = mock.patch.object(disk, name, fake)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def labeled(self, relative, label):
+        """Write the file RELATIVE with the SELinux label LABEL, or none if LABEL is None."""
+        path = self.write(relative, "{}")
+        self.labels.pop(str(path), None)
+        if label:
+            self.labels[str(path)] = label
+        return path
 
     def write(self, relative, text=""):
         path = self.work / relative
@@ -173,7 +193,8 @@ class DiskTest(unittest.TestCase):
 
     # /boot
 
-    def make_boot(self, entry=ENTRY):
+    def make_boot(self, entry=ENTRY, state_label=BOOT_T):
+        self.labeled("boot/bootupd-state.json", state_label)
         self.write("boot/loader/entries/ostree-1.conf", entry)
         self.write("boot/ostree/default-abcd/vmlinuz-6.17.5-300.fc44.x86_64")
         self.write("boot/ostree/default-abcd/initramfs-6.17.5-300.fc44.x86_64.img")
@@ -207,6 +228,19 @@ class DiskTest(unittest.TestCase):
         self.assertEqual(status, 1)
         self.assertIn("no ostree= option", err)
 
+    def test_boot_needs_bootupds_state_labeled(self):
+        status, _, err = self.run_main("boot", self.make_boot())
+        self.assertIn(f"SELinux labels: bootupd-state.json {BOOT_T}", err)
+        for label in (None, "system_u:object_r:unlabeled_t:s0"):
+            with self.subTest(label):
+                status, _, err = self.run_main("boot", self.make_boot(state_label=label))
+                self.assertEqual(status, 1)
+                self.assertIn(f"bootupd-state.json is labeled {label or 'nothing'}, not {BOOT_T}", err)
+        (self.work / "boot/bootupd-state.json").unlink()
+        status, _, err = self.run_main("boot", str(self.work / "boot"))
+        self.assertEqual(status, 1)
+        self.assertIn("boot has no bootupd-state.json", err)
+
     def test_boot_needs_exactly_one_entry(self):
         boot = self.make_boot()
         self.write("boot/loader/entries/ostree-2.conf", ENTRY)
@@ -216,7 +250,9 @@ class DiskTest(unittest.TestCase):
 
     # The root filesystem
 
-    def make_root(self, origin=ORIGIN, os_release=OS_RELEASE):
+    def make_root(self, origin=ORIGIN, os_release=OS_RELEASE, aleph_label=ROOT_T):
+        # bootc's record of the install, at the top of the subvolume.
+        self.labeled("root/root/.bootc-aleph.json", aleph_label)
         self.write(f"root/{DEPLOYMENT}.origin", origin)
         if os_release is not None:
             self.write(f"root/{DEPLOYMENT}/usr/lib/os-release", os_release)
@@ -232,6 +268,7 @@ class DiskTest(unittest.TestCase):
         self.assertIn("Root mount options: subvol=root,compress=zstd:1,ro", err)
 
     def test_root_without_a_subvolume(self):
+        self.labeled("root/.bootc-aleph.json", ROOT_T)
         self.write("root/ostree/deploy/default/deploy/0123abcd.0.origin", ORIGIN)
         self.write("root/ostree/deploy/default/deploy/0123abcd.0/usr/lib/os-release", OS_RELEASE)
         status, _, err = self.run_main("root", str(self.work / "root"), IMAGE, VERSION)
@@ -267,6 +304,40 @@ class DiskTest(unittest.TestCase):
         self.assertEqual(status, 1)
         self.assertIn("the deployment has no /usr/lib/os-release", err)
 
+    def test_root_needs_bootcs_record_labeled(self):
+        # What a relabel by Fedora's policy gives it: default_t.
+        default_t = "system_u:object_r:default_t:s0"
+        status, _, err = self.run_main("root", self.make_root(aleph_label=default_t), IMAGE, VERSION)
+        self.assertEqual(status, 1)
+        self.assertIn(f".bootc-aleph.json is labeled {default_t}, not {ROOT_T}", err)
+
+    # Labeling
+
+    def test_label_both_files(self):
+        boot = self.make_boot(state_label=None)
+        root = self.make_root(aleph_label="system_u:object_r:default_t:s0")
+        for role, folder in (("boot", boot), ("root", root)):
+            with self.subTest(role):
+                status, _, err = self.run_main("label", role, folder)
+                self.assertEqual(status, 0, err)
+                self.assertIn("Labeled ", err)
+        self.assertEqual(self.labels, {str(self.work / "boot/bootupd-state.json"): BOOT_T,
+                                       str(self.work / "root/root/.bootc-aleph.json"): ROOT_T})
+        self.assertEqual(self.run_main("boot", boot)[0], 0)
+        self.assertEqual(self.run_main("root", root, IMAGE, VERSION)[0], 0)
+
+    def test_label_needs_the_files(self):
+        root = self.make_root()
+        (self.work / "root/root/.bootc-aleph.json").unlink()
+        status, _, err = self.run_main("label", "root", root)
+        self.assertEqual(status, 1)
+        self.assertIn("root has no .bootc-aleph.json", err)
+        self.assertEqual(self.run_main("label", "esp", root)[0], 2)
+
+    def test_a_file_without_a_label(self):
+        with mock.patch.object(disk, "read_label", DiskTest.real_read_label):
+            self.assertIsNone(disk.read_label(self.write("plain")))
+
     def test_root_needs_one_deployment(self):
         root = self.make_root()
         self.write("root/root/ostree/deploy/default/deploy/4567cdef.0.origin", ORIGIN)
@@ -284,6 +355,8 @@ class DiskTest(unittest.TestCase):
         self.assertEqual(status, 2)
         self.assertIn("Usage:", err)
 
+
+DiskTest.real_read_label = staticmethod(disk.read_label)
 
 if __name__ == "__main__":
     unittest.main()

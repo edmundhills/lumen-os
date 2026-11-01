@@ -316,19 +316,29 @@ jobs:
           sudo find "$dir" -type f -exec ls -ls {} +
           df -h /
 
-      # image/check-disk.sh reads the disk as a raw file, read-only: the
-      # partitions, the boot files, and what the deployment follows.
-      - name: Check the qcow2
+      # image-builder runs bootc and bootupd where SELinux is off, so two
+      # files they write get no label; image/label-disk.sh gives them the ones
+      # an install from the ISO has (ADR 0018). Then image/check-disk.sh reads
+      # the disk read-only: the partitions, the boot files and those labels,
+      # and what the deployment follows. The boot test starts the qcow2 made
+      # again from the labeled disk.
+      - name: Label and check the qcow2
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           dir=$RUNNER_TEMP/disk
           qcow2=$(sudo find "$dir" -name '*.qcow2' -printf '%P\n')
-          sudo podman run --rm --volume "$dir:/output" --entrypoint qemu-img "$IMAGE_BUILDER" \
-            convert -O raw "/output/$qcow2" /output/check.raw
+          qemu_img() { sudo podman run --rm --volume "$dir:/output" --entrypoint qemu-img "$IMAGE_BUILDER" "$@"; }
+          qemu_img convert -O raw "/output/$qcow2" /output/check.raw
           report=$RUNNER_TEMP/disk-report status=0
           # shellcheck disable=SC2024
-          sudo image/check-disk.sh "$dir/check.raw" "$REGISTRY_IMAGE:dev" "$VERSION" >"$report" 2>&1 || status=$?
+          sudo image/label-disk.sh "$dir/check.raw" >"$report" 2>&1 || status=$?
+          # shellcheck disable=SC2024
+          sudo image/check-disk.sh "$dir/check.raw" "$REGISTRY_IMAGE:dev" "$VERSION" >>"$report" 2>&1 || status=$?
+          if ((status == 0)); then
+            qemu_img convert -O qcow2 /output/check.raw /output/labeled.qcow2
+            sudo mv "$dir/labeled.qcow2" "$dir/$qcow2"
+          fi
           sudo rm "$dir/check.raw"
           cat "$report"
           # The backticks are Markdown, for the run's summary page.

@@ -19,18 +19,25 @@
 #       and Fedora's shim, GRUB and its menu, which bootupd installs.
 #   python3 image/disk.py boot DIR
 #       The mounted /boot: one boot entry for an ostree deployment, with the
-#       kernel and initramfs it names.
+#       kernel and initramfs it names, and bootupd's state file with the
+#       SELinux label in LABELS.
 #   python3 image/disk.py root DIR IMAGE VERSION
 #       The mounted root filesystem: one ostree deployment, which follows
 #       IMAGE with the signed transport (docs/decisions/0008-image-signing.md),
-#       and whose os-release says it is Lumen at build version VERSION.
+#       and whose os-release says it is Lumen at build version VERSION; and
+#       bootc's record of the install with the SELinux label in LABELS.
+#   python3 image/disk.py label boot|root DIR
+#       Give the files in LABELS on the mounted /boot or root filesystem their
+#       labels (image/label-disk.sh mounts them read-write).
 #
 # image/check-disk.sh mounts the disk read-only and runs these; test_disk.py
 # runs them on stand-ins. Each writes what it found to standard error, and
 # exits 0 when the disk is as it should be, 1 when it isn't (saying why), and
 # 2 when its input can't be read.
 
+import errno
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -46,8 +53,82 @@ BIOS_BOOT = "21686148-6449-6e6f-744e-656564454649"
 ESP_FILES = ("EFI/BOOT/BOOTX64.EFI", "EFI/fedora/shimx64.efi", "EFI/fedora/grubx64.efi", "EFI/fedora/grub.cfg")
 
 
+# The SELinux labels of two files bootc and bootupd write as they install,
+# relative to /boot and to the top of the root filesystem (/sysroot in the
+# booted system). bootupd reads both at every boot. Neither tool labels them:
+# the kernel does as they are created, where SELinux is on, as in the ISO's
+# installer. image-builder runs them on a build machine where it is off, so
+# image/label-disk.sh gives them these (docs/decisions/0018-disk-labels.md).
+# /boot/.* is boot_t in Fedora's policy; it has no line for bootc's file, but
+# gives root_t to the older /sysroot/.aleph-version.json.
+LABELS = {
+    "boot": {"bootupd-state.json": "system_u:object_r:boot_t:s0"},
+    "root": {".bootc-aleph.json": "system_u:object_r:root_t:s0"},
+}
+
+
 class InputError(Exception):
     pass
+
+
+def read_label(path):
+    """PATH's SELinux label, or None if it has none."""
+    try:
+        return os.getxattr(path, "security.selinux", follow_symlinks=False).rstrip(b"\0").decode()
+    except OSError as e:
+        if e.errno in (errno.ENODATA, errno.ENOTSUP):
+            return None
+        raise
+
+
+def write_label(path, label):
+    # With the null at the end, as the kernel and setfiles store it.
+    os.setxattr(path, "security.selinux", label.encode() + b"\0", follow_symlinks=False)
+
+
+def check_labels(role, base):
+    """Problems with the labels of ROLE's files in LABELS, under BASE, and a report of them."""
+    problems, found = [], []
+    for name, want in LABELS[role].items():
+        path = Path(base) / name
+        if not path.is_file():
+            problems.append(f"{role} has no {name}")
+            continue
+        label = read_label(path)
+        found.append(f"{name} {label or 'unlabeled'}")
+        if label != want:
+            problems.append(f"{name} is labeled {label or 'nothing'}, not {want} (image/label-disk.sh sets it)")
+    return problems, [f"SELinux labels: {', '.join(found)}"] if found else []
+
+
+def deployments(top):
+    """The origin files of the ostree deployments on the root filesystem mounted at TOP."""
+    # image-builder puts the root's files in a Btrfs subvolume, so the
+    # deployment may be one folder below the top of the filesystem.
+    top = Path(top)
+    return sorted(top.glob("ostree/deploy/*/deploy/*.origin")) + sorted(top.glob("*/ostree/deploy/*/deploy/*.origin"))
+
+
+def physical_root(origin):
+    """The folder holding ostree/ for the deployment whose origin file is ORIGIN: /sysroot when booted."""
+    return origin.parents[4]
+
+
+def label(role, base):
+    """Give ROLE's files in LABELS, under BASE, their labels."""
+    if role == "root":
+        origins = deployments(base)
+        if len(origins) != 1:
+            return [f"expected one ostree deployment, found {len(origins)}"], []
+        base = physical_root(origins[0])
+    report = []
+    for name, want in LABELS[role].items():
+        path = Path(base) / name
+        if path.is_file():
+            write_label(path, want)
+            report.append(f"Labeled {name} {want}")
+    problems, found = check_labels(role, base)
+    return problems, report + found
 
 
 def size(n):
@@ -138,8 +219,9 @@ def boot(root):
     rootflags = ",".join(o.split("=", 1)[1] for o in options if o.startswith("rootflags="))
     if "compress=zstd:1" not in rootflags.split(","):
         problems.append(f"the kernel arguments mount the root without compress=zstd:1 (rootflags: {rootflags or 'none'})")
-    return problems, [f"Boot entry {entries[0].name}: {entry.get('title', 'no title')}",
-                      f"Kernel arguments: {' '.join(options)}"]
+    labels, found = check_labels("boot", root)
+    return problems + labels, [f"Boot entry {entries[0].name}: {entry.get('title', 'no title')}",
+                               f"Kernel arguments: {' '.join(options)}", *found]
 
 
 def read_keyfile(path):
@@ -178,15 +260,13 @@ def mount_options(deployment):
 
 def root(top, image, version):
     top = Path(top)
-    # image-builder puts the root's files in a Btrfs subvolume, so the
-    # deployment may be one folder below the top of the filesystem.
-    origins = sorted(top.glob("ostree/deploy/*/deploy/*.origin")) + sorted(
-        top.glob("*/ostree/deploy/*/deploy/*.origin"))
+    origins = deployments(top)
     if len(origins) != 1:
         return [f"expected one ostree deployment, found {len(origins)}"], []
     origin = origins[0]
     deployment = origin.with_suffix("")
-    problems, report = [], [f"Deployment: {deployment.relative_to(top)}"]
+    problems, report = check_labels("root", physical_root(origin))
+    report.insert(0, f"Deployment: {deployment.relative_to(top)}")
     options = mount_options(deployment)
     if options is not None:
         report.append(f"Root mount options: {options}")
@@ -207,15 +287,21 @@ def root(top, image, version):
 
 
 def main(argv):
-    commands = {"partitions": 1, "esp": 1, "boot": 1, "root": 3}
-    if len(argv) < 2 or argv[1] not in commands or len(argv) != 2 + commands[argv[1]]:
-        print("Usage: disk.py partitions LSBLK_JSON | esp DIR | boot DIR | root DIR IMAGE VERSION",
-              file=sys.stderr)
+    commands = {"partitions": 1, "esp": 1, "boot": 1, "root": 3, "label": 2}
+    if (len(argv) < 2 or argv[1] not in commands or len(argv) != 2 + commands[argv[1]]
+            or (argv[1] == "label" and argv[2] not in LABELS)):
+        print("Usage: disk.py partitions LSBLK_JSON | esp DIR | boot DIR | root DIR IMAGE VERSION"
+              " | label boot|root DIR", file=sys.stderr)
         return 2
     command, args = argv[1], argv[2:]
     try:
         if command == "partitions":
             problems, report, roles = partitions(*args)
+        elif command == "label":
+            if not Path(args[1]).is_dir():
+                raise InputError(f"{args[1]} is not a folder")
+            problems, report = label(*args)
+            roles = {}
         else:
             if not Path(args[0]).is_dir():
                 raise InputError(f"{args[0]} is not a folder")
