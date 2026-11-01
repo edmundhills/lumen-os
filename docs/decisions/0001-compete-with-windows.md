@@ -74,6 +74,7 @@ There's also a new risk for step 0.3. Microsoft's 2011 UEFI CA expired in June 2
 ## Follow-up
 
 - Step 1.9 records whether kernel lockdown is actually on, and whether hibernation is offered, on our image under Secure Boot. (CVE-2025-1272 reported Fedora kernels from 6.12 shipping with lockdown off.) If lockdown is off, that is a security gap to fix, not a way to get hibernation.
+- 2026-11-01, step 1.9: **lockdown is on, and hibernation isn't offered.** The qcow2's boot test (image run 41258990028, `dev` base `44.20261101`, kernel 7.2.12-200.fc44, Secure Boot on with Microsoft's keys) read `/sys/kernel/security/lockdown` as `none [integrity] confidentiality`, `/sys/power/state` as `freeze mem`, and `/sys/power/disk` as `[disabled]`: under Secure Boot the kernel locks itself down in integrity mode and turns hibernation off, as this ADR assumed. The installed system in the install test showed the same lockdown and sleep states (ADR 0014). Nothing to fix; the boot test records the three on every build.
 
 ## Consequences
 

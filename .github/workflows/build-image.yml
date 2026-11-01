@@ -187,6 +187,30 @@ jobs:
           sudo podman image ls "$LOCAL_IMAGE"
           df -h /
 
+      # The gaming edition (step 1.10a, ADR 0019), from the lumen stage just
+      # built, which Podman reuses: only the lumen-gaming stage runs, with its
+      # checks and bootc's lint. Step 1.12 re-chunks, signs and pushes it, and
+      # boots its qcow2; until then the build is the test, and the image is
+      # deleted again to leave the disk to the steps below.
+      - name: Build the gaming edition
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          sudo podman build --file image/Containerfile --target lumen-gaming \
+            --build-arg LUMEN_BUILD_VERSION="$VERSION" \
+            --build-arg LUMEN_COMMIT="$GITHUB_SHA" \
+            --tag localhost/lumen-gaming:ci .
+          sudo podman image ls localhost/lumen-gaming:ci
+          {
+            printf '### The gaming edition\n\n'
+            sudo podman run --rm --entrypoint rpm localhost/lumen-gaming:ci \
+              --query --queryformat '%{NAME} %{VERSION}-%{RELEASE}\n' steam gamescope mangohud gamemode steam-devices |
+              sed 's/^/- /'
+            printf -- '- 32-bit packages: %s\n' "$(sudo podman run --rm --entrypoint rpm localhost/lumen-gaming:ci \
+              --query --all --queryformat '%{ARCH}\n' | grep -cx i686)"
+          } >>"$GITHUB_STEP_SUMMARY"
+          sudo podman rmi localhost/lumen-gaming:ci
+
       # Read the newest build on ghcr.io, as users would, without logging in.
       # Re-chunking keeps its layer plan once it is re-chunked itself, and the
       # next step measures the update from it. Builds of main must be able to
@@ -297,7 +321,9 @@ jobs:
       # The qcow2 the boot test starts (step 1.9). image-builder installs the
       # re-chunked image on a disk with the image's own bootc, which records
       # the name it is given as the image the system follows, so the image
-      # gets the name Lumen systems follow (ADR 0011).
+      # gets the name Lumen systems follow (ADR 0011). image/disk.toml adds
+      # the kernel argument that mounts the Btrfs root with compression
+      # (ADR 0016).
       - name: Make the qcow2
         run: |
           dir=$RUNNER_TEMP/disk
@@ -307,26 +333,36 @@ jobs:
           sudo podman tag "$LOCAL_IMAGE-rechunked" "$REGISTRY_IMAGE:dev"
           sudo podman run --rm --privileged --security-opt label=type:unconfined_t \
             --volume /var/lib/containers/storage:/var/lib/containers/storage \
-            --volume "$dir:/output" \
+            --volume "$dir:/output" --volume "$PWD/image/disk.toml:/disk.toml:ro" \
             "$IMAGE_BUILDER" build --output-dir /output --progress verbose \
-            --bootc-ref "$REGISTRY_IMAGE:dev" qcow2
+            --blueprint /disk.toml --bootc-ref "$REGISTRY_IMAGE:dev" qcow2
           sudo podman untag "$LOCAL_IMAGE-rechunked" "$REGISTRY_IMAGE:dev"
           sudo find "$dir" -type f -exec ls -ls {} +
           df -h /
 
-      # image/check-disk.sh reads the disk as a raw file, read-only: the
-      # partitions, the boot files, and what the deployment follows.
-      - name: Check the qcow2
+      # image-builder runs bootc and bootupd where SELinux is off, so two
+      # files they write get no label; image/label-disk.sh gives them the ones
+      # an install from the ISO has (ADR 0018). Then image/check-disk.sh reads
+      # the disk read-only: the partitions, the boot files and those labels,
+      # and what the deployment follows. The boot test starts the qcow2 made
+      # again from the labeled disk.
+      - name: Label and check the qcow2
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           dir=$RUNNER_TEMP/disk
           qcow2=$(sudo find "$dir" -name '*.qcow2' -printf '%P\n')
-          sudo podman run --rm --volume "$dir:/output" --entrypoint qemu-img "$IMAGE_BUILDER" \
-            convert -O raw "/output/$qcow2" /output/check.raw
+          qemu_img() { sudo podman run --rm --volume "$dir:/output" --entrypoint qemu-img "$IMAGE_BUILDER" "$@"; }
+          qemu_img convert -O raw "/output/$qcow2" /output/check.raw
           report=$RUNNER_TEMP/disk-report status=0
           # shellcheck disable=SC2024
-          sudo image/check-disk.sh "$dir/check.raw" "$REGISTRY_IMAGE:dev" "$VERSION" >"$report" 2>&1 || status=$?
+          sudo image/label-disk.sh "$dir/check.raw" >"$report" 2>&1 || status=$?
+          # shellcheck disable=SC2024
+          sudo image/check-disk.sh "$dir/check.raw" "$REGISTRY_IMAGE:dev" "$VERSION" >>"$report" 2>&1 || status=$?
+          if ((status == 0)); then
+            qemu_img convert -O qcow2 /output/check.raw /output/labeled.qcow2
+            sudo mv "$dir/labeled.qcow2" "$dir/$qcow2"
+          fi
           sudo rm "$dir/check.raw"
           cat "$report"
           # The backticks are Markdown, for the run's summary page.
@@ -337,6 +373,46 @@ jobs:
             printf '```\n'
           } >>"$GITHUB_STEP_SUMMARY"
           exit "$status"
+
+      # The boot test (step 1.9; spec, "Boot test"): start the qcow2 in a VM
+      # with Secure Boot and check, from inside, the login screen within 60 s
+      # and no failed units (tests/boot/boot_disk.py, ADR 0017). The VM needs
+      # KVM, which the runners have (step 1.8b-3); its writes go to a
+      # snapshot, so the disk stays as image-builder made it.
+      - name: Boot the qcow2
+        run: |
+          if [[ ! -c /dev/kvm ]]; then
+            echo "::error::This runner has no /dev/kvm, so it can't run the boot test's VM at a usable speed."
+            exit 1
+          fi
+          fedora=$(sed -n 's/^FROM //p' tests/lint/Containerfile)
+          sudo podman build --quiet --build-arg "FEDORA=$fedora" --tag localhost/lumen-boot tests/boot
+          dir=$RUNNER_TEMP/disk out=$RUNNER_TEMP/boot report=$RUNNER_TEMP/boot-report status=0
+          qcow2=$(sudo find "$dir" -name '*.qcow2' -printf '%P\n')
+          mkdir -p "$out"
+          # The runner writes the report.
+          # shellcheck disable=SC2024
+          sudo podman run --rm --network=none --device /dev/kvm \
+            --volume "$dir:/disk:ro" --volume "$PWD:/src:ro" --volume "$out:/out" \
+            localhost/lumen-boot python3 /src/tests/boot/boot_disk.py --require-kvm "/disk/$qcow2" /out \
+            >"$report" 2>&1 || status=$?
+          cat "$report"
+          {
+            printf '### The boot test\n\n```text\n'
+            cat "$report"
+            printf '```\n'
+          } >>"$GITHUB_STEP_SUMMARY"
+          exit "$status"
+
+      # The serial ports' and QEMU's logs and the screenshot of the boot test.
+      - name: Keep the boot test's logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: boot-qcow2
+          path: ${{ runner.temp }}/boot
+          retention-days: 7
+          if-no-files-found: ignore
 
       # The tags that never move. dev moves in the sign job, once the image is
       # signed. skopeo pushes the layout as it is, so the digest is the one

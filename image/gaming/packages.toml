@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: 2026 Lumen OS contributors
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# The gaming edition's packages (step 1.10a, docs/decisions/0019-gaming-edition.md):
+# what the lumen-gaming stage of image/Containerfile adds to the lumen image,
+# in the format of image/packages.toml, which packages.py applies the same way.
+# Steam comes from RPM Fusion's Steam repository, which the stage turns on only
+# for this; everything else comes from Fedora.
+
+# Steam needs some forty 32-bit libraries, Mesa's among them. Each is installed
+# at the version of its 64-bit twin in the image, and no package the image has
+# changes (image/multilib.py, docs/architecture.md section 9.5).
+exact_32bit = true
+
+[gaming]
+keep = [
+  # Feral's daemon that raises a running game's priority and turns off power
+  # saving while it plays. Kinoite 45 already has it.
+  "gamemode",
+]
+install = [
+  # Valve's Steam client (RPM Fusion nonfree), with Proton inside it. The
+  # package is Valve's bootstrap: Steam downloads the rest of itself on its
+  # first start.
+  "steam",
+  # udev rules for Steam's controllers, the Steam Deck's and Valve's VR
+  # hardware, and many other game controllers, so they work without root
+  "steam-devices",
+  # Valve's micro-compositor, which runs a game, or Steam's Big Picture mode,
+  # in a session of its own (the Gamescope session, step 1.10b)
+  "gamescope",
+  # The performance overlay: frame rate, frame times, CPU and GPU load
+  "mangohud",
+]

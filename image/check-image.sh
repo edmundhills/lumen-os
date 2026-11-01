@@ -183,11 +183,13 @@ global_theme() {
 }
 
 # os-release names Lumen and its build, still says it is like Fedora, and
-# /etc/os-release leads to it (image/os-release.sh).
+# /etc/os-release leads to it (image/os-release.sh). An edition, such as the
+# gaming one, adds VARIANT_ID, and its IMAGE_ID is lumen-<VARIANT_ID>.
 os_release() {
-  local fedora want status=0 line
+  local fedora want status=0 line variant
   fedora=$(rpm --eval '%{fedora}') || return 1
-  for want in 'ID=lumen' 'ID_LIKE=fedora' 'IMAGE_ID=lumen' 'NAME="Lumen OS"'; do
+  variant=$(sed -n 's/^VARIANT_ID=//p' /usr/lib/os-release)
+  for want in 'ID=lumen' 'ID_LIKE=fedora' "IMAGE_ID=lumen${variant:+-$variant}" 'NAME="Lumen OS"'; do
     if ! grep -qxF -- "$want" /usr/lib/os-release; then
       printf '/usr/lib/os-release has no line %s\n' "$want"
       status=1
@@ -262,6 +264,42 @@ raise SystemExit(1 if problems else 0)
 EOF
 }
 
+# mcelog.service skips itself on AMD and Hygon processors, which mcelog
+# refuses with an error (image/overlay/usr/lib/systemd/system/mcelog.service.d,
+# docs/decisions/0017-boot-test.md): systemd sees the drop-in, and its
+# condition, run on a stand-in /proc/cpuinfo, stops an AMD or Hygon processor
+# and lets an Intel one through.
+mcelog_on_amd() {
+  if ! systemctl cat mcelog.service | grep -q '^ExecCondition=.*AuthenticAMD'; then
+    printf "systemctl cat mcelog.service doesn't show Lumen's condition on the processor\n"
+    return 1
+  fi
+  python3 - <<'EOF'
+import shlex
+import subprocess
+import sys
+import tempfile
+
+dropin = "/usr/lib/systemd/system/mcelog.service.d/50-lumen-cpu.conf"
+lines = [line for line in open(dropin, encoding="utf-8") if line.startswith("ExecCondition=")]
+if len(lines) != 1:
+    print(f"{dropin} has {len(lines)} ExecCondition lines, not one")
+    sys.exit(1)
+command = shlex.split(lines[0].removeprefix("ExecCondition="))
+problems = []
+for vendor, family, runs in (("AuthenticAMD", 25, False), ("HygonGenuine", 24, False), ("GenuineIntel", 6, True)):
+    with tempfile.NamedTemporaryFile("w", suffix="-cpuinfo") as cpuinfo:
+        cpuinfo.write(f"processor\t: 0\nvendor_id\t: {vendor}\ncpu family\t: {family}\n")
+        cpuinfo.flush()
+        status = subprocess.run([c.replace("/proc/cpuinfo", cpuinfo.name) for c in command]).returncode
+    if (status == 0) != runs:
+        problems.append(f"on a processor from {vendor}, the condition {'stops' if runs else 'lets through'} mcelog")
+for problem in problems:
+    print(problem)
+sys.exit(1 if problems else 0)
+EOF
+}
+
 # bootc install, and the installers and bootc-image-builder with it, records
 # the image with its signatures checked (ostree-image-signed).
 signed_installs() {
@@ -271,6 +309,26 @@ signed_installs() {
   if [[ $enforced != True ]]; then
     printf 'bootc install would follow the image without checking its signatures (enforce-container-sigpolicy is %s)\n' \
       "$enforced"
+    return 1
+  fi
+}
+
+# KWin and the Plasma desktop are the same release: KDE releases them together,
+# and lumen-glass is built against KWin (docs/architecture.md, section 9.4).
+# The base stage installs from Fedora's mirrors, which carry only the newest
+# builds, so a package it adds can pull in a new Plasma release while the
+# pinned Kinoite keeps its KWin; on 2026-11-01 dnf moved plasma-workspace and
+# 23 other Plasma packages to 6.8.2 with KWin still 6.7.5. A Plasma release
+# arrives with the weekly bump of the Kinoite pin instead.
+same_plasma_release() {
+  local kwin workspace
+  kwin=$(rpm --query --queryformat '%{VERSION}' kwin) || return 1
+  workspace=$(rpm --query --queryformat '%{VERSION}' plasma-workspace) || return 1
+  if [[ $kwin != "$workspace" ]]; then
+    printf 'KWin is %s but plasma-workspace is %s: a package the image adds pulled in another Plasma release.\n' \
+      "$kwin" "$workspace"
+    printf 'Wait for the Kinoite pin to move to a build with Plasma %s (the base workflow), or pin what pulled it.\n' \
+      "$workspace"
     return 1
   fi
 }
@@ -288,6 +346,8 @@ check "os-release names Lumen and its build version" os_release
 check "Only images Lumen signed are trusted under Lumen's names" trust_policy
 check "Power modes use Lumen's tuned profiles, which don't run bootc" tuned_profiles
 check "bootc install follows the image with its signatures checked" signed_installs
+check "mcelog, which supports no recent AMD processor, skips itself on one" mcelog_on_amd
+check "KWin and Plasma are the same release" same_plasma_release
 
 printf '\nPassed: %d   Failed: %d\n' "$passes" "$failures"
 ((failures == 0))

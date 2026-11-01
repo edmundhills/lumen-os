@@ -6,12 +6,15 @@
 # Write Lumen's /usr/lib/os-release in place of Kinoite's (docs/architecture.md,
 # section 9.7). /etc/os-release is a link to it.
 #
-# Usage: bash os-release.sh BUILD_VERSION
+# Usage: bash os-release.sh BUILD_VERSION [VARIANT_ID VARIANT]
 #
 # The lumen stage of the Containerfile runs this inside the image it is
 # building. BUILD_VERSION is <Fedora release>.<build date>[.N], from
-# build_version.py; it must name the image's own Fedora release. Exits 0 when
-# the file is written, 1 otherwise, which stops the build.
+# build_version.py; it must name the image's own Fedora release. An edition's
+# stage runs it again with its VARIANT_ID and name, such as `gaming Gaming`:
+# its IMAGE_ID becomes lumen-<VARIANT_ID>, and PRETTY_NAME, VARIANT and
+# VARIANT_ID say which edition it is. Exits 0 when the file is written, 1
+# otherwise, which stops the build.
 
 set -euo pipefail
 
@@ -19,11 +22,15 @@ set -euo pipefail
 readonly PRODUCT_VERSION=0.1
 readonly REPO_URL=https://github.com/edmundhills/lumen-os
 
-if (($# != 1)); then
-  printf 'Usage: %s BUILD_VERSION\n' "${0##*/}" >&2
+if (($# != 1 && $# != 3)); then
+  printf 'Usage: %s BUILD_VERSION [VARIANT_ID VARIANT]\n' "${0##*/}" >&2
   exit 2
 fi
-readonly build_version=$1
+readonly build_version=$1 variant_id=${2:-} variant=${3:-}
+if [[ -n $variant_id && ! $variant_id =~ ^[a-z0-9]+$ ]]; then
+  printf 'The variant ID "%s" is not lowercase letters and digits.\n' "$variant_id" >&2
+  exit 2
+fi
 
 # image-builder, which makes Lumen's disk images, reads VERSION_ID as a version
 # with at most one dot, and can't make a disk of an image whose VERSION_ID has
@@ -50,12 +57,15 @@ VERSION="$PRODUCT_VERSION ($build_version)"
 ID=lumen
 ID_LIKE=fedora
 VERSION_ID=$PRODUCT_VERSION
-PRETTY_NAME="Lumen OS $PRODUCT_VERSION"
-IMAGE_ID=lumen
+PRETTY_NAME="Lumen OS $PRODUCT_VERSION${variant:+ ($variant)}"
+IMAGE_ID=lumen${variant_id:+-$variant_id}
 IMAGE_VERSION=$build_version
 DEFAULT_HOSTNAME=lumen
 HOME_URL="$REPO_URL"
 DOCUMENTATION_URL="$REPO_URL/tree/main/docs"
 BUG_REPORT_URL="$REPO_URL/issues"
 EOF
+if [[ -n $variant_id ]]; then
+  printf 'VARIANT="%s"\nVARIANT_ID=%s\n' "$variant" "$variant_id" >>/usr/lib/os-release
+fi
 chmod 0644 /usr/lib/os-release

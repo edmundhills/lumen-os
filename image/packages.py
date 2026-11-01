@@ -18,6 +18,11 @@
 # Any mismatch stops the build and names the package, so the manifest always
 # says exactly what Lumen changes. FILE defaults to packages.toml next to this
 # script. Exits 0 on success, 1 on a problem.
+#
+# A manifest may start with options, before its first table:
+#   exact_32bit = true   Install every 32-bit package at the version of its
+#                        64-bit twin in the image, and change no package the
+#                        image has (image/multilib.py; the gaming stage).
 
 import re
 import subprocess
@@ -26,6 +31,8 @@ import tomllib
 from pathlib import Path
 
 LISTS = ("keep", "install", "remove")
+# The options a manifest may set before its first table, and their types.
+OPTIONS = {"exact_32bit": bool}
 # An RPM package name: letters, digits and . _ + -, starting with a letter or digit.
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._+-]*")
 # Weak dependencies stay out, so every package Lumen wants is in the manifest.
@@ -53,6 +60,10 @@ def load(path):
     where = {}  # package name -> the list it was first seen in
     problems = []
     for area, table in data.items():
+        if area in OPTIONS:
+            if not isinstance(table, OPTIONS[area]):
+                problems.append(f"{area}: expected true or false")
+            continue
         if not isinstance(table, dict):
             problems.append(f"{area}: expected a table, [{area}], holding keep, install or remove lists")
             continue
@@ -74,6 +85,13 @@ def load(path):
     if problems:
         raise ManifestError("\n".join(f"{path}: {p}" for p in problems))
     return lists
+
+
+def load_options(path):
+    """Read the options a manifest sets before its first table; load() has checked their types."""
+    with open(path, "rb") as f:
+        data = tomllib.load(f)
+    return {name: data.get(name, False) for name in OPTIONS}
 
 
 def check_before(lists, have):
@@ -135,9 +153,17 @@ def fail_on(problems):
 
 def apply(path):
     lists = load(path)
+    options = load_options(path)
     before = installed()
     fail_on(check_before(lists, before))
-    if lists["install"]:
+    if lists["install"] and options["exact_32bit"]:
+        # Imported only here: the base stage mounts this script on its own.
+        import multilib
+        try:
+            multilib.install(lists["install"])
+        except multilib.MultilibError as e:
+            raise ManifestError(str(e)) from None
+    elif lists["install"]:
         # --allowerasing lets a package replace one it conflicts with (tuned-ppd
         # replaces power-profiles-daemon). check_after stops the build if that
         # erases anything not listed under remove.

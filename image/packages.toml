@@ -18,7 +18,8 @@
 # lumen-glass and the rest) aren't: they come from the image's build stages
 # (docs/architecture.md, section 9.2).
 #
-# Checked against Kinoite 44.20261027.0 (docs/versions.md).
+# Checked against Kinoite 44.20261027.0 (docs/versions.md); moving to Kinoite
+# 45.20261101.0 (step 1.10a notes in PROGRESS.md).
 
 [desktop]
 keep = [
@@ -126,14 +127,17 @@ keep = [
   "liberation-mono-fonts",
 ]
 install = [
-  # Fcitx5 with modules for Qt 6, GTK 3 and GTK 4 apps, its Plasma settings
-  # page, and engines for the languages Kinoite's IBus engines cover: Chinese
-  # (Pinyin and Chewing), Japanese (Anthy), Korean (Hangul) and m17n
+  # Fcitx5 with modules for Qt 6, GTK 3 and GTK 4 apps, and engines for the
+  # languages Kinoite's IBus engines cover: Chinese (Pinyin and Chewing),
+  # Japanese (Anthy), Korean (Hangul) and m17n. Its Plasma settings page,
+  # kcm-fcitx5, is left out for now: Fedora 45's build needs Plasma 6.7's
+  # libPlasma.so.7, and Kinoite 45 has Plasma 6.8 (owner's choice,
+  # 2026-11-01). Put it back once Fedora 45 rebuilds it; Fedora 44's 5.1.16-2
+  # already was.
   "fcitx5",
   "fcitx5-qt6",
   "fcitx5-gtk3",
   "fcitx5-gtk4",
-  "kcm-fcitx5",
   "fcitx5-chinese-addons",
   "fcitx5-chewing",
   "fcitx5-anthy",

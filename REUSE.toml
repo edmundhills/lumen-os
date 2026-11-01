@@ -26,3 +26,17 @@ SPDX-License-Identifier = "GPL-3.0-or-later"
 path = ["image/overlay/etc/containers/policy.json", "image/overlay/usr/share/pki/containers/lumen.pub"]
 SPDX-FileCopyrightText = "2026 Lumen OS contributors"
 SPDX-License-Identifier = "GPL-3.0-or-later"
+
+# RPM Fusion's nonfree signing key, copied unchanged from its release package
+# (github.com/rpmfusion/rpmfusion-nonfree-release), whose licence is
+# BSD-1-Clause, and the file that pins its SHA-256, which can't hold a comment
+# that sha256sum --strict accepts (ADR 0019).
+[[annotations]]
+path = "image/gaming/RPM-GPG-KEY-rpmfusion-nonfree-fedora-2020"
+SPDX-FileCopyrightText = "RPM Fusion"
+SPDX-License-Identifier = "BSD-1-Clause"
+
+[[annotations]]
+path = "image/gaming/keys.sha256"
+SPDX-FileCopyrightText = "2026 Lumen OS contributors"
+SPDX-License-Identifier = "GPL-3.0-or-later"

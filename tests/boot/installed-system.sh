@@ -137,9 +137,7 @@ runs_the_build() {
 
 # The installer laid out the disk with Lumen's install profile
 # (installer/anaconda/lumen.conf): a Btrfs root, with /home as a subvolume of
-# its own, which snapper needs. Whether the running system mounts it with the
-# profile's zstd compression is recorded below, not judged: it doesn't yet
-# (step 1.8e).
+# its own, which snapper needs.
 btrfs_root() {
   local root home
   root=$(findmnt --raw --noheadings --output FSTYPE /sysroot)
@@ -151,14 +149,39 @@ btrfs_root() {
   fi
 }
 
+# The running system mounts its Btrfs with the profile's zstd compression
+# (spec: "Btrfs root with compression (zstd)"): the installer adds
+# rootflags=compress=zstd:1 to its kernel arguments (step 1.8e,
+# docs/decisions/0016-btrfs-compression.md). Compression is a setting of the
+# whole Btrfs, so /sysroot's mount shows it for /var and /var/home too.
+btrfs_compression() {
+  local options
+  options=$(findmnt --raw --noheadings --output OPTIONS /sysroot)
+  if [[ ,$options, != *,compress=zstd:1,* ]]; then
+    printf '/sysroot is mounted %s, without compress=zstd:1\n' "${options:-not at all}"
+    return 1
+  fi
+}
+
+# systemd-remount-fs.service didn't fail: the installer leaves / out of
+# /etc/fstab, whose options can't be applied to the composefs root (ADR 0016).
+remount_fs() {
+  if systemctl is-failed --quiet systemd-remount-fs.service; then
+    systemctl status --no-pager systemd-remount-fs.service 2>&1 | head -n 15
+    return 1
+  fi
+}
+
 check "Secure Boot on" secure_boot
 check "SELinux enforcing, targeted policy" selinux
 check "Follows $image, with signatures checked" follows_signed
 check "Runs build $version, $digest, the ISO's copy" runs_the_build
 check "Root on Btrfs, with /home a subvolume of its own" btrfs_root
+check "Btrfs mounted with zstd compression" btrfs_compression
+check "systemd-remount-fs.service didn't fail" remount_fs
 
 info "bootc status" "$(booted image.image image.transport image.signature version imageDigest | paste -sd ' ' -)"
-info "Btrfs compression" "$(findmnt --noheadings --output OPTIONS /sysroot | tr ',' '\n' | grep '^compress' || echo none)"
+info "/etc/fstab" "$(grep -v '^#' /etc/fstab | grep . | paste -sd ';' -)"
 info "Kernel command line" "$(cat /proc/cmdline)"
 for path in /sysroot /var /var/home /boot /boot/efi; do
   info "Mounted at $path" "$(findmnt --noheadings --output SOURCE,FSTYPE,OPTIONS "$path" 2>&1 | head -n 1)"

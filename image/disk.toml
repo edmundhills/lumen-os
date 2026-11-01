@@ -1,0 +1,19 @@
+# SPDX-FileCopyrightText: 2026 Lumen OS contributors
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# image-builder's blueprint for the qcow2 of each build (step 1.8a, ADR 0011):
+# what Lumen adds to its defaults.
+#
+# Kernel arguments: rootflags=compress=zstd:1, so the running system mounts
+# its Btrfs root with zstd compression (spec: "Btrfs root with compression
+# (zstd)"). bootc's own rootflags=subvol=/root names only the subvolume, and
+# systemd joins the two. The disk's root is always Btrfs
+# (image/overlay/usr/lib/bootc/install/20-lumen.toml), so the argument always
+# fits; the installer adds it only to a Btrfs root
+# (installer/anaconda/interactive-defaults.ks, docs/decisions/0016-btrfs-compression.md).
+
+name = "lumen-disk"
+
+[customizations.kernel]
+append = "rootflags=compress=zstd:1"
