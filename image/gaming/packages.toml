@@ -14,6 +14,11 @@
 exact_32bit = true
 
 [gaming]
+keep = [
+  # Feral's daemon that raises a running game's priority and turns off power
+  # saving while it plays. Kinoite 45 already has it.
+  "gamemode",
+]
 install = [
   # Valve's Steam client (RPM Fusion nonfree), with Proton inside it. The
   # package is Valve's bootstrap: Steam downloads the rest of itself on its
@@ -27,7 +32,4 @@ install = [
   "gamescope",
   # The performance overlay: frame rate, frame times, CPU and GPU load
   "mangohud",
-  # Feral's daemon that raises a running game's priority and turns off power
-  # saving while it plays
-  "gamemode",
 ]
