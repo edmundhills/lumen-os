@@ -136,16 +136,27 @@ FROM ${LUMEN_GAMING_FROM} AS lumen-gaming
 # key checked against its pinned SHA-256 first. packages.py applies
 # image/gaming/packages.toml with every 32-bit package at the version of its
 # 64-bit twin in the image, falling back to Koji (image/multilib.py). Then the
-# repository file and dnf's leftovers go, as in the base stage. Only what this
-# step reads is mounted, so other changes to image/ don't rerun dnf.
+# repository file and dnf's leftovers go, as in the base stage, and so does
+# anything the packages' scripts left in /run, which only exists at runtime:
+# systemd-tmpfiles and the services make it at boot, and bootc container lint
+# rejects content there. The step names each entry and the package that owns
+# it; on Kinoite 45 that was /run/setrans. Only what this step reads is
+# mounted, so other changes to image/ don't rerun dnf.
 RUN --mount=type=bind,source=image/packages.py,target=/run/lumen/packages.py \
     --mount=type=bind,source=image/multilib.py,target=/run/lumen/multilib.py \
     --mount=type=bind,source=image/gaming,target=/run/lumen/gaming \
     cd /run/lumen/gaming && sha256sum --check --strict keys.sha256 \
+    && before=$(ls -A /run) \
     && cp /run/lumen/gaming/rpmfusion-nonfree.repo /etc/yum.repos.d/lumen-rpmfusion-nonfree.repo \
     && PYTHONDONTWRITEBYTECODE=1 python3 /run/lumen/packages.py apply /run/lumen/gaming/packages.toml \
     && rm /etc/yum.repos.d/lumen-rpmfusion-nonfree.repo \
-    && rm -rf /run/dnf /var/cache/* /var/lib/dnf /var/log/*
+    && for name in $(ls -A /run); do \
+        if ! printf '%s\n' "$before" | grep -qxF -- "$name"; then \
+            printf 'Removing /run/%s (%s)\n' "$name" "$(rpm --query --file "/run/$name" 2>&1 | paste -sd ' ')"; \
+            rm -rf "/run/${name:?}"; \
+        fi; \
+    done \
+    && rm -rf /var/cache/* /var/lib/dnf /var/log/*
 
 # os-release names the edition (image/os-release.sh).
 ARG LUMEN_BUILD_VERSION
