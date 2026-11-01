@@ -38,3 +38,4 @@ The spec's gaming image "adds Steam, Gamescope session, MangoHud, controller ude
 ## Follow-up
 
 - 2026-11-01: image run 41322623199 (for `2ff7ec0`) built the gaming edition with the session in 17.8 minutes and passed: all ten files downloaded and matched their pins, and `check-gaming.sh`'s nine checks and bootc's lint passed. Whether the login screen offers the session, and whether it starts, is step 1.10c's boot test.
+- 2026-11-01, step 1.10c: image run 41330842279 (for `bd4cae5`) booted the gaming edition's qcow2, which follows `ghcr.io/edmundhills/lumen-gaming:dev`, and passed 11 of 11: Plasma Setup 30 s after the kernel, the greeter 15 s, no failed units or SELinux denials on either boot, and the login screen offers "Steam Big Picture" (`gamescope-session-steam.desktop`) next to Plasma. Starting the session itself in CI would need a GPU with Vulkan and Steam's first download, so it waits for real hardware.
