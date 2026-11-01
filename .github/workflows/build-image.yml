@@ -187,6 +187,30 @@ jobs:
           sudo podman image ls "$LOCAL_IMAGE"
           df -h /
 
+      # The gaming edition (step 1.10a, ADR 0019), from the lumen stage just
+      # built, which Podman reuses: only the lumen-gaming stage runs, with its
+      # checks and bootc's lint. Step 1.12 re-chunks, signs and pushes it, and
+      # boots its qcow2; until then the build is the test, and the image is
+      # deleted again to leave the disk to the steps below.
+      - name: Build the gaming edition
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          sudo podman build --file image/Containerfile --target lumen-gaming \
+            --build-arg LUMEN_BUILD_VERSION="$VERSION" \
+            --build-arg LUMEN_COMMIT="$GITHUB_SHA" \
+            --tag localhost/lumen-gaming:ci .
+          sudo podman image ls localhost/lumen-gaming:ci
+          {
+            printf '### The gaming edition\n\n'
+            sudo podman run --rm --entrypoint rpm localhost/lumen-gaming:ci \
+              --query --queryformat '%{NAME} %{VERSION}-%{RELEASE}\n' steam gamescope mangohud gamemode steam-devices |
+              sed 's/^/- /'
+            printf -- '- 32-bit packages: %s\n' "$(sudo podman run --rm --entrypoint rpm localhost/lumen-gaming:ci \
+              --query --all --queryformat '%{ARCH}\n' | grep -cx i686)"
+          } >>"$GITHUB_STEP_SUMMARY"
+          sudo podman rmi localhost/lumen-gaming:ci
+
       # Read the newest build on ghcr.io, as users would, without logging in.
       # Re-chunking keeps its layer plan once it is re-chunked itself, and the
       # next step measures the update from it. Builds of main must be able to

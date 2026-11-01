@@ -566,7 +566,7 @@ The base image is pinned by digest, but Fedora's mirrors carry only the release-
 
 ### 9.5 Variants
 
-- **`lumen-gaming`** is `lumen` plus Steam, the Gamescope session, MangoHud and the controller udev rules (spec). Steam needs 32-bit libraries that must match the 64-bit Mesa in `base` exactly, so they follow the exact-version rule of 9.4.
+- **`lumen-gaming`** is `lumen` plus Steam, the Gamescope session, MangoHud and the controller udev rules (spec). Steam needs 32-bit libraries that must match the 64-bit Mesa in `base` exactly, so they follow the exact-version rule of 9.4. The `lumen-gaming` stage takes Steam from RPM Fusion's nonfree repositories, turned on for that one step and limited to Steam, and installs every 32-bit package at the version of its 64-bit twin, from the mirrors or Fedora's signed copy on Koji (`image/multilib.py`, [ADR 0019](decisions/0019-gaming-edition.md)).
 - **`lumen-nvidia`** is `lumen` plus NVIDIA's driver. A `kmods` stage builds the kernel modules with akmods against `base`'s exact kernel (the 9.4 rule again) and signs them with Lumen's module signing key, and the variant installs them. With Secure Boot on, the kernel loads only signed modules; users enrol the key once as a MOK (step 1.12).
 - **`lumen-gaming-nvidia`** is `lumen-nvidia` plus the same gaming layer, for gamers with an NVIDIA card ([Q13](#8-spec-problems-and-open-questions)).
 - The variants are two independent choices: the driver (open or NVIDIA) and the edition (desktop or gaming). `SwitchVariant` changes one choice and keeps the other.

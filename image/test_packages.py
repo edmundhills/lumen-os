@@ -47,6 +47,27 @@ class Load(unittest.TestCase):
             load_text(text)
         self.assertIn(words, str(caught.exception))
 
+    def test_options_before_the_first_table(self):
+        text = "exact_32bit = true\n" + MANIFEST
+        self.assertEqual(load_text(text)["install"], ["tuned-ppd"])
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d, "packages.toml")
+            path.write_text(text)
+            self.assertEqual(packages.load_options(path), {"exact_32bit": True})
+            path.write_text(MANIFEST)
+            self.assertEqual(packages.load_options(path), {"exact_32bit": False})
+
+    def test_rejects_an_option_that_isnt_true_or_false(self):
+        self.assert_rejects('exact_32bit = "yes"\n' + MANIFEST, "exact_32bit: expected true or false")
+
+    def test_rejects_an_unknown_option(self):
+        self.assert_rejects("exact = true\n" + MANIFEST, "exact: expected a table")
+
+    def test_the_gaming_manifest_loads(self):
+        path = Path(packages.__file__).with_name("gaming") / "packages.toml"
+        self.assertTrue(packages.load(path)["install"])
+        self.assertEqual(packages.load_options(path), {"exact_32bit": True})
+
     def test_rejects_a_package_listed_twice(self):
         self.assert_rejects('[a]\nkeep = ["kwin"]\n[b]\nremove = ["kwin"]\n', "kwin is already listed in [a] keep")
 

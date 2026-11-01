@@ -1,0 +1,33 @@
+# SPDX-FileCopyrightText: 2026 Lumen OS contributors
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# RPM Fusion's nonfree repositories for Fedora, as the lumen-gaming stage of
+# image/Containerfile uses them for one step: turned on, and limited to Steam
+# with includepkgs, so nothing else can come from them (step 1.10a,
+# docs/decisions/0019-gaming-edition.md). The stage copies this file into
+# /etc/yum.repos.d and deletes it again in the same step, so the image keeps no
+# repository. The definitions are RPM Fusion's own (rpmfusion-nonfree.repo and
+# rpmfusion-nonfree-updates.repo in github.com/rpmfusion/rpmfusion-nonfree-release
+# at aa70b42), and the key is RPM Fusion's, next to this file, which the stage
+# checks against keys.sha256 first.
+
+[lumen-rpmfusion-nonfree]
+name=RPM Fusion for Fedora $releasever - Nonfree, Steam only
+metalink=https://mirrors.rpmfusion.org/metalink?repo=nonfree-fedora-$releasever&arch=$basearch
+enabled=1
+includepkgs=steam
+type=rpm-md
+gpgcheck=1
+repo_gpgcheck=0
+gpgkey=file:///run/lumen/gaming/RPM-GPG-KEY-rpmfusion-nonfree-fedora-2020
+
+[lumen-rpmfusion-nonfree-updates]
+name=RPM Fusion for Fedora $releasever - Nonfree - Updates, Steam only
+metalink=https://mirrors.rpmfusion.org/metalink?repo=nonfree-fedora-updates-released-$releasever&arch=$basearch
+enabled=1
+includepkgs=steam
+type=rpm-md
+gpgcheck=1
+repo_gpgcheck=0
+gpgkey=file:///run/lumen/gaming/RPM-GPG-KEY-rpmfusion-nonfree-fedora-2020

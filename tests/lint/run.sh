@@ -115,8 +115,11 @@ layout() {
   return "$status"
 }
 
-# The package manifests of the image and of its live system.
-manifests() { python3 image/packages.py check && python3 image/packages.py check image/live/packages.toml; }
+# The package manifests of the image, its live system and the gaming edition.
+manifests() {
+  python3 image/packages.py check && python3 image/packages.py check image/live/packages.toml &&
+    python3 image/packages.py check image/gaming/packages.toml
+}
 
 printf 'Lumen OS lint\n'
 check "Licences and copyright (reuse lint)" reuse lint
@@ -129,7 +132,7 @@ check "GitHub Actions workflows (actionlint)" workflows
 check "justfile formatting (just --fmt)" just --fmt --check
 check "Whitespace and line endings" whitespace
 check "Repository layout and licence files" layout
-check "Package manifest of the image and the live system (image/packages.py)" manifests
+check "Package manifests of the image, the live system and the gaming edition (image/packages.py)" manifests
 check "Image trust policy (image/trust.py)" python3 image/trust.py check image/overlay
 
 printf '\nPassed: %d   Failed: %d\n' "$passes" "$failures"

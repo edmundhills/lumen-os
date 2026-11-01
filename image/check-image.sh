@@ -183,11 +183,13 @@ global_theme() {
 }
 
 # os-release names Lumen and its build, still says it is like Fedora, and
-# /etc/os-release leads to it (image/os-release.sh).
+# /etc/os-release leads to it (image/os-release.sh). An edition, such as the
+# gaming one, adds VARIANT_ID, and its IMAGE_ID is lumen-<VARIANT_ID>.
 os_release() {
-  local fedora want status=0 line
+  local fedora want status=0 line variant
   fedora=$(rpm --eval '%{fedora}') || return 1
-  for want in 'ID=lumen' 'ID_LIKE=fedora' 'IMAGE_ID=lumen' 'NAME="Lumen OS"'; do
+  variant=$(sed -n 's/^VARIANT_ID=//p' /usr/lib/os-release)
+  for want in 'ID=lumen' 'ID_LIKE=fedora' "IMAGE_ID=lumen${variant:+-$variant}" 'NAME="Lumen OS"'; do
     if ! grep -qxF -- "$want" /usr/lib/os-release; then
       printf '/usr/lib/os-release has no line %s\n' "$want"
       status=1

@@ -24,6 +24,11 @@
 # live session is exactly that build.
 ARG LUMEN_LIVE_FROM=lumen
 
+# What the gaming edition builds on: the lumen stage of this build, unless
+# --build-arg LUMEN_GAMING_FROM=<image> names another. Step 1.12 puts the same
+# gaming layer on lumen-nvidia this way (docs/architecture.md, section 9.5).
+ARG LUMEN_GAMING_FROM=lumen
+
 # Fedora Kinoite, pinned by the digest of its multi-architecture index
 # (docs/versions.md). quay.io deletes dated builds four weeks after they are
 # made, so the base workflow (.github/workflows/base.yml) moves the pin to the
@@ -119,6 +124,47 @@ LABEL org.opencontainers.image.title="Lumen OS" \
       org.opencontainers.image.revision="$LUMEN_COMMIT" \
       org.opencontainers.image.source="https://github.com/edmundhills/lumen-os" \
       org.opencontainers.image.url="https://github.com/edmundhills/lumen-os"
+
+# The gaming edition (step 1.10a, docs/decisions/0019-gaming-edition.md): the
+# lumen image plus Steam, Gamescope, MangoHud, GameMode and the controller udev
+# rules (spec, "Image variants"). LUMEN_GAMING_FROM, at the top of this file,
+# says which image it starts from.
+FROM ${LUMEN_GAMING_FROM} AS lumen-gaming
+
+# Steam comes from RPM Fusion's nonfree repositories, which this step turns on
+# and limits to Steam (image/gaming/rpmfusion-nonfree.repo), with RPM Fusion's
+# key checked against its pinned SHA-256 first. packages.py applies
+# image/gaming/packages.toml with every 32-bit package at the version of its
+# 64-bit twin in the image, falling back to Koji (image/multilib.py). Then the
+# repository file and dnf's leftovers go, as in the base stage. Only what this
+# step reads is mounted, so other changes to image/ don't rerun dnf.
+RUN --mount=type=bind,source=image/packages.py,target=/run/lumen/packages.py \
+    --mount=type=bind,source=image/multilib.py,target=/run/lumen/multilib.py \
+    --mount=type=bind,source=image/gaming,target=/run/lumen/gaming \
+    cd /run/lumen/gaming && sha256sum --check --strict keys.sha256 \
+    && cp /run/lumen/gaming/rpmfusion-nonfree.repo /etc/yum.repos.d/lumen-rpmfusion-nonfree.repo \
+    && PYTHONDONTWRITEBYTECODE=1 python3 /run/lumen/packages.py apply /run/lumen/gaming/packages.toml \
+    && rm /etc/yum.repos.d/lumen-rpmfusion-nonfree.repo \
+    && rm -rf /run/dnf /var/cache/* /var/lib/dnf /var/log/*
+
+# os-release names the edition (image/os-release.sh).
+ARG LUMEN_BUILD_VERSION
+RUN --mount=type=bind,source=image/os-release.sh,target=/run/lumen/os-release.sh \
+    bash /run/lumen/os-release.sh "$LUMEN_BUILD_VERSION" gaming Gaming
+
+# The lumen image's checks still pass with the edition's packages, and the
+# edition's own do (image/gaming/check-gaming.sh). Then bootc's lint, as in
+# the lumen stage.
+RUN --mount=type=bind,source=image,target=/run/lumen/image \
+    bash /run/lumen/image/check-image.sh /run/lumen/image/overlay \
+    && bash /run/lumen/image/gaming/check-gaming.sh /run/lumen/image/multilib.py
+RUN rm -rf /run/lumen && bootc container lint --fatal-warnings
+
+ARG LUMEN_COMMIT
+LABEL org.opencontainers.image.title="Lumen OS Gaming" \
+      org.opencontainers.image.description="Lumen OS's gaming edition: Lumen OS with Steam, Gamescope, MangoHud and GameMode" \
+      org.opencontainers.image.version="$LUMEN_BUILD_VERSION" \
+      org.opencontainers.image.revision="$LUMEN_COMMIT"
 
 # The live system the install ISO boots (docs/architecture.md, section 9.6): the
 # Lumen image with what the live session and the installer need, laid out as
