@@ -36,9 +36,10 @@ What the tools do, read in their source on 2026-10-31:
 
 - Installed systems and the qcow2 compress what they write from the first boot on, on the root, `/var` and `/home`.
 - Compression stays a choice of the installer, as step 1.4 meant, and of the disk's builder, not of the image: an image update can't add it to a root that can't take it.
-- Whether the qcow2's `-.mount` unit for `/` makes a failed unit of its own is step 1.9's to find, with its boot test of the qcow2.
+- Whether the qcow2's `-.mount` unit for `/` makes a failed unit of its own was step 1.9's to find: it doesn't (Follow-up).
 - A user who adds a `/` line to `/etc/fstab` gets the failed remount back; Health (Phase 5) can say so.
 
 ## Follow-up
 
 - 2026-10-31: the branch's image check (run 41223616906) passed with the blueprint: the qcow2's boot entry has `rootflags=compress=zstd:1`. The first install run (`iso` run 41223626193) stopped in the first `%post`: bootc leaves `/boot` read-only, and ostree writes the new boot entry there; the section now remounts it read-write first (Decision 1). Then `iso` run 41232677119, on `dev` `44.20261031`, passed the install test 27 of 27: the installed system's kernel command line ends in `rootflags=compress=zstd:1`, `/sysroot`, `/var` and `/var/home` are mounted `compress=zstd:1`, `/etc/fstab` has no `/` line, and `systemd-remount-fs.service` didn't fail. The one failed unit left is `mcelog.service`, on the runner's CPU.
+- 2026-11-01, step 1.9: the qcow2's boot test (image run 41258990028) found no failed units on either boot, so image-builder's `-.mount` unit for `/` doesn't fail, and `/sysroot` is mounted with `compress=zstd:1` ([ADR 0017](0017-boot-test.md), Follow-up).

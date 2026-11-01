@@ -34,3 +34,7 @@ Each was logged with `permissive=1`: Fedora's policy runs bootupd in a permissiv
 - The qcow2's boot test holds "no SELinux denials" with no exception.
 - Disks that other people make from a Lumen image with image-builder, on a machine without SELinux, still get the two benign denials until the tools or the policy change upstream. A line for `/sysroot/\.bootc-aleph\.json` in Fedora's policy, or labels from bootc and bootupd, would fix it there; reporting it upstream is the owner's call.
 - The qcow2 CI keeps is image-builder's disk plus these two labels, converted back by `qemu-img`.
+
+## Follow-up
+
+- 2026-11-01: image run 41258990028 (for `1dc5c5d`) labeled the qcow2 and checked it in under a minute, the two conversions included. The booted system read `/sysroot/.bootc-aleph.json` as `system_u:object_r:root_t:s0` and `/boot/bootupd-state.json` as `system_u:object_r:boot_t:s0`, and the boot test found no SELinux denial on either boot.

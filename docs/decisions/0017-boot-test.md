@@ -35,3 +35,8 @@ The spec's boot test: "QEMU + qcow2 from bootc-image-builder, run in CI with KVM
 - "No failed units" holds on the runners whatever their processor, and on AMD PCs, the owner's among them.
 - The kernel reports machine checks on AMD processors itself (and `edac_mce_amd` where it loads), so skipping mcelog there loses nothing that mcelog would have given.
 - The 60 seconds are measured from the kernel's start in a CI VM; the boot time on real hardware is for the performance budget (Phase 9).
+
+## Follow-up
+
+- 2026-11-01: the first run (image run 41253258219, for `5338d5e`) passed Secure Boot, SELinux, no failed units (the mcelog drop-in worked) and compression, and failed two checks: no greeter after 4 minutes, which led to Plasma Setup and the two boots (Context, Decision 3), and 18 lines of SELinux denials from bootupd, on two files image-builder's build machine left unlabeled ([ADR 0018](0018-disk-labels.md)).
+- 2026-11-01: with both fixes, image run 41258990028 (for `1dc5c5d`, `dev` base `44.20261101`) **passed 10 of 10**. First boot: Plasma Setup 29 s after the kernel started (session 1, Wayland, user `plasma-setup`); startup finished in 48.9 s (3.5 s kernel, 3.3 s initrd, 42.1 s userspace), the slowest units being two that run on a first boot only, `fedora-atomic-desktop-mandb-update.service` (22.4 s, the manual pages' index) and `ldconfig.service` (11.6 s), after the screen was up. Second boot: the greeter 14 s after the kernel started (session `c1`, Wayland, user `plasmalogin`); startup 15.5 s (2.8 s, 4.0 s, 8.8 s). No failed units and no denials on either boot; the two labels are `root_t` and `boot_t`. Both boots' checks took 99 s, the step 2 minutes.
