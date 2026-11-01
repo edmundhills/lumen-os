@@ -35,7 +35,6 @@
 
 import argparse
 import os
-import re
 import shlex
 import shutil
 import sys
@@ -50,8 +49,11 @@ HERE = Path(__file__).resolve().parent
 CHECK_SCRIPT = HERE / "booted-disk.sh"
 CHECK_CREDENTIAL = "lumen.boot-check"
 UNIT = "lumen-boot-check.service"
-# Printed by the checks before they restart the system for the second boot.
+# Printed by the checks before they restart the system for the second boot,
+# and when the second boot's checks start. The firmware and GRUB write to the
+# port in between, which the report leaves out.
 FIRST_BOOT_DONE = r"LUMEN-CHECKS-FIRST-BOOT-DONE\n"
+SECOND_BOOT = r"LUMEN-CHECKS-SECOND-BOOT\n"
 # How long each stage may take with KVM, in seconds. On each boot the checks
 # wait up to 4 minutes for the screen and 5 more for the system to finish
 # starting.
@@ -103,23 +105,22 @@ def read_report(console, report, scale, alive, first_boot_done=lambda: None):
                     f"did systemd take the credentials {UNIT}?")
         return False
     start = console.mark
-
-    def output(end=None):
-        return re.sub(FIRST_BOOT_DONE, "", console.text()[start:end])
-
-    if not console.expect(FIRST_BOOT_DONE, TIMEOUTS["first boot"] * scale, alive):
-        report.guest(output(), 0)
+    first = console.expect(FIRST_BOOT_DONE, TIMEOUTS["first boot"] * scale, alive)
+    if not first:
+        report.guest(console.text()[start:], 0)
         report.step(False, "The first boot's checks didn't finish")
         report.note("Their last lines:\n" + console.tail())
         return False
+    first_boot = console.text()[start:console.mark - len(first[0])]
     first_boot_done()
-    done = console.expect(DONE, TIMEOUTS["second boot"] * scale, alive)
+    second_start = console.expect(SECOND_BOOT, TIMEOUTS["second boot"] * scale, alive) and console.mark
+    done = second_start and console.expect(DONE, TIMEOUTS["second boot"] * scale, alive)
     if not done:
-        report.guest(output(), 0)
+        report.guest(first_boot + (console.text()[second_start:] if second_start else ""), 0)
         report.step(False, "The second boot's checks didn't finish")
         report.note("Their last lines:\n" + console.tail())
         return False
-    report.guest(output(console.mark - len(done[0])), int(done[1]))
+    report.guest(first_boot + console.text()[second_start:console.mark - len(done[0])], int(done[1]))
     report.note(f"The checks of both boots took {time.monotonic() - started:.0f} s.")
     return True
 

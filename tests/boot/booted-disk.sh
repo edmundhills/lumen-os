@@ -25,7 +25,9 @@
 #    greeter and for the system to finish starting, and check them.
 #
 # Prints LUMEN-CHECKS-BEGIN first, LUMEN-CHECKS-FIRST-BOOT-DONE before the
-# restart, and LUMEN-CHECKS-<status>-DONE last, which boot_disk.py waits for.
+# restart, LUMEN-CHECKS-SECOND-BOOT when the second boot's checks start (the
+# firmware and GRUB write to this port too as the system restarts), and
+# LUMEN-CHECKS-<status>-DONE last, which boot_disk.py waits for.
 # The last status is 0 when every check of both boots passed and 1 when one
 # failed.
 
@@ -265,6 +267,7 @@ print(r.get("image"), r.get("transport"), r.get("signature"), i.get("version"))'
 fi
 
 read -r passes failures <"$STATE"
+printf 'LUMEN-CHECKS-SECOND-BOOT\n'
 printf '\nThe second boot, with a user\n'
 check "The login screen within $LOGIN_BUDGET s: Plasma Login Manager's greeter" login_screen
 check "No failed units" no_failed_units

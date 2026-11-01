@@ -36,6 +36,7 @@ class CredentialsTest(unittest.TestCase):
         script = boot_disk.CHECK_SCRIPT.read_text()
         self.assertIn("printf 'LUMEN-CHECKS-BEGIN\\n'", script)
         self.assertIn("printf 'LUMEN-CHECKS-FIRST-BOOT-DONE\\n'", script)
+        self.assertIn("printf 'LUMEN-CHECKS-SECOND-BOOT\\n'", script)
         self.assertIn("printf 'LUMEN-CHECKS-%d-DONE\\n' \"$status\"", script)
         self.assertRegex("LUMEN-CHECKS-0-DONE", boot_iso.DONE)
         self.assertRegex("LUMEN-CHECKS-FIRST-BOOT-DONE\n", boot_disk.FIRST_BOOT_DONE)
@@ -81,7 +82,10 @@ class ReadReportTest(unittest.TestCase):
 
         def first_boot_done():
             calls.append(self.report.passes)
-            self.vm_side.sendall(b"\r\nThe second boot, with a user\r\n  PASS  The login screen within 60 s\r\n\r\n"
+            # The firmware and GRUB write to the port as the system restarts.
+            self.vm_side.sendall(b"BdsDxe: loading Boot0003 \"Fedora\"\r\nBooting `Lumen OS 0.1 (ostree:0)'\r\n"
+                                 b"LUMEN-CHECKS-SECOND-BOOT\r\n"
+                                 b"\r\nThe second boot, with a user\r\n  PASS  The login screen within 60 s\r\n\r\n"
                                  b"Passed: 2   Failed: 1\r\nLUMEN-CHECKS-1-DONE\r\n")
 
         self.assertTrue(boot_disk.read_report(self.console, self.report, 1, lambda: True, first_boot_done))
@@ -89,15 +93,21 @@ class ReadReportTest(unittest.TestCase):
         self.assertEqual((self.report.passes, self.report.failures), (2, 1))
         self.assertIn("  FAIL  No failed units", self.report.lines)
         self.assertIn("The second boot, with a user", self.report.lines)
-        self.assertFalse(any("FIRST-BOOT" in line for line in self.report.lines))
+        self.assertFalse(any("FIRST-BOOT" in line or "SECOND-BOOT" in line for line in self.report.lines))
+        self.assertFalse(any("BdsDxe" in line or "Booting" in line for line in self.report.lines))
         self.assertTrue(any(re.match(r"\s+The checks of both boots took \d+ s\.", line) for line in self.report.lines))
 
     def test_says_when_the_second_boot_never_reports(self):
-        self.vm_side.sendall(b"LUMEN-CHECKS-BEGIN\r\n  PASS  Secure Boot on\r\nLUMEN-CHECKS-FIRST-BOOT-DONE\r\n")
+        self.vm_side.sendall(b"LUMEN-CHECKS-BEGIN\r\n  PASS  Secure Boot on\r\nLUMEN-CHECKS-FIRST-BOOT-DONE\r\n"
+                             b"BdsDxe: loading Boot0003\r\n")
         with mock.patch.dict(boot_disk.TIMEOUTS, {"second boot": 0.3}):
             self.assertFalse(boot_disk.read_report(self.console, self.report, 1, lambda: True))
         self.assertEqual((self.report.passes, self.report.failures), (1, 1))
         self.assertIn("  FAIL  The second boot's checks didn't finish", self.report.lines)
+        # The firmware's lines show only in the port's last lines, after the failure.
+        tail = next(i for i, line in enumerate(self.report.lines) if "Their last lines:" in line)
+        self.assertFalse(any("BdsDxe" in line for line in self.report.lines[:tail]))
+        self.assertTrue(any("BdsDxe" in line for line in self.report.lines[tail:]))
 
     def test_says_when_the_checks_never_start(self):
         with mock.patch.dict(boot_disk.TIMEOUTS, {"begin": 0.3}):
