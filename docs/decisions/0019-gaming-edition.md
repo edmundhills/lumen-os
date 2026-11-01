@@ -40,4 +40,5 @@ The spec's `lumen-gaming` image "adds Steam, Gamescope session, MangoHud, contro
 
 ## Follow-up
 
-- The first CI build will say which 32-bit packages Steam brings, how many came from Koji, and how much the edition adds to the image.
+- 2026-11-01: the first builds ran on Fedora 45 (Kinoite `45.20261101.0`, KWin and Plasma 6.8.2), which the base bump brought the same day. Kinoite 45 already has GameMode, so the manifest keeps it. The packages' scripts left `/run/setrans` in the image, which bootc's lint rejects; the install step now removes whatever it leaves in `/run` and names the package that owns it. Then image run 41309386656 (for `7001e33`) built the edition in 15 minutes and passed everything: RPM Fusion's key against its pin, Steam signed with it, every 32-bit package the build of its 64-bit twin, no RPM Fusion repository left, the lumen checks (14) and the edition's (6), and bootc's lint. The run's summary page lists Steam's version and the number of 32-bit packages, which a cloud session can't read.
+- The build job now takes about 75 minutes, 15 of them the edition's.

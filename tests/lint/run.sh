@@ -132,7 +132,7 @@ check "GitHub Actions workflows (actionlint)" workflows
 check "justfile formatting (just --fmt)" just --fmt --check
 check "Whitespace and line endings" whitespace
 check "Repository layout and licence files" layout
-check "Package manifests of the image, the live system and the gaming edition (image/packages.py)" manifests
+check "Package manifest of the image, its live system and its gaming edition (image/packages.py)" manifests
 check "Image trust policy (image/trust.py)" python3 image/trust.py check image/overlay
 
 printf '\nPassed: %d   Failed: %d\n' "$passes" "$failures"
