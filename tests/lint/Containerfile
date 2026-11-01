@@ -11,8 +11,8 @@
 # newest build of its tag every week and keeps a copy on ghcr.io, as it does for
 # Kinoite (step 1.5b). Moving to a newer Fedora is done by hand, because the
 # nodejs package below names Node's major version.
-# Pinned: Fedora 44, built 2026-10-28.
-FROM registry.fedoraproject.org/fedora:44@sha256:a329903517f5dbd709721cba0cb1b6d0cc05f01b9e5feb59c2b6bbe9eb083ade
+# Pinned: Fedora 44, built 2026-11-01.
+FROM registry.fedoraproject.org/fedora:44@sha256:d68cae9185777603262e0a7094f792ffed9326b22e1a03e2d2a1731fc3f94733
 
 RUN dnf install -y --setopt=install_weak_deps=False \
         # A container registry, which image/test_signatures.py runs as a
