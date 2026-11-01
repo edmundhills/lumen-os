@@ -5,7 +5,10 @@
 #
 # The image's boot test (step 1.9; spec, "Boot test"): start a build's qcow2
 # in a VM with Secure Boot and check, from inside, that it reaches the login
-# screen within 60 seconds with no failed units.
+# screen within 60 seconds with no failed units. The disk has no user, as a
+# newly installed system has none, so the first boot comes to Plasma Setup,
+# the first-run wizard; the checks finish it as its wizard does and restart,
+# and the second boot comes to Plasma Login Manager's greeter.
 #
 # Usage: python3 tests/boot/boot_disk.py [--require-kvm] DISK OUT
 #
@@ -13,11 +16,11 @@
 #   DISK           The disk, the qcow2 image-builder made of the build
 #                  (build-image.yml), or a raw disk. The VM's writes go to a
 #                  temporary snapshot, so the disk stays as it was.
-#   OUT            A folder for the logs and the screenshot.
+#   OUT            A folder for the logs and the screenshots.
 #
 # The VM is boot_iso.py's: QEMU's q35 machine with Fedora's UEFI firmware,
 # Secure Boot on and Microsoft's keys enrolled, and no network card. A reboot
-# restarts it, in case shim adds its boot entry on the first start.
+# restarts it, and the snapshot keeps what the first boot wrote.
 #
 # Nobody logs in: the disk has no password for anyone. The VM's firmware
 # tables carry three systemd credentials, so the image stays as it is:
@@ -32,6 +35,7 @@
 
 import argparse
 import os
+import re
 import shlex
 import shutil
 import sys
@@ -46,9 +50,12 @@ HERE = Path(__file__).resolve().parent
 CHECK_SCRIPT = HERE / "booted-disk.sh"
 CHECK_CREDENTIAL = "lumen.boot-check"
 UNIT = "lumen-boot-check.service"
-# How long each stage may take with KVM, in seconds: the checks wait up to 4
-# minutes for the login screen and 5 more for the system to finish starting.
-TIMEOUTS = {"begin": 300, "checks": 900}
+# Printed by the checks before they restart the system for the second boot.
+FIRST_BOOT_DONE = r"LUMEN-CHECKS-FIRST-BOOT-DONE\n"
+# How long each stage may take with KVM, in seconds. On each boot the checks
+# wait up to 4 minutes for the screen and 5 more for the system to finish
+# starting.
+TIMEOUTS = {"begin": 300, "first boot": 900, "second boot": 1200}
 
 
 def check_unit():
@@ -85,21 +92,35 @@ def disk_format(path):
     return "qcow2" if str(path).endswith(".qcow2") else "raw"
 
 
-def read_report(console, report, scale, alive):
-    """Wait for the checks' report on CONSOLE, the second serial port, and take it into REPORT."""
+def read_report(console, report, scale, alive, first_boot_done=lambda: None):
+    """Wait for the checks' report of both boots on CONSOLE, the second serial port, and take it into REPORT.
+
+    Calls FIRST_BOOT_DONE once the first boot's checks have ended, before the restart.
+    """
     started = time.monotonic()
     if not console.expect(BEGIN, TIMEOUTS["begin"] * scale, alive):
         report.step(False, f"The checks didn't start within {TIMEOUTS['begin'] * scale} s: "
                     f"did systemd take the credentials {UNIT}?")
         return False
     start = console.mark
-    done = console.expect(DONE, TIMEOUTS["checks"] * scale, alive)
-    if not done:
-        report.step(False, "The checks didn't finish")
+
+    def output(end=None):
+        return re.sub(FIRST_BOOT_DONE, "", console.text()[start:end])
+
+    if not console.expect(FIRST_BOOT_DONE, TIMEOUTS["first boot"] * scale, alive):
+        report.guest(output(), 0)
+        report.step(False, "The first boot's checks didn't finish")
         report.note("Their last lines:\n" + console.tail())
         return False
-    report.guest(console.text()[start:console.mark - len(done[0])], int(done[1]))
-    report.note(f"The checks took {time.monotonic() - started:.0f} s.")
+    first_boot_done()
+    done = console.expect(DONE, TIMEOUTS["second boot"] * scale, alive)
+    if not done:
+        report.guest(output(), 0)
+        report.step(False, "The second boot's checks didn't finish")
+        report.note("Their last lines:\n" + console.tail())
+        return False
+    report.guest(output(console.mark - len(done[0])), int(done[1]))
+    report.note(f"The checks of both boots took {time.monotonic() - started:.0f} s.")
     return True
 
 
@@ -128,8 +149,13 @@ def boot(disk, firmware, out, kvm):
                 vm = boot_iso.VM(command, (serial, monitor), serial_log, qemu_log)
                 checks = boot_iso.Console(vm._connect(port), checks_log)
                 vm.monitor.run("cont")
-                if read_report(checks, report, scale, vm.alive):
-                    if note := vm.screenshot(out / "disk-screen.png"):
+
+                def first_boot_done():
+                    if note := vm.screenshot(out / "disk-first-boot.png"):
+                        report.note(note)
+
+                if read_report(checks, report, scale, vm.alive, first_boot_done):
+                    if note := vm.screenshot(out / "disk-second-boot.png"):
                         report.note(note)
                 else:
                     report.note("The serial port's last lines:\n" + vm.console.tail())

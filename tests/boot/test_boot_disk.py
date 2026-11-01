@@ -32,11 +32,19 @@ class CredentialsTest(unittest.TestCase):
         for name, data in boot_disk.credentials():
             self.assertNotIn(",", boot_iso.credential(name, data))  # QEMU's option syntax would split it there.
 
-    def test_the_script_prints_both_markers(self):
+    def test_the_script_prints_the_markers(self):
         script = boot_disk.CHECK_SCRIPT.read_text()
         self.assertIn("printf 'LUMEN-CHECKS-BEGIN\\n'", script)
+        self.assertIn("printf 'LUMEN-CHECKS-FIRST-BOOT-DONE\\n'", script)
         self.assertIn("printf 'LUMEN-CHECKS-%d-DONE\\n' \"$status\"", script)
         self.assertRegex("LUMEN-CHECKS-0-DONE", boot_iso.DONE)
+        self.assertRegex("LUMEN-CHECKS-FIRST-BOOT-DONE\n", boot_disk.FIRST_BOOT_DONE)
+        self.assertNotRegex("LUMEN-CHECKS-FIRST-BOOT-DONE\n", boot_iso.DONE)
+
+    def test_the_first_boot_restarts_the_system_once(self):
+        script = boot_disk.CHECK_SCRIPT.read_text()
+        self.assertEqual(script.count("systemctl reboot"), 1)
+        self.assertIn("touch /etc/plasma-setup-done", script)
 
 
 class CommandTest(unittest.TestCase):
@@ -65,14 +73,31 @@ class ReadReportTest(unittest.TestCase):
         self.vm_side.close()
         self.console.sock.close()
 
-    def test_takes_the_checks_report(self):
-        self.vm_side.sendall(b"LUMEN-CHECKS-BEGIN\r\n  PASS  Secure Boot on\r\n  FAIL  No failed units\r\n"
-                             b"        mcelog.service\r\n  INFO  Kernel lockdown: [integrity]\r\n\r\n"
-                             b"Passed: 1   Failed: 1\r\nLUMEN-CHECKS-1-DONE\r\n")
-        self.assertTrue(boot_disk.read_report(self.console, self.report, 1, lambda: True))
-        self.assertEqual((self.report.passes, self.report.failures), (1, 1))
+    def test_takes_the_report_of_both_boots(self):
+        self.vm_side.sendall(b"LUMEN-CHECKS-BEGIN\r\nThe first boot, with no user\r\n  PASS  Secure Boot on\r\n"
+                             b"  FAIL  No failed units\r\n        mcelog.service\r\n"
+                             b"  INFO  Kernel lockdown: [integrity]\r\nLUMEN-CHECKS-FIRST-BOOT-DONE\r\n")
+        calls = []
+
+        def first_boot_done():
+            calls.append(self.report.passes)
+            self.vm_side.sendall(b"\r\nThe second boot, with a user\r\n  PASS  The login screen within 60 s\r\n\r\n"
+                                 b"Passed: 2   Failed: 1\r\nLUMEN-CHECKS-1-DONE\r\n")
+
+        self.assertTrue(boot_disk.read_report(self.console, self.report, 1, lambda: True, first_boot_done))
+        self.assertEqual(calls, [0])  # Once, before the second boot's report.
+        self.assertEqual((self.report.passes, self.report.failures), (2, 1))
         self.assertIn("  FAIL  No failed units", self.report.lines)
-        self.assertTrue(any(re.match(r"\s+The checks took \d+ s\.", line) for line in self.report.lines))
+        self.assertIn("The second boot, with a user", self.report.lines)
+        self.assertFalse(any("FIRST-BOOT" in line for line in self.report.lines))
+        self.assertTrue(any(re.match(r"\s+The checks of both boots took \d+ s\.", line) for line in self.report.lines))
+
+    def test_says_when_the_second_boot_never_reports(self):
+        self.vm_side.sendall(b"LUMEN-CHECKS-BEGIN\r\n  PASS  Secure Boot on\r\nLUMEN-CHECKS-FIRST-BOOT-DONE\r\n")
+        with mock.patch.dict(boot_disk.TIMEOUTS, {"second boot": 0.3}):
+            self.assertFalse(boot_disk.read_report(self.console, self.report, 1, lambda: True))
+        self.assertEqual((self.report.passes, self.report.failures), (1, 1))
+        self.assertIn("  FAIL  The second boot's checks didn't finish", self.report.lines)
 
     def test_says_when_the_checks_never_start(self):
         with mock.patch.dict(boot_disk.TIMEOUTS, {"begin": 0.3}):
