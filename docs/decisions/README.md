@@ -30,6 +30,7 @@ Architecture decision records (ADRs). Each one records a decision that changes t
 | [0018](0018-disk-labels.md) | Correct two SELinux labels on the qcow2 that image-builder makes | Accepted |
 | [0019](0019-gaming-edition.md) | Build the gaming edition with RPM Fusion's Steam and 32-bit packages at the image's versions | Accepted |
 | [0020](0020-gamescope-session.md) | Take the Gamescope session from ChimeraOS, pinned file by file, without SteamOS's helpers | Accepted |
+| [0021](0021-module-signing-key.md) | Sign out-of-tree kernel modules with Lumen's own key, which users enrol as a MOK | Accepted |
 
 ADRs 0001 to 0009 use the step numbers of their time. Since ADR 0010, the old Phase 8 is Phase 9 and the old Phase 9 is Phase 10, so their "step 8.2" is now step 9.2, and "step 9.1" is now step 10.1.
 
