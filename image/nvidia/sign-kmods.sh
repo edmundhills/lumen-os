@@ -71,6 +71,9 @@ for module in "${modules[@]}"; do
   printf 'Signed %s (%s)\n' "$module" "$signer"
 done
 
+# rpmrebuild and rpmbuild work in root's home, which on Kinoite is a link to
+# /var/roothome, made only at boot (the live stage meets the same for dracut).
+mkdir -p "$(realpath -m /root)"
 rpmrebuild --batch --notest-install --directory=/kmods "kmod-nvidia-$kver"
 install -m 0644 "$cert" /kmods/module-signing.der
 find /kmods -name '*.rpm' -print
