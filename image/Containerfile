@@ -230,7 +230,10 @@ RUN --mount=type=secret,id=module_signing_key \
 FROM ${LUMEN_NVIDIA_FROM} AS lumen-nvidia
 
 # The signed kmod-nvidia from the kmods stage first, so that nothing pulls in
-# akmod-nvidia and its compiler; then NVIDIA's user-space driver from RPM
+# akmod-nvidia and its compiler. It comes from this build, as Lumen's own
+# packages will from their stages, and has no package signature, which rpm
+# otherwise insists on: rpm checks its digests only. Its modules carry the
+# kernel signatures check-nvidia.sh checks. Then NVIDIA's user-space driver from RPM
 # Fusion, limited to it, through packages.py with nothing the image has
 # changed (image/nvidia/packages.toml). rpm checks the module package's
 # dependencies once both are in; depmod indexes the modules for the kernel.
@@ -248,7 +251,8 @@ RUN --mount=type=bind,from=kmods,source=/kmods,target=/run/lumen/kmods \
     && kver=$(cat /run/lumen/kmods/kernel) \
     && before=$(ls -A /run) \
     && cp /run/lumen/nvidia/rpmfusion-nonfree.repo /etc/yum.repos.d/lumen-rpmfusion-nvidia.repo \
-    && find /run/lumen/kmods -name 'kmod-nvidia-*.rpm' -exec rpm --install --nodeps {} + \
+    && find /run/lumen/kmods -name 'kmod-nvidia-*.rpm' \
+        -exec rpm --install --nodeps --define '_pkgverify_level digest' {} + \
     && PYTHONDONTWRITEBYTECODE=1 python3 /run/lumen/packages.py apply /run/lumen/nvidia/packages.toml \
     && rpm --verify --nofiles --noscripts "kmod-nvidia-$kver" \
     && depmod -a "$kver" \
