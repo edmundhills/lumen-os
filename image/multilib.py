@@ -28,6 +28,12 @@
 # If the packages can't be installed at the image's versions, the build stops
 # and says which. Usage:
 #   python3 image/multilib.py install PACKAGE...   as packages.py does it
+#   python3 image/multilib.py fetch NAME TWIN DIR   download NAME at the version
+#                                                   of the installed TWIN, such
+#                                                   as kernel-devel at
+#                                                   kernel-core's, signature
+#                                                   checked; print its path
+#                                                   (image/nvidia/build-kmods.sh)
 #   python3 image/multilib.py check                 list every 32-bit package
 #                                                   whose twin is at another
 #                                                   version; exit 1 if any
@@ -134,19 +140,24 @@ def koji_url(sourcerpm, key, name, evr, arch="i686"):
     return f"{KOJI}/{source}/{version}/{release}/data/signed/{key}/{arch}/{name}-{version_release(evr)}.{arch}.rpm"
 
 
-def fetch(name, evr, dest):
-    """Download the 32-bit NAME at EVR into DEST, from the mirrors or Koji; return the file's path."""
-    spec = f"{name}-{version_release(evr)}.i686"
+def fetch(name, evr, dest, arch="i686", twin=None):
+    """Download NAME.ARCH at EVR into DEST, from the mirrors or Koji; return the file's path.
+
+    TWIN is an installed package built from the same source package, whose
+    source and signing key say where Koji keeps the build: by default NAME's
+    64-bit twin, for a 32-bit package; kernel-core for kernel-devel.
+    """
+    spec = f"{name}-{version_release(evr)}.{arch}"
     before = set(glob.glob(f"{dest}/*.rpm"))
     if subprocess.run(DNF + ["download", f"--destdir={dest}", spec]).returncode == 0:
         new = set(glob.glob(f"{dest}/*.rpm")) - before
         if len(new) == 1:
             return new.pop()
-    twin = f"{name}.x86_64"
+    twin = twin or f"{name}.x86_64"
     sourcerpm, signature = subprocess.run(
         ["rpm", "--query", "--queryformat", "%{SOURCERPM}\n%{RSAHEADER:pgpsig}\n", twin],
         check=True, capture_output=True, text=True).stdout.splitlines()[:2]
-    url = koji_url(sourcerpm, key_id(signature), name, evr)
+    url = koji_url(sourcerpm, key_id(signature), name, evr, arch)
     path = os.path.join(dest, url.rsplit("/", 1)[1])
     print(f"The mirrors don't have {spec}; downloading it from Koji: {url}", flush=True)
     if subprocess.run(["curl", "--fail", "--silent", "--show-error", "--location", "--retry", "3",
@@ -227,14 +238,32 @@ def install(names):
         raise MultilibError("\n".join(problems))
 
 
+def fetch_like(name, twin, dest):
+    """Download NAME at the version of the installed package TWIN, check its signature and return its path."""
+    out = subprocess.run(["rpm", "--query", "--queryformat", QUERY, twin],
+                         check=True, capture_output=True, text=True).stdout
+    (_, arch), evr = next(iter(parse(out).items()))
+    path = fetch(name, evr, dest, arch=arch, twin=twin)
+    import_keys()
+    verify(path)
+    return path
+
+
 def main(argv):
+    if len(argv) == 5 and argv[1] == "fetch":
+        try:
+            print(fetch_like(argv[2], argv[3], argv[4]))
+        except (MultilibError, subprocess.CalledProcessError) as e:
+            print(e, file=sys.stderr)
+            return 1
+        return 0
     if argv[1:] == ["check"]:
         found = mismatches(installed())
         for line in found:
             print(f"32-bit and 64-bit builds differ: {line}")
         return 1 if found else 0
     if len(argv) < 3 or argv[1] != "install":
-        print("Usage: multilib.py install PACKAGE... | check", file=sys.stderr)
+        print("Usage: multilib.py install PACKAGE... | fetch NAME TWIN DIR | check", file=sys.stderr)
         return 2
     try:
         install(argv[2:])

@@ -29,6 +29,10 @@ ARG LUMEN_LIVE_FROM=lumen
 # gaming layer on lumen-nvidia this way (docs/architecture.md, section 9.5).
 ARG LUMEN_GAMING_FROM=lumen
 
+# What the NVIDIA edition builds on: the lumen stage of this build, unless
+# --build-arg LUMEN_NVIDIA_FROM=<image> names another (step 1.11b).
+ARG LUMEN_NVIDIA_FROM=lumen
+
 # Fedora Kinoite, pinned by the digest of its multi-architecture index
 # (docs/versions.md). quay.io deletes dated builds four weeks after they are
 # made, so the base workflow (.github/workflows/base.yml) moves the pin to the
@@ -189,6 +193,98 @@ RUN rm -rf /run/lumen && bootc container lint --fatal-warnings
 ARG LUMEN_COMMIT
 LABEL org.opencontainers.image.title="Lumen OS Gaming" \
       org.opencontainers.image.description="Lumen OS's gaming edition: Lumen OS with Steam, Gamescope, MangoHud and GameMode" \
+      org.opencontainers.image.version="$LUMEN_BUILD_VERSION" \
+      org.opencontainers.image.revision="$LUMEN_COMMIT"
+
+# NVIDIA's kernel modules for the NVIDIA edition (step 1.11b,
+# docs/decisions/0022-nvidia-edition.md): built with akmods against base's own
+# kernel, in a stage that is never shipped, so its compiler and kernel headers
+# stay out of every image (docs/architecture.md, section 9.5). The key that
+# signs them comes in the next step only.
+FROM base AS kmods
+
+# kernel-devel at the kernel's exact version, RPM Fusion's akmod-nvidia with
+# NVIDIA's open modules, and akmods (image/nvidia/build-kmods.sh). RPM Fusion's
+# key and its pin are the gaming edition's.
+RUN --mount=type=bind,source=image/multilib.py,target=/run/lumen/multilib.py \
+    --mount=type=bind,source=image/nvidia/build-kmods.sh,target=/run/lumen/build-kmods.sh \
+    --mount=type=bind,source=image/nvidia/rpmfusion-nonfree.repo,target=/run/lumen/nvidia/rpmfusion-nonfree.repo \
+    --mount=type=bind,source=image/gaming/RPM-GPG-KEY-rpmfusion-nonfree-fedora-2020,target=/run/lumen/nvidia/RPM-GPG-KEY-rpmfusion-nonfree-fedora-2020 \
+    --mount=type=bind,source=image/gaming/keys.sha256,target=/run/lumen/nvidia/keys.sha256 \
+    bash /run/lumen/build-kmods.sh /run/lumen
+
+# Sign the modules and pack them again (image/nvidia/sign-kmods.sh). The key,
+# its certificate and its pass phrase are build secrets: podman build --secret
+# id=module_signing_key,src=… and the same for module_signing_cert and, for an
+# encrypted key, module_signing_password. Secrets are mounted for this step
+# only and no layer keeps them. Builds of main sign with Lumen's key (ADR 0021,
+# step 1.11c); every other build makes a throwaway one.
+RUN --mount=type=secret,id=module_signing_key \
+    --mount=type=secret,id=module_signing_cert \
+    --mount=type=secret,id=module_signing_password \
+    --mount=type=bind,source=image/nvidia/sign-kmods.sh,target=/run/lumen/sign-kmods.sh \
+    bash /run/lumen/sign-kmods.sh /run/secrets
+
+# The NVIDIA edition (step 1.11b, ADR 0022): the lumen image plus NVIDIA's
+# driver, its modules signed for users to enrol Lumen's key as a MOK.
+FROM ${LUMEN_NVIDIA_FROM} AS lumen-nvidia
+
+# The signed kmod-nvidia from the kmods stage first, so that nothing pulls in
+# akmod-nvidia and its compiler; then NVIDIA's user-space driver from RPM
+# Fusion, limited to it, through packages.py with nothing the image has
+# changed (image/nvidia/packages.toml). rpm checks the module package's
+# dependencies once both are in; depmod indexes the modules for the kernel.
+# The certificate goes in /usr/share/pki/lumen for MOK enrolment. Then the
+# repository file and what dnf and the packages' scripts leave behind go, as
+# in the gaming stage.
+RUN --mount=type=bind,from=kmods,source=/kmods,target=/run/lumen/kmods \
+    --mount=type=bind,source=image/packages.py,target=/run/lumen/packages.py \
+    --mount=type=bind,source=image/multilib.py,target=/run/lumen/multilib.py \
+    --mount=type=bind,source=image/nvidia/packages.toml,target=/run/lumen/nvidia/packages.toml \
+    --mount=type=bind,source=image/nvidia/rpmfusion-nonfree.repo,target=/run/lumen/nvidia/rpmfusion-nonfree.repo \
+    --mount=type=bind,source=image/gaming/RPM-GPG-KEY-rpmfusion-nonfree-fedora-2020,target=/run/lumen/nvidia/RPM-GPG-KEY-rpmfusion-nonfree-fedora-2020 \
+    --mount=type=bind,source=image/gaming/keys.sha256,target=/run/lumen/nvidia/keys.sha256 \
+    cd /run/lumen/nvidia && sha256sum --check --strict keys.sha256 \
+    && kver=$(cat /run/lumen/kmods/kernel) \
+    && before=$(ls -A /run) \
+    && cp /run/lumen/nvidia/rpmfusion-nonfree.repo /etc/yum.repos.d/lumen-rpmfusion-nvidia.repo \
+    && find /run/lumen/kmods -name 'kmod-nvidia-*.rpm' -exec rpm --install --nodeps {} + \
+    && PYTHONDONTWRITEBYTECODE=1 python3 /run/lumen/packages.py apply /run/lumen/nvidia/packages.toml \
+    && rpm --verify --nofiles --noscripts "kmod-nvidia-$kver" \
+    && depmod -a "$kver" \
+    && install -D -m 0644 /run/lumen/kmods/module-signing.der /usr/share/pki/lumen/module-signing.der \
+    && rm /etc/yum.repos.d/lumen-rpmfusion-nvidia.repo \
+    && for name in $(ls -A /run); do \
+        if ! printf '%s\n' "$before" | grep -qxF -- "$name"; then \
+            printf 'Removing /run/%s (%s)\n' "$name" "$(rpm --query --file "/run/$name" 2>&1 | paste -sd ' ')"; \
+            rm -rf "/run/${name:?}"; \
+        fi; \
+    done \
+    && rm -rf /var/cache/* /var/lib/dnf /var/log/*
+
+# The edition's overlay: the kernel arguments that keep nouveau and nova away
+# from NVIDIA cards, which bootc applies, and the preset that turns on RPM
+# Fusion's nvidia-fallback.service, which loads nouveau when NVIDIA's module
+# didn't load (risk 7).
+RUN --mount=type=bind,source=image/nvidia/overlay,target=/run/lumen/overlay \
+    cp --recursive --no-preserve=mode,ownership /run/lumen/overlay/. / \
+    && systemctl preset nvidia-fallback.service
+
+# os-release names the edition (image/os-release.sh).
+ARG LUMEN_BUILD_VERSION
+RUN --mount=type=bind,source=image/os-release.sh,target=/run/lumen/os-release.sh \
+    bash /run/lumen/os-release.sh "$LUMEN_BUILD_VERSION" nvidia NVIDIA
+
+# The lumen image's checks still pass, and the edition's own do
+# (image/nvidia/check-nvidia.sh). Then bootc's lint, as in the lumen stage.
+RUN --mount=type=bind,source=image,target=/run/lumen/image \
+    bash /run/lumen/image/check-image.sh /run/lumen/image/overlay \
+    && bash /run/lumen/image/nvidia/check-nvidia.sh
+RUN rm -rf /run/lumen && bootc container lint --fatal-warnings
+
+ARG LUMEN_COMMIT
+LABEL org.opencontainers.image.title="Lumen OS NVIDIA" \
+      org.opencontainers.image.description="Lumen OS's NVIDIA edition: Lumen OS with NVIDIA's driver, signed for Secure Boot" \
       org.opencontainers.image.version="$LUMEN_BUILD_VERSION" \
       org.opencontainers.image.revision="$LUMEN_COMMIT"
 

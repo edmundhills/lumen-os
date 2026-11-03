@@ -119,6 +119,7 @@ layout() {
 manifests() {
   python3 image/packages.py check && python3 image/packages.py check image/live/packages.toml &&
     python3 image/packages.py check image/gaming/packages.toml &&
+    python3 image/packages.py check image/nvidia/packages.toml &&
     python3 image/gaming/session.py check image/gaming/session.toml
 }
 
