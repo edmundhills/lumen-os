@@ -72,7 +72,9 @@ modules() {
       printf '%s is signed by "%s", not "%s"\n' "$module" "$(modinfo --field=signer "$module")" "$signer"
       status=1
     fi
-    if [[ $(modinfo --field=license "$module") != "Dual MIT/GPL" ]]; then
+    # NVIDIA's open modules are under GPL-compatible licences, Dual MIT/GPL
+    # and, for nvidia-peermem, Dual BSD/GPL; the proprietary ones say NVIDIA.
+    if [[ $(modinfo --field=license "$module") != *GPL* ]]; then
       printf "%s is under %s: not one of NVIDIA's open modules\n" "$module" "$(modinfo --field=license "$module")"
       status=1
     fi
