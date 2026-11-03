@@ -13,8 +13,10 @@
 #   FILES  where the stage mounts multilib.py, and nvidia/ with RPM Fusion's
 #          repository file, its key and keys.sha256.
 #
-# 1. kernel-devel at exactly the version of the image's kernel-core, from the
-#    mirrors or Fedora's signed copy on Koji (multilib.py fetch).
+# 1. kernel-devel, and kernel-devel-matched, which akmods needs to tie it to
+#    the kernel, at exactly the version of the image's kernel-core, from the
+#    mirrors or Fedora's signed copies on Koji (multilib.py fetch). The mirrors
+#    keep only the release's and the newest kernel's.
 # 2. RPM Fusion's akmod-nvidia from its nonfree repositories, limited to
 #    NVIDIA's driver, with NVIDIA's open modules forced: RPM Fusion otherwise
 #    picks them by what lspci shows on the build machine.
@@ -33,13 +35,16 @@ export PYTHONDONTWRITEBYTECODE=1
 kver=$(rpm --query --queryformat '%{VERSION}-%{RELEASE}.%{ARCH}' kernel-core)
 printf 'Building NVIDIA modules for kernel %s\n' "$kver"
 mkdir -p /var/tmp/lumen-kernel-devel /kmods
-devel=$(python3 "$files/multilib.py" fetch kernel-devel kernel-core /var/tmp/lumen-kernel-devel | tail -n 1)
+devel=()
+for name in kernel-devel kernel-devel-matched; do
+  devel+=("$(python3 "$files/multilib.py" fetch "$name" kernel-core /var/tmp/lumen-kernel-devel | tail -n 1)")
+done
 
 (cd "$files/nvidia" && sha256sum --check --strict keys.sha256)
 cp "$files/nvidia/rpmfusion-nonfree.repo" /etc/yum.repos.d/lumen-rpmfusion-nvidia.repo
 printf '%%_with_kmod_nvidia_open 1\n' >/etc/rpm/macros.lumen-nvidia-open
 
-dnf --assumeyes --setopt=install_weak_deps=False install "$devel" akmod-nvidia rpmrebuild
+dnf --assumeyes --setopt=install_weak_deps=False install "${devel[@]}" akmod-nvidia rpmrebuild
 if ! akmods --force --kernels "$kver" --kmod nvidia; then
   printf "akmods couldn't build kmod-nvidia for %s. Its logs:\n" "$kver" >&2
   cat /var/cache/akmods/nvidia/*.log >&2 || true
