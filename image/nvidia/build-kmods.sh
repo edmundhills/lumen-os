@@ -20,6 +20,9 @@
 # 2. RPM Fusion's akmod-nvidia from its nonfree repositories, limited to
 #    NVIDIA's driver, with NVIDIA's open modules forced: RPM Fusion otherwise
 #    picks them by what lspci shows on the build machine.
+#    akmod-nvidia goes in with its scripts off: its %post would start a build
+#    at once, as root, which akmodsbuild refuses, and dnf then fails the whole
+#    transaction. akmods itself builds as its own user.
 # 3. akmods builds kmod-nvidia for that kernel and installs it here, unsigned.
 # Writes the kernel's version to /kmods/kernel for the next step.
 
@@ -44,7 +47,11 @@ done
 cp "$files/nvidia/rpmfusion-nonfree.repo" /etc/yum.repos.d/lumen-rpmfusion-nvidia.repo
 printf '%%_with_kmod_nvidia_open 1\n' >/etc/rpm/macros.lumen-nvidia-open
 
-dnf --assumeyes --setopt=install_weak_deps=False install "${devel[@]}" akmod-nvidia rpmrebuild
+dnf --assumeyes --setopt=install_weak_deps=False install "${devel[@]}" akmods rpmrebuild
+dnf --assumeyes --setopt=install_weak_deps=False --setopt=tsflags=noscripts install akmod-nvidia
+# akmods builds in /tmp and /var/tmp as its own user (as Universal Blue's
+# builds make sure too).
+chmod 1777 /tmp /var/tmp
 if ! akmods --force --kernels "$kver" --kmod nvidia; then
   printf "akmods couldn't build kmod-nvidia for %s. Its logs:\n" "$kver" >&2
   cat /var/cache/akmods/nvidia/*.log >&2 || true
