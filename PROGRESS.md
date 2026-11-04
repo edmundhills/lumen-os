@@ -323,6 +323,9 @@ Left over from 1.6, 1.5c and 1.5b:
   - CI: a job of its own, `nvidia`, because the build job (92 minutes) would pass its 120-minute limit; it builds `lumen` again and then the edition with a throwaway key ("Lumen OS kernel module signing (throwaway)", one day, stand-in pass phrase). 7 unit tests in `image/test_nvidia.py`.
   - CI's first builds failed five times, each fixed in its own commit (ADR 0022, Follow-up): `kernel-devel-matched` from Koji too; `akmod-nvidia` installed with `tsflags=noscripts` (its `%post` builds as root); root's home made for `rpmrebuild`; this build's kmod installed with `_pkgverify_level digest` (Fedora 45's rpm wants a package signature); the open-module check wanted Dual MIT/GPL, but `nvidia-peermem` is Dual BSD/GPL.
   - **Done:** image run 41736790496 (for `bc9e062`) green: the `nvidia` job in 52 minutes (akmods about 90 s for five modules, signed with the throwaway key; lumen checks 14, NVIDIA checks 5, bootc lint; image 9.4 GB), the build job in 94, lint green.
+- 1.11c, 2026-11-04 (the key, 1.11a, still not made).
+  - `image/ci-disks.sh` (`make`, `check`, `boot` over an editions file) holds what the build job's three disk steps did; both jobs call it. The `nvidia` job makes, labels, checks and boots `lumen-nvidia:dev`'s qcow2 and keeps `boot-qcow2-nvidia`; its limit is now 120 minutes.
+  - `booted-disk.sh`, second boot, `VARIANT_ID=nvidia`: the kernel arguments, `nvidia-fallback.service` active, nouveau loaded and nvidia not; then `modprobe nvidia` must fail with "Key was rejected by service" (Secure Boot refuses a module whose key isn't enrolled). Both editions record "Display drivers".
 
 ---
 

@@ -316,114 +316,28 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
-      # The qcow2s the boot test starts (steps 1.9 and 1.10c), one per edition,
-      # each in its own folder: lumen's from the re-chunked image, the gaming
-      # edition's from its build above. image-builder installs an image on a
-      # disk with the image's own bootc, which records the name it is given as
-      # the image the system follows, so each gets the name its systems follow
-      # (ADR 0011): ghcr.io/<owner>/lumen:dev and lumen-gaming:dev.
-      # image/disk.toml adds the kernel argument that mounts the Btrfs root with
-      # compression (ADR 0016). $RUNNER_TEMP/editions lists them for the steps
-      # below: edition, image, name.
+      # The disk tests (steps 1.9 and 1.10c; image/ci-disks.sh): a qcow2 of each
+      # edition, lumen's from the re-chunked image and the gaming edition's from
+      # its build above, each named as its systems follow it (ADR 0011);
+      # labeled and checked read-only (ADR 0018); then booted twice in a VM
+      # with Secure Boot, to the first-run screen and the login screen within
+      # 60 s each with no failed units, and for the gaming edition with the
+      # Gamescope session offered (ADR 0017). The VM needs KVM, which the
+      # runners have (step 1.8b-3). $RUNNER_TEMP/editions lists the editions:
+      # edition, image, name.
       - name: Make the qcow2s
         run: |
           printf '%s\n' "lumen $LOCAL_IMAGE-rechunked $REGISTRY_IMAGE:dev" \
             "gaming localhost/lumen-gaming:ci $REGISTRY_IMAGE-gaming:dev" >"$RUNNER_TEMP/editions"
-          # osbuild mounts the new Btrfs root, which needs the host's module.
-          sudo modprobe btrfs
-          while read -r edition image name; do
-            dir=$RUNNER_TEMP/disk/$edition
-            mkdir -p "$dir"
-            sudo podman tag "$image" "$name"
-            sudo podman run --rm --privileged --security-opt label=type:unconfined_t \
-              --volume /var/lib/containers/storage:/var/lib/containers/storage \
-              --volume "$dir:/output" --volume "$PWD/image/disk.toml:/disk.toml:ro" \
-              "$IMAGE_BUILDER" build --output-dir /output --progress verbose \
-              --blueprint /disk.toml --bootc-ref "$name" qcow2 </dev/null
-            sudo podman untag "$image" "$name"
-            sudo find "$dir" -type f -exec ls -ls {} +
-          done <"$RUNNER_TEMP/editions"
-          df -h /
+          image/ci-disks.sh make "$RUNNER_TEMP/editions"
 
-      # image-builder runs bootc and bootupd where SELinux is off, so two
-      # files they write get no label; image/label-disk.sh gives them the ones
-      # an install from the ISO has (ADR 0018). Then image/check-disk.sh reads
-      # the disk read-only: the partitions, the boot files and those labels,
-      # and what the deployment follows. The boot test starts the qcow2 made
-      # again from the labeled disk. Each edition's disk is checked even when
-      # another's fails.
       - name: Label and check the qcow2s
         env:
           VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          status=0
-          while read -r edition image name; do
-            dir=$RUNNER_TEMP/disk/$edition
-            qcow2=$(sudo find "$dir" -name '*.qcow2' -printf '%P\n')
-            qemu_img() {
-              sudo podman run --rm --volume "$dir:/output" --entrypoint qemu-img "$IMAGE_BUILDER" "$@" </dev/null
-            }
-            qemu_img convert -O raw "/output/$qcow2" /output/check.raw
-            report=$RUNNER_TEMP/disk-report-$edition result=0
-            # shellcheck disable=SC2024
-            sudo image/label-disk.sh "$dir/check.raw" >"$report" 2>&1 </dev/null || result=$?
-            # shellcheck disable=SC2024
-            sudo image/check-disk.sh "$dir/check.raw" "$name" "$VERSION" >>"$report" 2>&1 </dev/null || result=$?
-            if ((result == 0)); then
-              qemu_img convert -O qcow2 /output/check.raw /output/labeled.qcow2
-              sudo mv "$dir/labeled.qcow2" "$dir/$qcow2"
-            else
-              status=1
-            fi
-            sudo rm "$dir/check.raw"
-            printf '%s (%s):\n' "$edition" "$image"
-            cat "$report"
-            # The backticks are Markdown, for the run's summary page.
-            # shellcheck disable=SC2016
-            {
-              printf '### The qcow2: %s\n\n```text\n' "$edition"
-              cat "$report"
-              printf '```\n'
-            } >>"$GITHUB_STEP_SUMMARY"
-          done <"$RUNNER_TEMP/editions"
-          exit "$status"
+        run: image/ci-disks.sh check "$RUNNER_TEMP/editions" "$VERSION"
 
-      # The boot test (steps 1.9 and 1.10c; spec, "Boot test"): start each
-      # qcow2 in a VM with Secure Boot and check, from inside, the first-run
-      # screen and the login screen within 60 s each, no failed units, and for
-      # the gaming edition that the login screen offers the Gamescope session
-      # (tests/boot/boot_disk.py, ADR 0017). The VM needs KVM, which the
-      # runners have (step 1.8b-3); its writes go to a snapshot, so the disk
-      # stays as image-builder made it. Each edition boots even when another's
-      # fails.
       - name: Boot the qcow2s
-        run: |
-          if [[ ! -c /dev/kvm ]]; then
-            echo "::error::This runner has no /dev/kvm, so it can't run the boot test's VM at a usable speed."
-            exit 1
-          fi
-          fedora=$(sed -n 's/^FROM //p' tests/lint/Containerfile)
-          sudo podman build --quiet --build-arg "FEDORA=$fedora" --tag localhost/lumen-boot tests/boot
-          status=0
-          while read -r edition _ name; do
-            dir=$RUNNER_TEMP/disk/$edition out=$RUNNER_TEMP/boot/$edition report=$RUNNER_TEMP/boot-report-$edition
-            qcow2=$(sudo find "$dir" -name '*.qcow2' -printf '%P\n')
-            mkdir -p "$out"
-            # The runner writes the report.
-            # shellcheck disable=SC2024
-            sudo podman run --rm --network=none --device /dev/kvm \
-              --volume "$dir:/disk:ro" --volume "$PWD:/src:ro" --volume "$out:/out" \
-              localhost/lumen-boot python3 /src/tests/boot/boot_disk.py --require-kvm "/disk/$qcow2" /out \
-              >"$report" 2>&1 </dev/null || status=1
-            printf '%s (%s):\n' "$edition" "$name"
-            cat "$report"
-            {
-              printf '### The boot test: %s\n\n```text\n' "$edition"
-              cat "$report"
-              printf '```\n'
-            } >>"$GITHUB_STEP_SUMMARY"
-          done <"$RUNNER_TEMP/editions"
-          exit "$status"
+        run: image/ci-disks.sh boot "$RUNNER_TEMP/editions"
 
       # The serial ports' and QEMU's logs and the screenshots of the boot
       # test, a folder per edition.
@@ -470,7 +384,14 @@ jobs:
   nvidia:
     name: Build the NVIDIA edition
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    # The edition took 52 minutes on 2026-11-03; its qcow2 and boot test add
+    # about 15.
+    timeout-minutes: 120
+    env:
+      REGISTRY_IMAGE: ghcr.io/${{ github.repository_owner }}/lumen
+      # As the build job's.
+      IMAGE_BUILDER: >-
+        ghcr.io/osbuild/image-builder-cli:v88.0.0@sha256:a0c38fa28181aca104b64465a1d21b385603ac62b184ced4041f467573a1534c
     steps:
       - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -505,6 +426,7 @@ jobs:
       # under another name, so it can't pass for it, and lives one day. Its
       # pass phrase is a stand-in: sign-file ignores it for a key without one.
       - name: Build the NVIDIA edition
+        id: nvidia
         run: |
           version=$(python3 image/build_version.py image/Containerfile)
           keys=$RUNNER_TEMP/module-key
@@ -529,6 +451,34 @@ jobs:
               --queryformat '%{NAME} %{VERSION}-%{RELEASE}\n' |
               grep -E '^(kmod-nvidia|xorg-x11-drv-nvidia)' | sed 's/^/- /'
           } >>"$GITHUB_STEP_SUMMARY"
+          printf 'version=%s\n' "$version" >>"$GITHUB_OUTPUT"
+
+      # The NVIDIA edition's disk test (step 1.11c; image/ci-disks.sh), as the
+      # build job's: its qcow2, named lumen-nvidia:dev, labeled and checked,
+      # then booted twice. The VM has no NVIDIA card and Lumen's key isn't
+      # enrolled, so nouveau must take over and the desktop still come up,
+      # and the kernel must refuse NVIDIA's module (risk 7).
+      - name: Make the qcow2
+        run: |
+          printf '%s\n' "nvidia localhost/lumen-nvidia:ci $REGISTRY_IMAGE-nvidia:dev" >"$RUNNER_TEMP/editions"
+          image/ci-disks.sh make "$RUNNER_TEMP/editions"
+
+      - name: Label and check the qcow2
+        env:
+          VERSION: ${{ steps.nvidia.outputs.version }}
+        run: image/ci-disks.sh check "$RUNNER_TEMP/editions" "$VERSION"
+
+      - name: Boot the qcow2
+        run: image/ci-disks.sh boot "$RUNNER_TEMP/editions"
+
+      - name: Keep the boot test's logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: boot-qcow2-nvidia
+          path: ${{ runner.temp }}/boot
+          retention-days: 7
+          if-no-files-found: ignore
 
   # Sign the pushed image and attach its SBOM, check both with the key and the
   # trust policy that ship in the image, then move dev to it (ADR 0008).
