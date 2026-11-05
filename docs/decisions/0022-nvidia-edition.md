@@ -32,6 +32,7 @@ The spec's `lumen-nvidia` image has NVIDIA's "proprietary driver as signed kmod,
 ## Consequences
 
 - The NVIDIA edition supports Turing and newer cards; older ones run on nouveau and `hardware.json` marks them amber (risk 7).
+- Users enrol Lumen's key once, with `mokutil` and the blue MokManager screen at the next start ([nvidia-secure-boot.md](../nvidia-secure-boot.md), step 1.12a); Settings does the first part for them from Phase 5.
 - Without the key enrolled, the NVIDIA edition still starts to a working desktop on nouveau, which step 1.11c tests on a machine with no NVIDIA card.
 - The build depends on RPM Fusion's mirrors and, when the mirrors have moved past the base's kernel, Koji; either being down fails the NVIDIA job, not `lumen`'s.
 - Each build of a branch runs a second runner for about an hour.

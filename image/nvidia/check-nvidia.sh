@@ -115,6 +115,19 @@ nouveau_fallback() {
   return "$status"
 }
 
+# What docs/nvidia-secure-boot.md asks users to run: mokutil to enrol the
+# key, openssl to check its fingerprint (step 1.12a).
+enrolment_tools() {
+  local tool status=0
+  for tool in mokutil openssl; do
+    command -v "$tool" >/dev/null || {
+      printf '%s is not installed\n' "$tool"
+      status=1
+    }
+  done
+  return "$status"
+}
+
 no_repository_left() {
   local found
   found=$(grep -lis rpmfusion /etc/yum.repos.d/*.repo)
@@ -139,6 +152,7 @@ printf 'Lumen NVIDIA edition checks\n'
 check "NVIDIA's driver is installed, and nothing that built its modules" packages
 check "The modules are NVIDIA's open ones, built for this kernel and signed with the image's certificate" modules
 check "Nouveau stays away from NVIDIA cards, and loads when NVIDIA's module doesn't" nouveau_fallback
+check "mokutil and openssl, which enrolling the key needs, are installed" enrolment_tools
 check "No RPM Fusion repository is left in the image" no_repository_left
 check "os-release names the NVIDIA edition" os_release
 
