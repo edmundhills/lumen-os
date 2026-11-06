@@ -25,8 +25,10 @@
 ARG LUMEN_LIVE_FROM=lumen
 
 # What the gaming edition builds on: the lumen stage of this build, unless
-# --build-arg LUMEN_GAMING_FROM=<image> names another. Step 1.12 puts the same
-# gaming layer on lumen-nvidia this way (docs/architecture.md, section 9.5).
+# --build-arg LUMEN_GAMING_FROM=<image> names another. Step 1.12b puts the same
+# gaming layer on lumen-nvidia this way (docs/architecture.md, section 9.5),
+# naming the image CI has just built: it must be an image, not another stage,
+# because Podman picks the stages a build needs from these defaults.
 ARG LUMEN_GAMING_FROM=lumen
 
 # What the NVIDIA edition builds on: the lumen stage of this build, unless

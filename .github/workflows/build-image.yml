@@ -426,9 +426,6 @@ jobs:
       # The throwaway key has the profile of Lumen's (image/nvidia/make-module-key.sh)
       # under another name, so it can't pass for it, and lives one day. Its
       # pass phrase is a stand-in: sign-file ignores it for a key without one.
-      # The gaming edition's build reuses lumen-nvidia's layers; it gets the
-      # same secrets in case it builds them again, so the key goes only after
-      # both.
       - name: Build the NVIDIA edition
         id: nvidia
         run: |
@@ -441,15 +438,13 @@ jobs:
             -noenc -keyout "$keys/key" -outform DER -out "$keys/cert" 2>/dev/null
           printf 'unused\n' >"$keys/password"
           printf '%s\n' "$keys" >"$RUNNER_TEMP/module-key-dir"
-          build() {
-            sudo podman build --file image/Containerfile \
-              --secret "id=module_signing_key,src=$keys/key" \
-              --secret "id=module_signing_cert,src=$keys/cert" \
-              --secret "id=module_signing_password,src=$keys/password" \
-              --build-arg LUMEN_BUILD_VERSION="$version" \
-              --build-arg LUMEN_COMMIT="$GITHUB_SHA" "$@" .
-          }
-          build --target lumen-nvidia --tag localhost/lumen-nvidia:ci
+          sudo podman build --file image/Containerfile --target lumen-nvidia \
+            --secret "id=module_signing_key,src=$keys/key" \
+            --secret "id=module_signing_cert,src=$keys/cert" \
+            --secret "id=module_signing_password,src=$keys/password" \
+            --build-arg LUMEN_BUILD_VERSION="$version" \
+            --build-arg LUMEN_COMMIT="$GITHUB_SHA" \
+            --tag localhost/lumen-nvidia:ci .
           sudo podman image ls localhost/lumen-nvidia:ci
           {
             printf '### The NVIDIA edition\n\n'
@@ -459,18 +454,26 @@ jobs:
           } >>"$GITHUB_STEP_SUMMARY"
           printf 'version=%s\n' "$version" >>"$GITHUB_OUTPUT"
 
-      # lumen-gaming-nvidia (step 1.12b): the lumen-gaming stage on
-      # lumen-nvidia, which adds NVIDIA's 32-bit libraries for Steam's games.
+      # Whatever happened above, the throwaway key goes now: nothing after
+      # this needs it.
+      - name: Remove the throwaway key
+        if: ${{ always() }}
+        run: |
+          if [[ -f $RUNNER_TEMP/module-key-dir ]]; then
+            keys=$(cat "$RUNNER_TEMP/module-key-dir")
+            rm -rf -- "${keys:?}" "$RUNNER_TEMP/module-key-dir"
+          fi
+
+      # lumen-gaming-nvidia (step 1.12b): the lumen-gaming stage on the
+      # lumen-nvidia image just built, which adds NVIDIA's 32-bit libraries for
+      # Steam's games. LUMEN_GAMING_FROM names the image, not the stage, which
+      # Podman wouldn't build (image/Containerfile).
       - name: Build the gaming edition on it
         env:
           VERSION: ${{ steps.nvidia.outputs.version }}
         run: |
-          keys=$(cat "$RUNNER_TEMP/module-key-dir")
           sudo podman build --file image/Containerfile --target lumen-gaming \
-            --build-arg LUMEN_GAMING_FROM=lumen-nvidia \
-            --secret "id=module_signing_key,src=$keys/key" \
-            --secret "id=module_signing_cert,src=$keys/cert" \
-            --secret "id=module_signing_password,src=$keys/password" \
+            --build-arg LUMEN_GAMING_FROM=localhost/lumen-nvidia:ci \
             --build-arg LUMEN_BUILD_VERSION="$VERSION" \
             --build-arg LUMEN_COMMIT="$GITHUB_SHA" \
             --tag localhost/lumen-gaming-nvidia:ci .
@@ -481,16 +484,6 @@ jobs:
               --queryformat '%{NAME}.%{ARCH} %{VERSION}-%{RELEASE}\n' |
               grep -E '^(steam|gamescope|xorg-x11-drv-nvidia-libs)\.' | sort | sed 's/^/- /'
           } >>"$GITHUB_STEP_SUMMARY"
-
-      # Whatever happened above, the throwaway key goes before the disks are
-      # made.
-      - name: Remove the throwaway key
-        if: ${{ always() }}
-        run: |
-          if [[ -f $RUNNER_TEMP/module-key-dir ]]; then
-            keys=$(cat "$RUNNER_TEMP/module-key-dir")
-            rm -rf -- "${keys:?}" "$RUNNER_TEMP/module-key-dir"
-          fi
 
       # The NVIDIA editions' disk tests (steps 1.11c and 1.12b; image/ci-disks.sh),
       # as the build job's: each qcow2, named after the image its systems
