@@ -24,6 +24,9 @@ enable snapper-timeline.timer
 enable snapper-cleanup.timer
 enable lumen-home-snapshots.service
 
+# The Flatpak apps Lumen comes with, Bottles first (step 1.13)
+enable lumen-flatpak-preinstall.timer
+
 # Power profiles through tuned (docs/architecture.md, Q2)
 enable tuned.service
 enable tuned-ppd.service

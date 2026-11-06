@@ -277,6 +277,33 @@ btrfs_compression() {
   fi
 }
 
+# Wine's ntsync driver is loaded, and anyone may open its device, Bottles'
+# and Steam's sandboxes included (step 1.13, lumen-ntsync.conf).
+ntsync_device() {
+  local mode
+  if [[ ! -c /dev/ntsync ]]; then
+    printf '/dev/ntsync is missing; lsmod says: %s\n' "$(lsmod | grep -w ntsync || echo 'not loaded')"
+    return 1
+  fi
+  mode=$(stat --format=%a /dev/ntsync)
+  if [[ $mode != 666 ]]; then
+    printf '/dev/ntsync has mode %s, not 666\n' "$mode"
+    return 1
+  fi
+}
+
+# The timer that installs Bottles and the other apps Lumen comes with, once
+# the system is online, is waiting (step 1.13). The VM has no network, so the
+# service itself only ever skips here.
+first_boot_apps() {
+  local state
+  state=$(systemctl is-active lumen-flatpak-preinstall.timer)
+  if [[ $state != active ]]; then
+    printf 'lumen-flatpak-preinstall.timer is %s, not active\n' "$state"
+    return 1
+  fi
+}
+
 # No SELinux denial since this boot started, in the journal or the audit log,
 # as the ISO's tests check.
 no_denials() {
@@ -317,6 +344,7 @@ if [[ ! -e $STATE ]]; then
   check "The first-run screen within $LOGIN_BUDGET s: Plasma Setup" first_run_screen
   check "No failed units" no_failed_units
   check "Btrfs mounted with zstd compression" btrfs_compression
+  check "Wine's ntsync driver: /dev/ntsync, open to anyone" ntsync_device
   check "No SELinux denials" no_denials
   boot_info "First-run screen"
   info "Follows" "$(bootc status --format=json 2>/dev/null | python3 -c 'import json,sys
@@ -350,9 +378,12 @@ if grep -qE '^VARIANT_ID=(gaming-)?nvidia$' /usr/lib/os-release; then
   check "No NVIDIA card or key: nouveau took over, NVIDIA's module isn't loaded" nouveau_fallback
   check "The kernel refuses NVIDIA's module until its key is enrolled" nvidia_refused
 fi
+check "The apps Lumen comes with, Bottles first, install once online: the timer waits" first_boot_apps
 check "No failed units" no_failed_units
 check "No SELinux denials" no_denials
 boot_info "Login screen"
+info "First-boot apps" "$(systemctl show --property=Result,ConditionResult lumen-flatpak-preinstall.service |
+  paste -sd ' ' -)"
 info "Sessions offered" "$(sessions_offered | paste -sd ';' -)"
 info "Display drivers" "$(for card in /sys/class/drm/card[0-9]; do
   [[ -e $card/device/driver ]] && basename "$(readlink -f "$card/device/driver")"

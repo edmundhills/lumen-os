@@ -1,0 +1,25 @@
+# SPDX-FileCopyrightText: 2026 Lumen OS contributors
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Installs the Flatpak apps Lumen comes with, from
+# /usr/share/flatpak/preinstall.d, into the system installation, as Flatpak's
+# own preinstall does it (man flatpak-preinstall). lumen-flatpak-preinstall.timer
+# starts it after each start, in the background. Without a network connection
+# it is skipped, not failed, and the next start tries again. Apps already
+# installed, or removed by the user, cost one quick check.
+
+[Unit]
+Description=Install the Flatpak apps that come with Lumen
+Documentation=man:flatpak-preinstall(1)
+Documentation=https://github.com/edmundhills/lumen-os/blob/main/image/README.md
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecCondition=/usr/bin/nm-online --quiet --timeout=60
+ExecStart=/usr/bin/flatpak preinstall --system --assumeyes --noninteractive
+Nice=19
+IOSchedulingClass=idle
+PrivateTmp=yes

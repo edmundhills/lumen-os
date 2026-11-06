@@ -344,7 +344,7 @@ The install media is a live ISO built from the Lumen image (ADR 0002), packed by
 - Install creates the app's own bottle with its recipe and runs the installer, by driving Bottles through its command-line tool (`bottles-cli`, run inside the Bottles Flatpak). The installer file reaches the sandbox through the document portal, so Bottles' permissions never widen. Whether `bottles-cli` can apply every recipe field (dependencies, DLL overrides, environment variables) is checked at step 7.5.
 - Nothing installs until the user presses a button (spec).
 
-**Bottles** (Flathub) runs each Windows app in its own bottle inside its Flatpak sandbox, with Bottles' default permissions (no home folder beyond Downloads). Settings → Apps → Windows apps and `lumen app list --windows` list the bottles; removing an app deletes its bottle. Games use Steam with Proton, Heroic or Lutris instead.
+**Bottles** (Flathub) comes on the first online start through Flatpak's preinstall, and `.exe` and `.msi` files open in it until the "Open Windows app" dialog exists ([ADR 0024](decisions/0024-windows-app-base.md)). It runs each Windows app in its own bottle inside its Flatpak sandbox, with Bottles' default permissions (no home folder beyond Downloads). Settings → Apps → Windows apps and `lumen app list --windows` list the bottles; removing an app deletes its bottle. Games use Steam with Proton, Heroic or Lutris instead.
 
 **Lumen Setup for Windows** runs on Windows before Lumen is on the machine, so it shares data with Lumen, not D-Bus:
 

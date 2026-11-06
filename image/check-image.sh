@@ -334,6 +334,62 @@ same_plasma_release() {
 }
 
 printf 'Lumen image checks\n'
+# Wine's ntsync driver loads at every start (step 1.13): a modules-load.d file
+# names it, and the image's kernel has it.
+ntsync() {
+  local file=/usr/lib/modules-load.d/lumen-ntsync.conf dir status=0
+  if ! grep -qx ntsync "$file"; then
+    printf '%s does not name ntsync\n' "$file"
+    status=1
+  fi
+  for dir in /usr/lib/modules/*/; do
+    if ! find "$dir" -name 'ntsync.ko*' | grep -q . && ! grep -qs '/ntsync\.ko$' "$dir/modules.builtin"; then
+      printf 'The kernel in %s has no ntsync module\n' "$dir"
+      status=1
+    fi
+  done
+  return "$status"
+}
+
+# Bottles comes on first boot (step 1.13): Flatpak can preinstall, the
+# preinstall list names Bottles, Flathub becomes a system remote on first use,
+# and Lumen's timer is the only unit that runs `flatpak preinstall`.
+first_boot_apps() {
+  local status=0 flathub=() others
+  if ! flatpak preinstall --help >/dev/null 2>&1; then
+    printf "Flatpak %s has no 'flatpak preinstall', which came in 1.17\n" "$(flatpak --version)"
+    status=1
+  fi
+  if ! grep -qxF '[Flatpak Preinstall com.usebottles.bottles]' /usr/share/flatpak/preinstall.d/lumen.preinstall; then
+    printf "/usr/share/flatpak/preinstall.d/lumen.preinstall doesn't name Bottles\n"
+    status=1
+  fi
+  # A .flatpakrepo in a remotes.d folder becomes a remote when Flatpak first
+  # runs; Flathub's must not be filtered.
+  mapfile -t flathub < <(grep -lxF 'Url=https://dl.flathub.org/repo/' /usr/share/flatpak/remotes.d/*.flatpakrepo \
+    /etc/flatpak/remotes.d/*.flatpakrepo 2>/dev/null)
+  if ((${#flathub[@]} == 0)); then
+    printf 'No remotes.d file sets up Flathub. The .flatpakrepo files in the image:\n'
+    find /usr/share/flatpak /etc/flatpak -name '*.flatpakrepo' -exec grep -H -E '^(Title|Url|Filter)=' {} + 2>&1
+    status=1
+  elif grep -H '^Filter=' "${flathub[@]}"; then
+    printf 'Flathub is filtered\n'
+    status=1
+  fi
+  others=$(grep -rlsF 'flatpak preinstall' /usr/lib/systemd/system /usr/lib/systemd/user /etc/systemd |
+    grep -v '/lumen-flatpak-preinstall\.service$')
+  if [[ -n $others ]]; then
+    printf 'Other units run flatpak preinstall too: %s\n' "$others"
+    status=1
+  fi
+  return "$status"
+}
+
+# .exe and .msi files open in Bottles (step 1.13, image/windows_apps.py).
+windows_apps() {
+  python3 "$here/windows_apps.py" check /
+}
+
 check "Overlay files are in place, owned and writable only by root" overlay_files
 check "Units that Lumen's presets enable are enabled" enabled_units
 check "Fedora's updaters and countme ping are masked" masked_units
@@ -348,6 +404,9 @@ check "Power modes use Lumen's tuned profiles, which don't run bootc" tuned_prof
 check "bootc install follows the image with its signatures checked" signed_installs
 check "mcelog, which supports no recent AMD processor, skips itself on one" mcelog_on_amd
 check "KWin and Plasma are the same release" same_plasma_release
+check "Wine's ntsync driver loads at every start" ntsync
+check "Bottles comes from Flathub after the first start, through flatpak preinstall" first_boot_apps
+check ".exe and .msi files open in Bottles" windows_apps
 
 printf '\nPassed: %d   Failed: %d\n' "$passes" "$failures"
 ((failures == 0))

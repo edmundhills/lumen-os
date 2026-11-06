@@ -1,0 +1,28 @@
+# SPDX-FileCopyrightText: 2026 Lumen OS contributors
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Lumen's default apps for file types (XDG MIME Applications). Windows
+# programs and installers open in Bottles (step 1.13), until Lumen's "Open
+# Windows app" dialog takes over in Phase 7 (spec, "Windows apps"). Bottles is
+# a Flatpak that comes on first boot; until it has, Plasma asks which app to
+# use. A user's own choice, in Settings or "Open With", goes in
+# ~/.config/mimeapps.list and wins. image/windows_apps.py checks that the
+# image's shared-mime-info gives .exe and .msi files types listed here, and
+# that no other list sets them.
+#
+# Bottles' desktop file declares application/x-ms-dos-executable and
+# application/x-msi. The added associations offer it for the other names an
+# .exe file can have too.
+
+[Added Associations]
+application/x-ms-dos-executable=com.usebottles.bottles.desktop;
+application/x-msdownload=com.usebottles.bottles.desktop;
+application/vnd.microsoft.portable-executable=com.usebottles.bottles.desktop;
+application/x-msi=com.usebottles.bottles.desktop;
+
+[Default Applications]
+application/x-ms-dos-executable=com.usebottles.bottles.desktop;
+application/x-msdownload=com.usebottles.bottles.desktop;
+application/vnd.microsoft.portable-executable=com.usebottles.bottles.desktop;
+application/x-msi=com.usebottles.bottles.desktop;

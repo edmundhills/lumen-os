@@ -1,0 +1,15 @@
+# SPDX-FileCopyrightText: 2026 Lumen OS contributors
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# The Flatpak apps that come with Lumen (spec, "Image contents": user apps are
+# Flatpaks preinstalled on first boot, not part of the image). Flatpak's own
+# preinstall reads this file (man flatpak-preinstall), and
+# lumen-flatpak-preinstall.timer runs it after each start. A user who removes
+# one of these apps keeps it removed. Step 1.13 brings Bottles; the other apps
+# come with Welcome and the Store.
+
+# Bottles runs Windows programs with Wine, each in its own bottle (spec,
+# "Windows apps"); .exe and .msi files open in it (/usr/share/applications/mimeapps.list).
+[Flatpak Preinstall com.usebottles.bottles]
+Branch=stable
