@@ -1,0 +1,8 @@
+# SPDX-FileCopyrightText: 2026 Lumen OS contributors
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# The NVIDIA edition's units (step 1.11b, ADR 0022). RPM Fusion ships
+# nvidia-fallback.service without enabling it: it loads nouveau when the NVIDIA
+# module didn't load, so the desktop works before Lumen's key is enrolled.
+enable nvidia-fallback.service

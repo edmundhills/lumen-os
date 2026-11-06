@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Lumen OS contributors
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Steam's question to the system, in the Gamescope session: is there a system
+# update? (step 1.10b, docs/decisions/0020-gamescope-session.md). Steam calls
+# this with -steamos3, as SteamOS has it:
+#   steamos-update --supports-duplicate-detection      should do nothing
+#   steamos-update [--enable-duplicate-detection] check
+#                                                      should check for an update
+#   steamos-update [--enable-duplicate-detection]      should apply one
+# Lumen's system updates are lumen-updated's (Phase 5), which applies them
+# safely and asks first, never Steam's. So the answer is always "no update":
+# exit status 7, which Steam reads as nothing to do (as ChimeraOS's script
+# answers when its own updater is missing).
+
+for arg in "$@"; do
+    if [[ $arg == --supports-duplicate-detection ]]; then
+        exit 0
+    fi
+done
+exit 7

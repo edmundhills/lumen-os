@@ -1,0 +1,46 @@
+# SPDX-FileCopyrightText: 2026 Lumen OS contributors
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# The Gamescope session's files (step 1.10b, docs/decisions/0020-gamescope-session.md):
+# Steam's Big Picture mode as a session on the login screen, from ChimeraOS's
+# gamescope-session and gamescope-session-steam (MIT). Fedora doesn't package
+# them. The lumen-gaming stage of image/Containerfile downloads each file from
+# its repository at the commit below, checks it against its SHA-256 and
+# installs it unchanged (image/gaming/session.py), so the image holds exactly
+# these files and a changed one stops the build.
+#
+# Each [[source]] is one repository at one commit. Each file has its path in
+# the repository, its SHA-256, and optionally the mode it gets (default 0644)
+# and where it goes in the image (default: the same path).
+#
+# Left out on purpose: gamescope-session's export-gpu, an interactive GPU
+# picker nothing calls, and gamescope-session-steam's SteamOS helpers
+# (steamos-update, jupiter-biosupdate, steamos-select-branch, the
+# steamos-polkit-helpers and their polkit policy org.chimeraos.update.policy),
+# which update ChimeraOS and a Steam Deck's firmware as root. Lumen's own
+# steamos-update (image/gaming/overlay) tells Steam there is no system update:
+# lumen-updated owns those (Phase 5). steam-http-loader, which hands links to
+# Steam, is left out too.
+
+[[source]]
+repository = "https://github.com/ChimeraOS/gamescope-session"
+commit = "73d2da84ace7f41006a0f85bd2fdb19ef593a464"
+files = [
+  { path = "usr/bin/gamescope-session-plus", mode = "0755", sha256 = "65843e8d92ce65bffb8374fef256f867a9cd4f746423aedb45c5e5b7eff02660" },
+  { path = "usr/share/gamescope-session-plus/gamescope-session-plus", mode = "0755", sha256 = "3671cbc698b05e6ae3e68492848af3fec33aa0fe64c2f94a5e3e3395b498e636" },
+  { path = "usr/share/gamescope-session-plus/device-quirks", sha256 = "ec8e2072edee9184fcf3ad9d56f3c58d015d0888250772e7113c28eed13c842b" },
+  { path = "usr/lib/systemd/user/gamescope-session-plus@.service", sha256 = "9b2d46b5ce484889a59b1a56c80092137ee80e979b8b9b8cb30c4bb3775757f2" },
+  { path = "usr/share/gamescope/scripts/50-custom/50-disable-explicit-sync.lua", sha256 = "e662f171bb06c63669dd3a539934164a13601ff9f4944f6953e7ed6c6a33f418" },
+  { path = "LICENSE", install = "usr/share/licenses/gamescope-session/LICENSE", sha256 = "d62fc383576f96d7771cebc2ef27b6ec9f372a96534f908f9c9cc5aed5e2a0a4" },
+]
+
+[[source]]
+repository = "https://github.com/ChimeraOS/gamescope-session-steam"
+commit = "1a3fdb7fa15a4bba7204bef69702b7a10a297828"
+files = [
+  { path = "usr/share/wayland-sessions/gamescope-session-steam.desktop", sha256 = "5191ce561bc06731d37b6c5ece251a24954d670e4173c7a669611e1a7edb7faf" },
+  { path = "usr/share/gamescope-session-plus/sessions.d/steam", sha256 = "d55d3759bae1a432406ace1ea78829134ec8e8b0e6f40c8a8c109effab5bda3c" },
+  { path = "usr/bin/steamos-session-select", mode = "0755", sha256 = "07d31397668c43c34887e1f0c79204f079887b1ad5e28863ee97545e1f4f1f3e" },
+  { path = "LICENSE", install = "usr/share/licenses/gamescope-session-steam/LICENSE", sha256 = "60b224211e8d9528b25a62f580c6096f7a7c6df66798606c9290c86e1bb06d29" },
+]

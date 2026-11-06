@@ -4,23 +4,25 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Check the gaming edition: what the lumen-gaming stage of image/Containerfile
-# adds to the lumen image is in place, and nothing it leaves behind is (step
-# 1.10a, docs/decisions/0019-gaming-edition.md).
+# adds to the lumen image, or to lumen-nvidia for lumen-gaming-nvidia, is in
+# place, and nothing it leaves behind is (steps 1.10a and 1.12b,
+# docs/decisions/0019-gaming-edition.md).
 #
-# Usage: bash check-gaming.sh MULTILIB_PY
+# Usage: bash check-gaming.sh IMAGE_DIR
 #
 # The lumen-gaming stage runs this inside the image it is building, after
-# image/check-image.sh and just before `bootc container lint`, with the path of
-# image/multilib.py. Exits 0 when every check passes, 1 otherwise, which stops
-# the build.
+# image/check-image.sh and just before `bootc container lint`, with the
+# checkout's image/ folder as IMAGE_DIR, for multilib.py and the Gamescope
+# session's manifest (step 1.10b). Exits 0 when every check passes, 1
+# otherwise, which stops the build.
 
 set -u
 
-if (($# != 1)) || [[ ! -f $1 ]]; then
-  printf 'Usage: %s MULTILIB_PY\n' "${0##*/}" >&2
+if (($# != 1)) || [[ ! -f $1/multilib.py || ! -f $1/gaming/session.toml ]]; then
+  printf 'Usage: %s IMAGE_DIR\n' "${0##*/}" >&2
   exit 2
 fi
-readonly multilib=$1
+readonly multilib=$1/multilib.py session=$1/gaming/session.py manifest=$1/gaming/session.toml
 
 # Checking the image must not change it (image/Containerfile).
 export PYTHONDONTWRITEBYTECODE=1
@@ -100,10 +102,14 @@ no_repository_left() {
   fi
 }
 
-# os-release names the edition (image/os-release.sh).
+# os-release names the edition (image/os-release.sh): Gaming, or on the NVIDIA
+# edition both (step 1.12b).
 os_release() {
-  local want status=0
-  for want in 'VARIANT_ID=gaming' 'VARIANT="Gaming"' 'IMAGE_ID=lumen-gaming'; do
+  local want status=0 wants=('VARIANT_ID=gaming' 'VARIANT="Gaming"' 'IMAGE_ID=lumen-gaming')
+  if rpm --query --quiet xorg-x11-drv-nvidia; then
+    wants=('VARIANT_ID=gaming-nvidia' 'VARIANT="Gaming, NVIDIA"' 'IMAGE_ID=lumen-gaming-nvidia')
+  fi
+  for want in "${wants[@]}"; do
     if ! grep -qxF -- "$want" /usr/lib/os-release; then
       printf '/usr/lib/os-release has no line %s\n' "$want"
       status=1
@@ -132,13 +138,89 @@ programs() {
   return "$status"
 }
 
+# The Gamescope session is on the login screen: Plasma Login Manager lists
+# /usr/share/wayland-sessions, and the entry's program, its user unit and the
+# Steam session's settings are in place (step 1.10b).
+gamescope_session() {
+  local entry=/usr/share/wayland-sessions/gamescope-session-steam.desktop exec program want status=0
+  if [[ ! -f $entry ]]; then
+    printf '%s is missing\n' "$entry"
+    return 1
+  fi
+  exec=$(sed -n 's/^Exec=//p' "$entry")
+  program=${exec%% *}
+  if [[ $exec != "gamescope-session-plus steam" ]] || ! command -v "$program" >/dev/null; then
+    printf 'The session runs "%s", not gamescope-session-plus steam from PATH\n' "$exec"
+    status=1
+  fi
+  for want in /usr/lib/systemd/user/gamescope-session-plus@.service \
+    /usr/share/gamescope-session-plus/gamescope-session-plus /usr/share/gamescope-session-plus/sessions.d/steam; do
+    [[ -f $want ]] || {
+      printf '%s is missing\n' "$want"
+      status=1
+    }
+  done
+  return "$status"
+}
+
+# The session's files are ChimeraOS's at the pinned commits, unchanged, with
+# their licences (image/gaming/session.toml).
+session_files() { python3 "$session" verify "$manifest"; }
+
+# None of SteamOS's update and firmware helpers are in the image, and Steam's
+# question about system updates gets Lumen's answer: none, from Steam
+# (lumen-updated owns them).
+no_steamos_helpers() {
+  local path status=0 answer
+  for path in /usr/bin/jupiter-biosupdate /usr/bin/steamos-select-branch /usr/bin/steamos-polkit-helpers \
+    /usr/share/polkit-1/actions/org.chimeraos.update.policy; do
+    if [[ -e $path ]]; then
+      printf '%s is in the image\n' "$path"
+      status=1
+    fi
+  done
+  steamos-update check
+  answer=$?
+  if ((answer != 7)); then
+    printf 'steamos-update check exits %d, not 7 (no update)\n' "$answer"
+    status=1
+  fi
+  if ! steamos-update --supports-duplicate-detection; then
+    printf 'steamos-update --supports-duplicate-detection fails\n'
+    status=1
+  fi
+  return "$status"
+}
+
+# On the NVIDIA edition, Steam's 32-bit games get NVIDIA's 32-bit libraries,
+# at the 64-bit driver's version (image/gaming/nvidia.toml; same_32bit_builds
+# checks the version). Without NVIDIA's driver, the repository the stage turns
+# on for them must have brought none of NVIDIA's packages.
+nvidia_32bit() {
+  if ! rpm --query --quiet xorg-x11-drv-nvidia; then
+    if rpm --query --quiet xorg-x11-drv-nvidia-libs; then
+      printf "xorg-x11-drv-nvidia-libs is installed, but NVIDIA's driver isn't\n"
+      return 1
+    fi
+    return 0
+  fi
+  if ! rpm --query --quiet xorg-x11-drv-nvidia-libs.i686; then
+    printf "NVIDIA's 32-bit libraries, xorg-x11-drv-nvidia-libs.i686, are not installed\n"
+    return 1
+  fi
+}
+
 printf 'Lumen gaming edition checks\n'
 check "Steam (RPM Fusion's), steam-devices, Gamescope, MangoHud and GameMode are installed" packages
 check "Controller udev rules give the devices to the user at the seat" controller_rules
 check "Every 32-bit package is the build of its 64-bit twin" same_32bit_builds
 check "No RPM Fusion repository is left in the image" no_repository_left
 check "os-release names the gaming edition" os_release
+check "NVIDIA's 32-bit libraries for Steam's games on the NVIDIA edition, and none without it" nvidia_32bit
 check "Steam, Gamescope, MangoHud and GameMode's programs are in place" programs
+check "The Gamescope session is on the login screen" gamescope_session
+check "The session's files are ChimeraOS's, at the pinned commits" session_files
+check "No SteamOS update or firmware helpers; steamos-update says there is no update" no_steamos_helpers
 
 printf '\nPassed: %d   Failed: %d\n' "$passes" "$failures"
 ((failures == 0))

@@ -1,0 +1,29 @@
+# SPDX-FileCopyrightText: 2026 Lumen OS contributors
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# The NVIDIA edition's packages (step 1.11b, docs/decisions/0022-nvidia-edition.md):
+# what the lumen-nvidia stage of image/Containerfile adds to the lumen image,
+# in the format of image/packages.toml. NVIDIA's user-space driver comes from
+# RPM Fusion's nonfree repositories, limited to it; the kernel modules come
+# from the kmods stage, built with akmods against the image's kernel and signed
+# with Lumen's key, and the stage installs them first, so nothing here pulls in
+# akmod-nvidia and its compiler.
+
+# No package the image has changes, and any 32-bit package matches its 64-bit
+# twin (image/multilib.py).
+exact_32bit = true
+
+[nvidia]
+install = [
+  # NVIDIA's driver: the user-space libraries (OpenGL, Vulkan, EGL for
+  # Wayland), the X and Wayland pieces, nvidia-fallback.service, and the files
+  # that keep nouveau and nova away from NVIDIA cards
+  "xorg-x11-drv-nvidia",
+  # Suspend, resume and hibernate with the card's memory kept, and Dynamic
+  # Boost on laptops (nvidia-powerd)
+  "xorg-x11-drv-nvidia-power",
+  # CUDA's and the video engines' libraries: hardware video encoding and
+  # decoding (NVENC, NVDEC) for apps such as OBS and Steam's streaming
+  "xorg-x11-drv-nvidia-cuda-libs",
+]

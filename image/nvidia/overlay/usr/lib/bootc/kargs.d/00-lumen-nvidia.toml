@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: 2026 Lumen OS contributors
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# NVIDIA's driver, not nouveau or nova, drives NVIDIA cards in the NVIDIA
+# edition: the kernel arguments RPM Fusion's xorg-x11-drv-nvidia sets with
+# grubby on other Fedora systems, which bootc applies from here when it
+# installs or switches to the image (step 1.11b, ADR 0022). When the NVIDIA
+# module didn't load, such as before Lumen's key is enrolled as a MOK,
+# nvidia-fallback.service loads nouveau before the login screen starts, so the
+# desktop still works.
+kargs = ["rd.driver.blacklist=nouveau,nova_core", "modprobe.blacklist=nouveau,nova_core"]

@@ -3,8 +3,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # RPM Fusion's nonfree repositories for Fedora, as the lumen-gaming stage of
-# image/Containerfile uses them for one step: turned on, and limited to Steam
-# with includepkgs, so nothing else can come from them (step 1.10a,
+# image/Containerfile uses them for one step: turned on, and limited with
+# includepkgs to Steam and, on the NVIDIA edition, NVIDIA's 32-bit libraries
+# (image/gaming/nvidia.toml), so nothing else can come from them (step 1.10a,
 # docs/decisions/0019-gaming-edition.md). The stage copies this file into
 # /etc/yum.repos.d and deletes it again in the same step, so the image keeps no
 # repository. The definitions are RPM Fusion's own (rpmfusion-nonfree.repo and
@@ -13,20 +14,20 @@
 # checks against keys.sha256 first.
 
 [lumen-rpmfusion-nonfree]
-name=RPM Fusion for Fedora $releasever - Nonfree, Steam only
+name=RPM Fusion for Fedora $releasever - Nonfree, Steam and NVIDIA's 32-bit libraries
 metalink=https://mirrors.rpmfusion.org/metalink?repo=nonfree-fedora-$releasever&arch=$basearch
 enabled=1
-includepkgs=steam
+includepkgs=steam,xorg-x11-drv-nvidia-libs
 type=rpm-md
 gpgcheck=1
 repo_gpgcheck=0
 gpgkey=file:///run/lumen/gaming/RPM-GPG-KEY-rpmfusion-nonfree-fedora-2020
 
 [lumen-rpmfusion-nonfree-updates]
-name=RPM Fusion for Fedora $releasever - Nonfree - Updates, Steam only
+name=RPM Fusion for Fedora $releasever - Nonfree - Updates, Steam and NVIDIA's 32-bit libraries
 metalink=https://mirrors.rpmfusion.org/metalink?repo=nonfree-fedora-updates-released-$releasever&arch=$basearch
 enabled=1
-includepkgs=steam
+includepkgs=steam,xorg-x11-drv-nvidia-libs
 type=rpm-md
 gpgcheck=1
 repo_gpgcheck=0

@@ -1,0 +1,31 @@
+# SPDX-FileCopyrightText: 2026 Lumen OS contributors
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# RPM Fusion's nonfree repositories for Fedora, as the kmods and lumen-nvidia
+# stages of image/Containerfile use them, each for one step: turned on and
+# limited with includepkgs to NVIDIA's driver and what it needs from RPM
+# Fusion, so nothing else can come from them (step 1.11b,
+# docs/decisions/0022-nvidia-edition.md). The definitions are RPM Fusion's own,
+# as image/gaming/rpmfusion-nonfree.repo says, and so is the key, which the
+# stages mount from image/gaming and check against image/gaming/keys.sha256.
+
+[lumen-rpmfusion-nonfree]
+name=RPM Fusion for Fedora $releasever - Nonfree, NVIDIA's driver only
+metalink=https://mirrors.rpmfusion.org/metalink?repo=nonfree-fedora-$releasever&arch=$basearch
+enabled=1
+includepkgs=akmod-nvidia,xorg-x11-drv-nvidia*,nvidia-modprobe,nvidia-persistenced,nvidia-settings
+type=rpm-md
+gpgcheck=1
+repo_gpgcheck=0
+gpgkey=file:///run/lumen/nvidia/RPM-GPG-KEY-rpmfusion-nonfree-fedora-2020
+
+[lumen-rpmfusion-nonfree-updates]
+name=RPM Fusion for Fedora $releasever - Nonfree - Updates, NVIDIA's driver only
+metalink=https://mirrors.rpmfusion.org/metalink?repo=nonfree-fedora-updates-released-$releasever&arch=$basearch
+enabled=1
+includepkgs=akmod-nvidia,xorg-x11-drv-nvidia*,nvidia-modprobe,nvidia-persistenced,nvidia-settings
+type=rpm-md
+gpgcheck=1
+repo_gpgcheck=0
+gpgkey=file:///run/lumen/nvidia/RPM-GPG-KEY-rpmfusion-nonfree-fedora-2020

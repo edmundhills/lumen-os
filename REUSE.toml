@@ -40,3 +40,10 @@ SPDX-License-Identifier = "BSD-1-Clause"
 path = "image/gaming/keys.sha256"
 SPDX-FileCopyrightText = "2026 Lumen OS contributors"
 SPDX-License-Identifier = "GPL-3.0-or-later"
+
+# Lumen's kernel module signing certificate, a DER file that tools read whole
+# (step 1.11a, ADR 0021).
+[[annotations]]
+path = "image/nvidia/module-signing.der"
+SPDX-FileCopyrightText = "2026 Lumen OS contributors"
+SPDX-License-Identifier = "GPL-3.0-or-later"

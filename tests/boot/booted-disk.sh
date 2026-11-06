@@ -156,6 +156,79 @@ first_run_screen() { on_screen "Plasma Setup" user plasma-setup; }
 # session of the class "greeter" (ADR 0005).
 login_screen() { on_screen "the greeter" greeter; }
 
+# The sessions the login screen offers: Plasma Login Manager lists each entry
+# in /usr/share/wayland-sessions that isn't hidden and whose TryExec, if it
+# names one, is installed. One line per session: its name and file.
+sessions_offered() {
+  local entry tryexec
+  for entry in /usr/share/wayland-sessions/*.desktop; do
+    [[ -f $entry ]] || continue
+    grep -qiE '^(Hidden|NoDisplay)=true' "$entry" && continue
+    tryexec=$(sed -n 's/^TryExec=//p' "$entry")
+    [[ -z $tryexec ]] || command -v "$tryexec" >/dev/null || continue
+    printf '%s (%s)\n' "$(sed -n 's/^Name=//p' "$entry" | head -n 1)" "${entry##*/}"
+  done
+}
+
+# The gaming edition's login screen offers the Gamescope session, and what it
+# starts is installed (step 1.10c, ADR 0020).
+gamescope_session_offered() {
+  local program status=0
+  if ! sessions_offered | grep -qF '(gamescope-session-steam.desktop)'; then
+    printf 'The login screen offers no Gamescope session. It offers:\n%s\n' "$(sessions_offered)"
+    status=1
+  fi
+  for program in gamescope-session-plus gamescope steam; do
+    command -v "$program" >/dev/null || {
+      printf '%s is not installed\n' "$program"
+      status=1
+    }
+  done
+  return "$status"
+}
+
+# The NVIDIA edition with no NVIDIA card and Lumen's key not enrolled, as in
+# this VM (step 1.11c, risk 7): the kernel arguments keep nouveau out until
+# nvidia-fallback.service loads it, which it did, and NVIDIA's module isn't
+# loaded.
+nouveau_fallback() {
+  local status=0
+  if [[ $(</proc/cmdline) != *rd.driver.blacklist=nouveau,nova_core* ]]; then
+    printf "The kernel arguments don't keep nouveau and nova out: %s\n" "$(</proc/cmdline)"
+    status=1
+  fi
+  if [[ $(systemctl is-active nvidia-fallback.service) != active ]]; then
+    printf 'nvidia-fallback.service is %s, not active:\n' "$(systemctl is-active nvidia-fallback.service)"
+    systemctl status --no-pager --lines=8 nvidia-fallback.service 2>&1 | head -n 14
+    status=1
+  fi
+  if [[ ! -d /sys/module/nouveau ]]; then
+    printf 'nouveau is not loaded\n'
+    status=1
+  fi
+  if [[ -d /sys/module/nvidia ]]; then
+    printf "NVIDIA's module is loaded, on a machine with no NVIDIA card\n"
+    status=1
+  fi
+  return "$status"
+}
+
+# Under Secure Boot the kernel loads only modules signed by a key it trusts:
+# NVIDIA's, signed with a key this machine hasn't enrolled as a MOK, must be
+# refused (ADR 0021). Runs after nouveau_fallback, which it would disturb only
+# if the kernel wrongly took the module.
+nvidia_refused() {
+  local out
+  if out=$(modprobe nvidia 2>&1); then
+    printf "The kernel loaded NVIDIA's module, though its key isn't enrolled\n"
+    return 1
+  fi
+  if [[ $out != *"Key was rejected by service"* ]]; then
+    printf "modprobe nvidia failed, but not for the key: %s\n" "$out"
+    return 1
+  fi
+}
+
 # Finish Plasma Setup as its wizard does when someone completes it
 # (plasma-setup's src/auth/authhelper.cpp): create the first user with
 # useradd -m -U, create /etc/plasma-setup-done, which stops
@@ -270,9 +343,20 @@ read -r passes failures <"$STATE"
 printf 'LUMEN-CHECKS-SECOND-BOOT\n'
 printf '\nThe second boot, with a user\n'
 check "The login screen within $LOGIN_BUDGET s: Plasma Login Manager's greeter" login_screen
+if grep -qE '^VARIANT_ID=gaming(-nvidia)?$' /usr/lib/os-release; then
+  check "The login screen offers the Gamescope session (Steam Big Picture)" gamescope_session_offered
+fi
+if grep -qE '^VARIANT_ID=(gaming-)?nvidia$' /usr/lib/os-release; then
+  check "No NVIDIA card or key: nouveau took over, NVIDIA's module isn't loaded" nouveau_fallback
+  check "The kernel refuses NVIDIA's module until its key is enrolled" nvidia_refused
+fi
 check "No failed units" no_failed_units
 check "No SELinux denials" no_denials
 boot_info "Login screen"
+info "Sessions offered" "$(sessions_offered | paste -sd ';' -)"
+info "Display drivers" "$(for card in /sys/class/drm/card[0-9]; do
+  [[ -e $card/device/driver ]] && basename "$(readlink -f "$card/device/driver")"
+done | paste -sd ' ' -)"
 show_denials
 
 printf '\nPassed: %d   Failed: %d\n' "$passes" "$failures"

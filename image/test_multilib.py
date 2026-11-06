@@ -116,6 +116,32 @@ class Signatures(unittest.TestCase):
             self.assertEqual(runs[-1], ["rpmkeys", "--import", str(key)])
 
 
+class FetchLike(unittest.TestCase):
+    def test_kernel_devel_at_the_kernels_version_from_koji(self):
+        calls = []
+
+        def run(cmd, **kwargs):
+            calls.append(cmd)
+            if cmd[:2] == ["rpm", "--query"] and cmd[3] == multilib.QUERY:
+                return subprocess.CompletedProcess(cmd, 0, stdout="kernel-core x86_64 0:7.2.13-300.fc45\n", stderr="")
+            if cmd[:2] == ["rpm", "--query"]:
+                return subprocess.CompletedProcess(
+                    cmd, 0, stdout="kernel-7.2.13-300.fc45.src.rpm\nRSA/SHA256, Mon, Key ID 829b6066c8ac4916\n", stderr="")
+            if "download" in cmd:
+                return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="")  # The mirrors have moved on.
+            if cmd[:2] == ["rpmkeys", "--checksig"]:
+                return subprocess.CompletedProcess(cmd, 0, stdout="x: digests signatures OK\n", stderr="")
+            return subprocess.CompletedProcess(cmd, 0, stdout="45\n", stderr="")
+        with (mock.patch.object(multilib.subprocess, "run", side_effect=run),
+              mock.patch.object(multilib.glob, "glob", return_value=[])):
+            path = multilib.fetch_like("kernel-devel", "kernel-core", "/d")
+        self.assertEqual(path, "/d/kernel-devel-7.2.13-300.fc45.x86_64.rpm")
+        curl = next(c for c in calls if c[0] == "curl")
+        self.assertEqual(curl[-1], "https://kojipkgs.fedoraproject.org/packages/kernel/7.2.13/300.fc45/data/signed/"
+                                   "c8ac4916/x86_64/kernel-devel-7.2.13-300.fc45.x86_64.rpm")
+        self.assertIn(["rpmkeys", "--checksig", path], calls)
+
+
 class Install(unittest.TestCase):
     """install() with dnf, rpm and curl stood in: the mirrors have an older Mesa than dnf picks first."""
 
