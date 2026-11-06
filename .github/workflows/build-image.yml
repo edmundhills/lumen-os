@@ -374,19 +374,20 @@ jobs:
             printf -- '- Tags: `dev-%s`, `sha-%s`. `dev` moves once the image is signed.\n' "$VERSION" "$GITHUB_SHA"
           } >>"$GITHUB_STEP_SUMMARY"
 
-  # The NVIDIA edition (step 1.11b, ADR 0022), on a runner of its own: it
-  # builds the lumen stage again, from the same commit and bases, and then the
-  # kmods and lumen-nvidia stages, which would take the build job past its
-  # time limit. Every build signs the modules with a throwaway key made here,
-  # so the signing runs and is checked on every build; builds of main sign with
-  # Lumen's key once step 1.11c brings it in (ADR 0021). Nothing is pushed yet
-  # (step 1.12).
+  # The NVIDIA editions (steps 1.11b and 1.12b, ADRs 0022 and 0019), on a
+  # runner of their own: it builds the lumen stage again, from the same commit
+  # and bases, then the kmods and lumen-nvidia stages, and the gaming layer on
+  # lumen-nvidia, which would take the build job past its time limit. Every
+  # build signs the modules with a throwaway key made here, so the signing runs
+  # and is checked on every build; builds of main sign with Lumen's key once
+  # step 1.11c brings it in (ADR 0021). Nothing is pushed yet (step 1.12c).
   nvidia:
-    name: Build the NVIDIA edition
+    name: Build the NVIDIA editions
     runs-on: ubuntu-24.04
-    # The edition took 52 minutes on 2026-11-03; its qcow2 and boot test add
-    # about 15.
-    timeout-minutes: 120
+    # lumen-nvidia took 52 minutes on 2026-11-03 and its qcow2 and boot test
+    # 17; the gaming layer took 15 in the build job, and its disk test adds
+    # as much again.
+    timeout-minutes: 150
     env:
       REGISTRY_IMAGE: ghcr.io/${{ github.repository_owner }}/lumen
       # As the build job's.
@@ -425,6 +426,9 @@ jobs:
       # The throwaway key has the profile of Lumen's (image/nvidia/make-module-key.sh)
       # under another name, so it can't pass for it, and lives one day. Its
       # pass phrase is a stand-in: sign-file ignores it for a key without one.
+      # The gaming edition's build reuses lumen-nvidia's layers; it gets the
+      # same secrets in case it builds them again, so the key goes only after
+      # both.
       - name: Build the NVIDIA edition
         id: nvidia
         run: |
@@ -436,14 +440,16 @@ jobs:
             -addext "basicConstraints=critical,CA:FALSE" -addext "keyUsage=digitalSignature" \
             -noenc -keyout "$keys/key" -outform DER -out "$keys/cert" 2>/dev/null
           printf 'unused\n' >"$keys/password"
-          sudo podman build --file image/Containerfile --target lumen-nvidia \
-            --secret "id=module_signing_key,src=$keys/key" \
-            --secret "id=module_signing_cert,src=$keys/cert" \
-            --secret "id=module_signing_password,src=$keys/password" \
-            --build-arg LUMEN_BUILD_VERSION="$version" \
-            --build-arg LUMEN_COMMIT="$GITHUB_SHA" \
-            --tag localhost/lumen-nvidia:ci .
-          rm -rf "$keys"
+          printf '%s\n' "$keys" >"$RUNNER_TEMP/module-key-dir"
+          build() {
+            sudo podman build --file image/Containerfile \
+              --secret "id=module_signing_key,src=$keys/key" \
+              --secret "id=module_signing_cert,src=$keys/cert" \
+              --secret "id=module_signing_password,src=$keys/password" \
+              --build-arg LUMEN_BUILD_VERSION="$version" \
+              --build-arg LUMEN_COMMIT="$GITHUB_SHA" "$@" .
+          }
+          build --target lumen-nvidia --tag localhost/lumen-nvidia:ci
           sudo podman image ls localhost/lumen-nvidia:ci
           {
             printf '### The NVIDIA edition\n\n'
@@ -453,22 +459,58 @@ jobs:
           } >>"$GITHUB_STEP_SUMMARY"
           printf 'version=%s\n' "$version" >>"$GITHUB_OUTPUT"
 
-      # The NVIDIA edition's disk test (step 1.11c; image/ci-disks.sh), as the
-      # build job's: its qcow2, named lumen-nvidia:dev, labeled and checked,
-      # then booted twice. The VM has no NVIDIA card and Lumen's key isn't
-      # enrolled, so nouveau must take over and the desktop still come up,
-      # and the kernel must refuse NVIDIA's module (risk 7).
-      - name: Make the qcow2
+      # lumen-gaming-nvidia (step 1.12b): the lumen-gaming stage on
+      # lumen-nvidia, which adds NVIDIA's 32-bit libraries for Steam's games.
+      - name: Build the gaming edition on it
+        env:
+          VERSION: ${{ steps.nvidia.outputs.version }}
         run: |
-          printf '%s\n' "nvidia localhost/lumen-nvidia:ci $REGISTRY_IMAGE-nvidia:dev" >"$RUNNER_TEMP/editions"
+          keys=$(cat "$RUNNER_TEMP/module-key-dir")
+          sudo podman build --file image/Containerfile --target lumen-gaming \
+            --build-arg LUMEN_GAMING_FROM=lumen-nvidia \
+            --secret "id=module_signing_key,src=$keys/key" \
+            --secret "id=module_signing_cert,src=$keys/cert" \
+            --secret "id=module_signing_password,src=$keys/password" \
+            --build-arg LUMEN_BUILD_VERSION="$VERSION" \
+            --build-arg LUMEN_COMMIT="$GITHUB_SHA" \
+            --tag localhost/lumen-gaming-nvidia:ci .
+          sudo podman image ls localhost/lumen-gaming-nvidia:ci
+          {
+            printf '### The gaming edition on the NVIDIA edition\n\n'
+            sudo podman run --rm --entrypoint rpm localhost/lumen-gaming-nvidia:ci --query --all \
+              --queryformat '%{NAME}.%{ARCH} %{VERSION}-%{RELEASE}\n' |
+              grep -E '^(steam|gamescope|xorg-x11-drv-nvidia-libs)\.' | sort | sed 's/^/- /'
+          } >>"$GITHUB_STEP_SUMMARY"
+
+      # Whatever happened above, the throwaway key goes before the disks are
+      # made.
+      - name: Remove the throwaway key
+        if: ${{ always() }}
+        run: |
+          if [[ -f $RUNNER_TEMP/module-key-dir ]]; then
+            keys=$(cat "$RUNNER_TEMP/module-key-dir")
+            rm -rf -- "${keys:?}" "$RUNNER_TEMP/module-key-dir"
+          fi
+
+      # The NVIDIA editions' disk tests (steps 1.11c and 1.12b; image/ci-disks.sh),
+      # as the build job's: each qcow2, named after the image its systems
+      # follow, labeled and checked, then booted twice. The VM has no NVIDIA
+      # card and Lumen's key isn't enrolled, so nouveau must take over and the
+      # desktop still come up, and the kernel must refuse NVIDIA's module
+      # (risk 7); the gaming edition's login screen must offer its session.
+      - name: Make the qcow2s
+        run: |
+          printf '%s\n' "nvidia localhost/lumen-nvidia:ci $REGISTRY_IMAGE-nvidia:dev" \
+            "gaming-nvidia localhost/lumen-gaming-nvidia:ci $REGISTRY_IMAGE-gaming-nvidia:dev" \
+            >"$RUNNER_TEMP/editions"
           image/ci-disks.sh make "$RUNNER_TEMP/editions"
 
-      - name: Label and check the qcow2
+      - name: Label and check the qcow2s
         env:
           VERSION: ${{ steps.nvidia.outputs.version }}
         run: image/ci-disks.sh check "$RUNNER_TEMP/editions" "$VERSION"
 
-      - name: Boot the qcow2
+      - name: Boot the qcow2s
         run: image/ci-disks.sh boot "$RUNNER_TEMP/editions"
 
       - name: Keep the boot test's logs

@@ -343,10 +343,10 @@ read -r passes failures <"$STATE"
 printf 'LUMEN-CHECKS-SECOND-BOOT\n'
 printf '\nThe second boot, with a user\n'
 check "The login screen within $LOGIN_BUDGET s: Plasma Login Manager's greeter" login_screen
-if grep -qx 'VARIANT_ID=gaming' /usr/lib/os-release; then
+if grep -qE '^VARIANT_ID=gaming(-nvidia)?$' /usr/lib/os-release; then
   check "The login screen offers the Gamescope session (Steam Big Picture)" gamescope_session_offered
 fi
-if grep -qx 'VARIANT_ID=nvidia' /usr/lib/os-release; then
+if grep -qE '^VARIANT_ID=(gaming-)?nvidia$' /usr/lib/os-release; then
   check "No NVIDIA card or key: nouveau took over, NVIDIA's module isn't loaded" nouveau_fallback
   check "The kernel refuses NVIDIA's module until its key is enrolled" nvidia_refused
 fi

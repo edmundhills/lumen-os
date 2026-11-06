@@ -83,7 +83,10 @@ class Key(unittest.TestCase):
 
     def test_ci_signs_with_a_throwaway_key_by_another_name(self):
         self.assertIn('-subj "/O=Lumen OS/CN=Lumen OS kernel module signing (throwaway)"', WORKFLOW)
-        self.assertIn('rm -rf "$keys"', WORKFLOW)
+        # The key goes in a step that runs even when a build fails.
+        removal = WORKFLOW.split("- name: Remove the throwaway key", 1)[1].split("- name:", 1)[0]
+        self.assertIn("if: ${{ always() }}", removal)
+        self.assertIn('rm -rf -- "${keys:?}"', removal)
 
 
 if __name__ == "__main__":

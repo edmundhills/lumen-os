@@ -49,14 +49,14 @@ class CredentialsTest(unittest.TestCase):
 
     def test_the_nvidia_edition_must_fall_back_and_refuse_the_module(self):
         script = boot_disk.CHECK_SCRIPT.read_text()
-        self.assertIn("if grep -qx 'VARIANT_ID=nvidia' /usr/lib/os-release; then", script)
+        self.assertIn("if grep -qE '^VARIANT_ID=(gaming-)?nvidia$' /usr/lib/os-release; then", script)
         self.assertIn("Key was rejected by service", script)
         # The refusal check runs after the fallback check, which it would disturb.
         self.assertLess(script.index("nouveau_fallback\n"), script.index("nvidia_refused\n"))
 
     def test_the_gaming_edition_must_offer_its_session(self):
         script = boot_disk.CHECK_SCRIPT.read_text()
-        self.assertIn("if grep -qx 'VARIANT_ID=gaming' /usr/lib/os-release; then", script)
+        self.assertIn("if grep -qE '^VARIANT_ID=gaming(-nvidia)?$' /usr/lib/os-release; then", script)
         self.assertIn("(gamescope-session-steam.desktop)", script)
 
 

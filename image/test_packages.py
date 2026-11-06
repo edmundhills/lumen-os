@@ -124,5 +124,25 @@ class Checks(unittest.TestCase):
                                     "power-profiles-daemon is listed under remove, but is still installed"])
 
 
+class Architectures(unittest.TestCase):
+    """A name.arch entry, for a package whose other architecture the image has."""
+
+    def setUp(self):
+        self.lists = {"keep": [], "install": ["xorg-x11-drv-nvidia-libs.i686"], "remove": []}
+        self.have = {"xorg-x11-drv-nvidia-libs": "3:615.78.08-1.fc45"}  # the x86_64 one, by name
+
+    def test_the_64_bit_package_doesnt_count_as_the_32_bit_one(self):
+        self.assertEqual(packages.check_before(self.lists, self.have, query=lambda spec: False), [])
+        self.assertEqual(packages.check_after(self.lists, self.have, self.have, query=lambda spec: False),
+                         ["xorg-x11-drv-nvidia-libs.i686 is listed under install, but isn't installed"])
+
+    def test_the_32_bit_package_once_rpm_has_it(self):
+        self.assertEqual(packages.check_after(self.lists, self.have, self.have, query=lambda spec: True), [])
+        self.assertTrue(packages.check_before(self.lists, self.have, query=lambda spec: True))
+
+    def test_a_dot_that_isnt_an_architecture(self):
+        self.assertFalse(packages.present("python3.14", {}, query=lambda spec: True))
+
+
 if __name__ == "__main__":
     unittest.main()

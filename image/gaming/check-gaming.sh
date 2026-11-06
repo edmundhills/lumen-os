@@ -4,8 +4,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Check the gaming edition: what the lumen-gaming stage of image/Containerfile
-# adds to the lumen image is in place, and nothing it leaves behind is (step
-# 1.10a, docs/decisions/0019-gaming-edition.md).
+# adds to the lumen image, or to lumen-nvidia for lumen-gaming-nvidia, is in
+# place, and nothing it leaves behind is (steps 1.10a and 1.12b,
+# docs/decisions/0019-gaming-edition.md).
 #
 # Usage: bash check-gaming.sh IMAGE_DIR
 #
@@ -101,10 +102,14 @@ no_repository_left() {
   fi
 }
 
-# os-release names the edition (image/os-release.sh).
+# os-release names the edition (image/os-release.sh): Gaming, or on the NVIDIA
+# edition both (step 1.12b).
 os_release() {
-  local want status=0
-  for want in 'VARIANT_ID=gaming' 'VARIANT="Gaming"' 'IMAGE_ID=lumen-gaming'; do
+  local want status=0 wants=('VARIANT_ID=gaming' 'VARIANT="Gaming"' 'IMAGE_ID=lumen-gaming')
+  if rpm --query --quiet xorg-x11-drv-nvidia; then
+    wants=('VARIANT_ID=gaming-nvidia' 'VARIANT="Gaming, NVIDIA"' 'IMAGE_ID=lumen-gaming-nvidia')
+  fi
+  for want in "${wants[@]}"; do
     if ! grep -qxF -- "$want" /usr/lib/os-release; then
       printf '/usr/lib/os-release has no line %s\n' "$want"
       status=1
@@ -187,12 +192,31 @@ no_steamos_helpers() {
   return "$status"
 }
 
+# On the NVIDIA edition, Steam's 32-bit games get NVIDIA's 32-bit libraries,
+# at the 64-bit driver's version (image/gaming/nvidia.toml; same_32bit_builds
+# checks the version). Without NVIDIA's driver, the repository the stage turns
+# on for them must have brought none of NVIDIA's packages.
+nvidia_32bit() {
+  if ! rpm --query --quiet xorg-x11-drv-nvidia; then
+    if rpm --query --quiet xorg-x11-drv-nvidia-libs; then
+      printf "xorg-x11-drv-nvidia-libs is installed, but NVIDIA's driver isn't\n"
+      return 1
+    fi
+    return 0
+  fi
+  if ! rpm --query --quiet xorg-x11-drv-nvidia-libs.i686; then
+    printf "NVIDIA's 32-bit libraries, xorg-x11-drv-nvidia-libs.i686, are not installed\n"
+    return 1
+  fi
+}
+
 printf 'Lumen gaming edition checks\n'
 check "Steam (RPM Fusion's), steam-devices, Gamescope, MangoHud and GameMode are installed" packages
 check "Controller udev rules give the devices to the user at the seat" controller_rules
 check "Every 32-bit package is the build of its 64-bit twin" same_32bit_builds
 check "No RPM Fusion repository is left in the image" no_repository_left
 check "os-release names the gaming edition" os_release
+check "NVIDIA's 32-bit libraries for Steam's games on the NVIDIA edition, and none without it" nvidia_32bit
 check "Steam, Gamescope, MangoHud and GameMode's programs are in place" programs
 check "The Gamescope session is on the login screen" gamescope_session
 check "The session's files are ChimeraOS's, at the pinned commits" session_files

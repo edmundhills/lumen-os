@@ -137,9 +137,14 @@ no_repository_left() {
   fi
 }
 
+# os-release names the edition: NVIDIA, or with the gaming layer on it both
+# (step 1.12b).
 os_release() {
-  local want status=0
-  for want in 'VARIANT_ID=nvidia' 'VARIANT="NVIDIA"' 'IMAGE_ID=lumen-nvidia'; do
+  local want status=0 wants=('VARIANT_ID=nvidia' 'VARIANT="NVIDIA"' 'IMAGE_ID=lumen-nvidia')
+  if grep -qx 'VARIANT_ID=gaming-nvidia' /usr/lib/os-release; then
+    wants=('VARIANT_ID=gaming-nvidia' 'VARIANT="Gaming, NVIDIA"' 'IMAGE_ID=lumen-gaming-nvidia')
+  fi
+  for want in "${wants[@]}"; do
     if ! grep -qxF -- "$want" /usr/lib/os-release; then
       printf '/usr/lib/os-release has no line %s\n' "$want"
       status=1

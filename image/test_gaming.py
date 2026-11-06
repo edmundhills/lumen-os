@@ -75,7 +75,7 @@ class Repository(unittest.TestCase):
         for name in self.repo.sections():
             with self.subTest(name):
                 section = self.repo[name]
-                self.assertEqual(section["includepkgs"], "steam")
+                self.assertEqual(section["includepkgs"], "steam,xorg-x11-drv-nvidia-libs")
                 self.assertEqual(section["gpgcheck"], "1")
                 self.assertTrue(section["metalink"].startswith("https://mirrors.rpmfusion.org/metalink?repo=nonfree-fedora-"))
                 self.assertEqual(section["gpgkey"], f"file:///run/lumen/gaming/{KEY.name}")

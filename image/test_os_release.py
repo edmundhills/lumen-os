@@ -4,8 +4,8 @@
 #
 # Unit tests for os-release.sh's product version: image-builder, which makes
 # Lumen's disk images, reads VERSION_ID as a version with at most one dot
-# (docs/decisions/0011-disk-images.md). `just test` runs them in the lint
-# container:
+# (docs/decisions/0011-disk-images.md); and for the editions' variant IDs, such
+# as gaming-nvidia (step 1.12b). `just test` runs them in the lint container:
 #   python3 -m unittest discover --start-directory image
 
 import re
@@ -42,6 +42,26 @@ class OsReleaseTest(unittest.TestCase):
                                 capture_output=True, text=True, check=False)
         self.assertEqual(result.returncode, 1, result.stderr)
         self.assertIn('The product version "0.1.1" is not N or N.N', result.stderr)
+
+    def run_with_variant(self, variant_id):
+        # The variant ID is checked first; a build version that isn't one then
+        # stops the script before it writes anything, wherever it runs.
+        return subprocess.run(["bash", str(SCRIPT), "not-a-build-version", variant_id, "An edition"],
+                              capture_output=True, text=True, check=False)
+
+    def test_variant_ids_are_lowercase_parts_joined_by_hyphens(self):
+        for variant_id in ("gaming", "nvidia", "gaming-nvidia"):
+            with self.subTest(variant_id):
+                result = self.run_with_variant(variant_id)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertNotIn("variant ID", result.stderr)
+
+    def test_other_variant_ids_stop_the_script(self):
+        for variant_id in ("Gaming", "gaming_nvidia", "-nvidia", "gaming-", "gaming--nvidia", "gaming nvidia"):
+            with self.subTest(variant_id):
+                result = self.run_with_variant(variant_id)
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertIn(f'The variant ID "{variant_id}" is not', result.stderr)
 
 
 if __name__ == "__main__":

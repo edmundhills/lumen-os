@@ -27,8 +27,8 @@ if (($# != 1 && $# != 3)); then
   exit 2
 fi
 readonly build_version=$1 variant_id=${2:-} variant=${3:-}
-if [[ -n $variant_id && ! $variant_id =~ ^[a-z0-9]+$ ]]; then
-  printf 'The variant ID "%s" is not lowercase letters and digits.\n' "$variant_id" >&2
+if [[ -n $variant_id && ! $variant_id =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]]; then
+  printf 'The variant ID "%s" is not lowercase letters and digits, in parts joined by "-".\n' "$variant_id" >&2
   exit 2
 fi
 
