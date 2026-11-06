@@ -294,6 +294,14 @@ jobs:
         run: |
           dir=$RUNNER_TEMP/previous log=$RUNNER_TEMP/previous.log
           mkdir -p "$dir"
+          # Builds of main listed the edition's tags with the login above. An
+          # edition with no dev yet has nothing to read: before its first
+          # push, ghcr.io refuses an anonymous reader with 403, as it does for
+          # a private package, rather than say the name is unknown.
+          if [[ $PUBLISH == true ]] && ! grep -qF '"dev"' "$RUNNER_TEMP/tags-$IMAGE.json"; then
+            printf '%s:dev does not exist yet.\n' "$REGISTRY_IMAGE"
+            exit 0
+          fi
           if ! digest=$(skopeo inspect --no-creds --format '{{.Digest}}' "docker://$REGISTRY_IMAGE:dev" 2>"$log"); then
             if grep -qiE 'manifest unknown|name unknown|not known to registry' "$log"; then
               printf '%s:dev does not exist yet.\n' "$REGISTRY_IMAGE"
