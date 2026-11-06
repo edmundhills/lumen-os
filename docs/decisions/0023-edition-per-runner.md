@@ -36,3 +36,7 @@ Lumen has four images (spec, "Image variants"; [ADR 0004](0004-phase-0-review.md
 - The gaming editions' boot test now boots the re-chunked image, as `lumen`'s did.
 - The jobs' names change, to "Check lumen / Build the image" and so on; a branch rule that required the old names would need the new ones.
 - The first push of `lumen-gaming` creates its package. If ghcr.io doesn't make it public, as it did `lumen`, the next build of `main` stops at "Make the package public", and the owner makes it public in the package's settings.
+
+## Follow-up
+
+- 2026-11-06: Image run 42282719947 (for `30b46bc`), the first with a runner per edition, was green in 109 minutes, as long as its longest edition: `lumen` 46 minutes (7.8 GB; an update from `dev` downloads 2 of 254 layers, 41.3 MiB; boot 10 of 10), `lumen-gaming` 89 (8.6 GB; build 42, re-chunk 17; its re-chunked image booted 11 of 11), `lumen-nvidia` 85 (9.4 GB; build 50, re-chunk 14; boot 12 of 12) and `lumen-gaming-nvidia` 109 (10.5 GB; `lumen-nvidia` 52, the gaming layer 18, re-chunk 15; boot 13 of 13). All four had build version 45.20261106, passed the checks again after re-chunking, and kept their SBOMs; the three new editions had no `dev` to measure an update from.
