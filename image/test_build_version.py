@@ -81,6 +81,16 @@ class Main(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, first + ".1\n")
 
+    def test_a_version_taken_in_any_repository_is_taken(self):
+        first = self.run_script(str(HERE / "Containerfile")).stdout.strip()
+        with tempfile.TemporaryDirectory() as d:
+            lumen, gaming = Path(d, "lumen.json"), Path(d, "gaming.json")
+            lumen.write_text(json.dumps({"Repository": "ghcr.io/x/lumen", "Tags": ["dev-" + first]}))
+            gaming.write_text(json.dumps({"Repository": "ghcr.io/x/lumen-gaming", "Tags": ["dev-" + first + ".1"]}))
+            result = self.run_script(str(HERE / "Containerfile"), str(lumen), str(gaming))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, first + ".2\n")
+
     def test_fails_on_a_tag_list_that_isnt_json(self):
         with tempfile.TemporaryDirectory() as d:
             tags = Path(d, "tags.json")

@@ -8,14 +8,16 @@
 # 44.20261028.1, .2 and so on for further builds on the same day. It goes into
 # os-release, the image's version label and its dated tags.
 #
-# Usage: python3 image/build_version.py CONTAINERFILE [TAGS_JSON]
+# Usage: python3 image/build_version.py CONTAINERFILE [TAGS_JSON...]
 #
 # The Fedora release is the tag of the Kinoite image that the Containerfile's
-# base stage starts from, and the date is today's in UTC. TAGS_JSON is what
-# `skopeo list-tags` prints for the image's repository on ghcr.io: when a build
-# of this version already has its dev-<version> tag there, the next free suffix
-# is used, so a dated tag never moves. Without it, the version has no suffix,
-# which is what a local build needs. Prints the version and exits 0, or exits 1
+# base stage starts from, and the date is today's in UTC. Each TAGS_JSON is
+# what `skopeo list-tags` prints for a repository on ghcr.io: when a build of
+# this version already has its dev-<version> tag in any of them, the next free
+# suffix is used, so a dated tag never moves. CI passes the repositories of
+# all four editions, so the editions built from one commit share a version
+# (step 1.12c). Without any, the version has no suffix, which is what a local
+# build needs. Prints the version and exits 0, or exits 1
 # on a problem.
 
 import datetime
@@ -57,16 +59,16 @@ def build_version(release, day, tags):
 
 
 def main(argv):
-    if len(argv) not in (2, 3):
-        print("Usage: build_version.py CONTAINERFILE [TAGS_JSON]", file=sys.stderr)
+    if len(argv) < 2:
+        print("Usage: build_version.py CONTAINERFILE [TAGS_JSON...]", file=sys.stderr)
         return 2
     try:
         with open(argv[1], encoding="utf-8") as f:
             release = fedora_release(f.read())
         tags = []
-        if len(argv) == 3:
-            with open(argv[2], encoding="utf-8") as f:
-                tags = json.load(f).get("Tags") or []
+        for path in argv[2:]:
+            with open(path, encoding="utf-8") as f:
+                tags += json.load(f).get("Tags") or []
     except (OSError, ValueError, AttributeError, VersionError) as e:
         print(f"build_version.py: {e}", file=sys.stderr)
         return 1

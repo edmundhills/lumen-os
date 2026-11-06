@@ -32,6 +32,7 @@ Architecture decision records (ADRs). Each one records a decision that changes t
 | [0020](0020-gamescope-session.md) | Take the Gamescope session from ChimeraOS, pinned file by file, without SteamOS's helpers | Accepted |
 | [0021](0021-module-signing-key.md) | Sign out-of-tree kernel modules with Lumen's own key, which users enrol as a MOK | Accepted |
 | [0022](0022-nvidia-edition.md) | Build NVIDIA's open modules with akmods in a stage of their own, sign them apart, and keep nouveau as the fallback | Accepted |
+| [0023](0023-edition-per-runner.md) | Build, test and publish each edition on a runner of its own | Accepted |
 
 ADRs 0001 to 0009 use the step numbers of their time. Since ADR 0010, the old Phase 8 is Phase 9 and the old Phase 9 is Phase 10, so their "step 8.2" is now step 9.2, and "step 9.1" is now step 10.1.
 

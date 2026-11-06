@@ -31,24 +31,6 @@ import tomllib
 from pathlib import Path
 
 LISTS = ("keep", "install", "remove")
-# Architectures a package name may end in, as name.arch, for a package whose
-# other architecture the image has, such as xorg-x11-drv-nvidia-libs.i686.
-ARCHES = ("i686", "x86_64", "noarch")
-
-
-def arch_installed(spec):
-    """Whether rpm has NAME.ARCH installed."""
-    return subprocess.run(["rpm", "--query", "--quiet", spec]).returncode == 0
-
-
-def present(name, have, query=arch_installed):
-    """Whether NAME is among HAVE's names, or, for name.arch, whether rpm has that architecture installed."""
-    if name in have:
-        return True
-    base, _, arch = name.rpartition(".")
-    return bool(base) and arch in ARCHES and query(name)
-
-
 # The options a manifest may set before its first table, and their types.
 OPTIONS = {"exact_32bit": bool}
 # An RPM package name: letters, digits and . _ + -, starting with a letter or digit.
@@ -112,7 +94,7 @@ def load_options(path):
     return {name: data.get(name, False) for name in OPTIONS}
 
 
-def check_before(lists, have, query=arch_installed):
+def check_before(lists, have):
     """List what in the manifest doesn't match the base image's packages."""
     problems = []
     for name in lists["keep"]:
@@ -122,16 +104,16 @@ def check_before(lists, have, query=arch_installed):
         if name not in have:
             problems.append(f"{name} is listed under remove, but the base image doesn't have it")
     for name in lists["install"]:
-        if present(name, have, query):
+        if name in have:
             problems.append(f"{name} is listed under install, but the base image already has it: move it to keep")
     return problems
 
 
-def check_after(lists, before, after, query=arch_installed):
+def check_after(lists, before, after):
     """List where the packages after dnf ran differ from what the manifest says."""
     problems = []
     for name in lists["install"]:
-        if not present(name, after, query):
+        if name not in after:
             problems.append(f"{name} is listed under install, but isn't installed")
     for name in lists["remove"]:
         if name in after:

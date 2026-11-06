@@ -2,12 +2,14 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# The image workflow: build image/Containerfile and check it on every push and
-# pull request. Builds of main also push the image to ghcr.io, sign it, and
-# move `dev` to it. docs/architecture.md, section 9.8.
+# The image workflow: build each edition of image/Containerfile and check it on
+# every push and pull request. Builds of main also push each edition to
+# ghcr.io, sign it, and move its `dev` to it. docs/architecture.md, section 9.8.
 #
-# The build itself is in build-image.yml. It is called from two jobs so that
-# only builds of main get a token that can write to ghcr.io, and the signing key.
+# The build itself is in build-image.yml, which builds one edition. Two jobs
+# call it, so that only builds of main get a token that can write to ghcr.io,
+# and the signing key; each runs it once per edition, on a runner each, and an
+# edition that fails holds back only itself (ADR 0023).
 
 name: image
 
@@ -27,23 +29,45 @@ concurrency:
 
 jobs:
   check:
-    name: Check
+    name: Check ${{ matrix.edition }}
     if: github.event_name != 'push' || github.ref != 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      matrix:
+        edition: [lumen, gaming, nvidia, gaming-nvidia]
     permissions:
       contents: read
     uses: ./.github/workflows/build-image.yml
     with:
+      edition: ${{ matrix.edition }}
       publish: false
 
   publish:
-    name: Publish
+    name: Publish ${{ matrix.edition }}
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - edition: lumen
+            publish: true
+          - edition: gaming
+            publish: true
+          # The NVIDIA editions are built and tested on main as on any other
+          # branch, but published only once Lumen's key signs their modules
+          # (steps 1.11a and 1.12c-2, ADR 0021): until then a throwaway key
+          # does, and no user could enrol it.
+          - edition: nvidia
+            publish: false
+          - edition: gaming-nvidia
+            publish: false
     permissions:
       contents: read
       packages: write
     uses: ./.github/workflows/build-image.yml
     with:
-      publish: true
+      edition: ${{ matrix.edition }}
+      publish: ${{ matrix.publish }}
     # The signing key, a secret of the image-signing environment, which only
     # main may use (ADR 0008). build-image.yml's sign job opens the environment.
     secrets:

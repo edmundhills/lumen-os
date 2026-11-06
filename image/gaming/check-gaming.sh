@@ -193,9 +193,10 @@ no_steamos_helpers() {
 }
 
 # On the NVIDIA edition, Steam's 32-bit games get NVIDIA's 32-bit libraries,
-# at the 64-bit driver's version (image/gaming/nvidia.toml; same_32bit_builds
-# checks the version). Without NVIDIA's driver, the repository the stage turns
-# on for them must have brought none of NVIDIA's packages.
+# at the 64-bit driver's version: xorg-x11-drv-nvidia-libs requires its x86-32
+# build once Steam brings mesa-libGL(x86-32), and same_32bit_builds checks the
+# version. Without NVIDIA's driver, the repository the stage turns on must have
+# brought none of NVIDIA's packages.
 nvidia_32bit() {
   if ! rpm --query --quiet xorg-x11-drv-nvidia; then
     if rpm --query --quiet xorg-x11-drv-nvidia-libs; then
