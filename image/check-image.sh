@@ -385,7 +385,10 @@ first_boot_apps() {
   return "$status"
 }
 
-# .exe and .msi files open in Bottles (step 1.13, image/windows_apps.py).
+# .exe and .msi files open in Bottles (step 1.13): for every type
+# shared-mime-info gives them, Plasma's vendor list, as the lumen stage left
+# it, puts Bottles first, and no list Plasma reads before it says otherwise
+# (image/windows_apps.py).
 windows_apps() {
   python3 "$here/windows_apps.py" check /
 }

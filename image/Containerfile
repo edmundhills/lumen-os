@@ -91,6 +91,13 @@ RUN --mount=type=bind,source=image/overlay,target=/run/lumen/overlay \
     && systemctl mask rpm-ostreed-automatic.timer bootc-fetch-apply-updates.timer \
         rpm-ostree-countme.timer
 
+# Windows programs and installers open in Bottles, until Lumen's own dialog in
+# Phase 7: Bottles goes first for their types in Plasma's vendor list of
+# default apps, which keeps anything Fedora puts there (image/windows_apps.py,
+# ADR 0024).
+RUN --mount=type=bind,source=image/windows_apps.py,target=/run/lumen/windows_apps.py \
+    PYTHONDONTWRITEBYTECODE=1 python3 /run/lumen/windows_apps.py apply /usr/share/applications/kde-mimeapps.list
+
 # The build version: <Fedora release>.<build date>, with .1, .2 for further
 # builds on the same day (docs/architecture.md, section 9.7). image/build_version.py
 # works it out for CI and `just build-image`. It changes with every build, so

@@ -3,41 +3,64 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Check that Windows programs and installers open in Bottles (step 1.13, spec,
-# "Windows apps"), until Lumen's own dialog takes over in Phase 7.
+# Make Windows programs and installers open in Bottles (step 1.13, spec,
+# "Windows apps", docs/decisions/0024-windows-app-base.md), until Lumen's own
+# dialog takes over in Phase 7, and check that they do.
 #
-# Usage: python3 image/windows_apps.py check ROOT
+# Usage:
+#   python3 image/windows_apps.py apply LIST
+#   python3 image/windows_apps.py check ROOT
 #
-# ROOT is the image's root: / inside the image, for image/check-image.sh. The
-# check reads the types the image's shared-mime-info gives *.exe and *.msi
-# files, and requires that:
+# apply   Puts Bottles first, as the default and as an added app, for every
+#         type in TYPES in LIST, Plasma's vendor list of default apps
+#         (/usr/share/applications/kde-mimeapps.list, which Plasma reads before
+#         Fedora's mimeapps.list there). It keeps whatever else LIST holds, or
+#         makes it. The lumen stage of image/Containerfile runs it.
+# check   In the image at ROOT (/ for image/check-image.sh): for every type the
+#         image's shared-mime-info gives *.exe and *.msi files, LIST makes
+#         Bottles the default and adds it, and no list Plasma reads before it
+#         sets another default or removes Bottles.
 #
-#   - Lumen's /usr/share/applications/mimeapps.list makes Bottles the default
-#     for each of them, and adds it as an app for them;
-#   - no other mimeapps.list that Plasma reads sets a default for them, or
-#     removes Bottles from them;
-#   - no package owns Lumen's list, which would mean the image replaced a file
-#     of Fedora's.
-#
-# Exits 0 when all hold, 1 when one doesn't (saying why), and 2 on a usage error.
+# Exits 0 when done or when every check holds, 1 when one doesn't (saying
+# why), and 2 on a usage error.
 
 import configparser
-import subprocess
+import io
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
 BOTTLES = "com.usebottles.bottles.desktop"
-LUMEN_LIST = Path("usr/share/applications/mimeapps.list")
+LIST = Path("usr/share/applications/kde-mimeapps.list")
 MIME_PACKAGES = Path("usr/share/mime/packages")
+SECTIONS = ("Added Associations", "Default Applications")
 # The files Windows programs and installers come in.
 PATTERNS = ("*.exe", "*.msi")
-# Where the other lists Plasma reads can be: the system's config folders
-# (XDG_CONFIG_DIRS) and data folders (XDG_DATA_DIRS), each as <desktop>-mimeapps.list
-# or mimeapps.list. Fedora's KDE settings keep a profile of their own.
-LIST_FOLDERS = (Path("etc/xdg"), Path("usr/share/applications"), Path("usr/local/share/applications"),
-                Path("usr/share/kde-settings"))
+# Every type shared-mime-info gives those files. Bottles' desktop file declares
+# the first and the last (bottlesdevs/Bottles at fdeaff1); the rest are other
+# names, or older formats, an .exe file can have (Fedora 45's shared-mime-info,
+# 2026-11-06).
+TYPES = (
+    "application/x-ms-dos-executable",
+    "application/x-msdownload",
+    "application/vnd.microsoft.portable-executable",
+    "application/x-dosexec",
+    "application/x-ms-ne-executable",
+    "application/x-lx-executable",
+    "application/x-msi",
+)
+# The lists Plasma reads before LIST: the system's config folders
+# (XDG_CONFIG_DIRS, with Fedora's KDE profile) and /usr/local's data folder.
+# Fedora's /usr/share/applications/mimeapps.list comes after it.
+EARLIER = (Path("etc/xdg"), Path("usr/share/kde-settings"), Path("usr/local/share/applications"))
 NS = "{http://www.freedesktop.org/standards/shared-mime-info}"
+HEADER = """\
+# Plasma's default apps for file types (XDG MIME Applications). Lumen's image
+# build puts Bottles first for Windows programs and installers
+# (image/windows_apps.py), until Lumen's "Open Windows app" dialog takes over
+# in Phase 7. A user's own choice, in Settings or "Open With", goes in
+# ~/.config/mimeapps.list and wins.
+"""
 
 
 def types_for(xml_texts, pattern):
@@ -52,46 +75,62 @@ def types_for(xml_texts, pattern):
     return found
 
 
+def parser():
+    p = configparser.ConfigParser(interpolation=None, strict=False, delimiters=("=",), comment_prefixes=("#",))
+    p.optionxform = str
+    return p
+
+
 def read_list(text):
     """{section: {MIME type: [desktop file IDs]}} of a mimeapps.list."""
-    parser = configparser.ConfigParser(interpolation=None, strict=False, delimiters=("=",),
-                                       comment_prefixes=("#",))
-    parser.optionxform = str
-    parser.read_string(text)
-    return {section: {key: [app for app in value.split(";") if app] for key, value in parser[section].items()}
-            for section in parser.sections()}
+    p = parser()
+    p.read_string(text)
+    return {section: {key: [app for app in value.split(";") if app] for key, value in p[section].items()}
+            for section in p.sections()}
 
 
-def rpm_owner(path):
-    """The package that owns PATH, or None."""
-    result = subprocess.run(["rpm", "--query", "--file", "--queryformat", "%{NAME}\n", str(path)],
-                            capture_output=True, text=True)
-    return result.stdout.strip() if result.returncode == 0 else None
+def with_bottles(text):
+    """TEXT, a mimeapps.list or "", with Bottles first for every type in TYPES."""
+    p = parser()
+    p.read_string(text)
+    for section in SECTIONS:
+        if not p.has_section(section):
+            p.add_section(section)
+        for mime in TYPES:
+            apps = [app for app in p[section].get(mime, "").split(";") if app and app != BOTTLES]
+            p[section][mime] = ";".join([BOTTLES, *apps]) + ";"
+    out = io.StringIO()
+    p.write(out, space_around_delimiters=False)
+    return HEADER + "\n" + out.getvalue()
 
 
-def other_lists(root):
-    """Every mimeapps.list under ROOT that Plasma may read, but Lumen's."""
-    lumen = root / LUMEN_LIST
+def apply(path):
+    path = Path(path)
+    text = path.read_text(encoding="utf-8") if path.exists() else ""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(with_bottles(text), encoding="utf-8")
+
+
+def earlier_lists(root):
+    """Every mimeapps.list under ROOT that Plasma reads before LIST."""
     found = []
-    for folder in LIST_FOLDERS:
+    for folder in EARLIER:
         if (root / folder).is_dir():
-            found += [path for path in sorted((root / folder).rglob("*mimeapps.list")) if path != lumen]
+            found += sorted((root / folder).rglob("*mimeapps.list"))
     return found
 
 
-def check(root, owner=rpm_owner):
+def check(root):
     """List what keeps .exe and .msi files from opening in Bottles in the image at ROOT."""
     root = Path(root)
     problems = []
     xml_texts = [path.read_text(encoding="utf-8") for path in sorted((root / MIME_PACKAGES).glob("*.xml"))]
     if not xml_texts:
         return [f"{root / MIME_PACKAGES} has no shared-mime-info XML"]
-    lumen_path = root / LUMEN_LIST
-    if not lumen_path.is_file():
-        return [f"{lumen_path} is missing"]
-    lumen = read_list(lumen_path.read_text(encoding="utf-8"))
-    defaults = lumen.get("Default Applications", {})
-    added = lumen.get("Added Associations", {})
+    path = root / LIST
+    if not path.is_file():
+        return [f"{path} is missing"]
+    sections = read_list(path.read_text(encoding="utf-8"))
     types = []
     for pattern in PATTERNS:
         found = types_for(xml_texts, pattern)
@@ -99,32 +138,32 @@ def check(root, owner=rpm_owner):
             problems.append(f"shared-mime-info gives {pattern} no type")
         for mime in found:
             types.append(mime)
-            if defaults.get(mime, [None])[0] != BOTTLES:
-                problems.append(f"Lumen's mimeapps.list doesn't make Bottles the default for {mime}, the type of {pattern}")
-            if BOTTLES not in added.get(mime, []):
-                problems.append(f"Lumen's mimeapps.list doesn't add Bottles for {mime}, the type of {pattern}")
-    for path in other_lists(root):
-        sections = read_list(path.read_text(encoding="utf-8"))
+            if sections.get("Default Applications", {}).get(mime, [None])[0] != BOTTLES:
+                problems.append(f"{LIST} doesn't make Bottles the default for {mime}, a type of {pattern}")
+            if BOTTLES not in sections.get("Added Associations", {}).get(mime, []):
+                problems.append(f"{LIST} doesn't add Bottles for {mime}, a type of {pattern}")
+    for other in earlier_lists(root):
+        earlier = read_list(other.read_text(encoding="utf-8"))
         for mime in types:
-            if mime in sections.get("Default Applications", {}):
-                problems.append(f"{path} sets a default app for {mime}: "
-                                f"{';'.join(sections['Default Applications'][mime])}")
-            if BOTTLES in sections.get("Removed Associations", {}).get(mime, []):
-                problems.append(f"{path} removes Bottles from {mime}")
-    package = owner(lumen_path)
-    if package:
-        problems.append(f"{lumen_path} belongs to the package {package}, whose file Lumen's replaced")
+            apps = earlier.get("Default Applications", {}).get(mime)
+            if apps and apps[0] != BOTTLES:
+                problems.append(f"{other}, which Plasma reads first, sets {';'.join(apps)} as the default for {mime}")
+            if BOTTLES in earlier.get("Removed Associations", {}).get(mime, []):
+                problems.append(f"{other}, which Plasma reads first, removes Bottles from {mime}")
     return problems
 
 
 def main(argv):
-    if len(argv) != 3 or argv[1] != "check":
-        print("Usage: windows_apps.py check ROOT", file=sys.stderr)
-        return 2
-    problems = check(argv[2])
-    for problem in problems:
-        print(problem)
-    return 1 if problems else 0
+    if len(argv) == 3 and argv[1] == "apply":
+        apply(argv[2])
+        return 0
+    if len(argv) == 3 and argv[1] == "check":
+        problems = check(argv[2])
+        for problem in problems:
+            print(problem)
+        return 1 if problems else 0
+    print("Usage: windows_apps.py apply LIST | check ROOT", file=sys.stderr)
+    return 2
 
 
 if __name__ == "__main__":
