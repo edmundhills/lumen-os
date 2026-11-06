@@ -85,7 +85,7 @@ class Key(unittest.TestCase):
         self.assertIn('-subj "/O=Lumen OS/CN=Lumen OS kernel module signing (throwaway)"', WORKFLOW)
         # The key goes in a step that runs even when a build fails.
         removal = WORKFLOW.split("- name: Remove the throwaway key", 1)[1].split("- name:", 1)[0]
-        self.assertIn("if: ${{ always() }}", removal)
+        self.assertRegex(removal, r"if: \$\{\{ always\(\)")
         self.assertIn('rm -rf -- "${keys:?}"', removal)
 
 
