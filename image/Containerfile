@@ -135,7 +135,9 @@ LABEL org.opencontainers.image.title="Lumen OS" \
 # lumen image plus Steam, Gamescope, MangoHud, GameMode and the controller udev
 # rules (spec, "Image variants"). LUMEN_GAMING_FROM, at the top of this file,
 # says which image it starts from: on lumen-nvidia, the same stage makes
-# lumen-gaming-nvidia (step 1.12b), with NVIDIA's 32-bit libraries too.
+# lumen-gaming-nvidia (step 1.12b). There Steam's 32-bit Mesa brings NVIDIA's
+# 32-bit libraries too, at the driver's version: xorg-x11-drv-nvidia-libs
+# requires its x86-32 build when mesa-libGL(x86-32) is installed.
 FROM ${LUMEN_GAMING_FROM} AS lumen-gaming
 
 # Steam comes from RPM Fusion's nonfree repositories, which this step turns on
@@ -152,7 +154,6 @@ FROM ${LUMEN_GAMING_FROM} AS lumen-gaming
 RUN --mount=type=bind,source=image/packages.py,target=/run/lumen/packages.py \
     --mount=type=bind,source=image/multilib.py,target=/run/lumen/multilib.py \
     --mount=type=bind,source=image/gaming/packages.toml,target=/run/lumen/gaming/packages.toml \
-    --mount=type=bind,source=image/gaming/nvidia.toml,target=/run/lumen/gaming/nvidia.toml \
     --mount=type=bind,source=image/gaming/rpmfusion-nonfree.repo,target=/run/lumen/gaming/rpmfusion-nonfree.repo \
     --mount=type=bind,source=image/gaming/RPM-GPG-KEY-rpmfusion-nonfree-fedora-2020,target=/run/lumen/gaming/RPM-GPG-KEY-rpmfusion-nonfree-fedora-2020 \
     --mount=type=bind,source=image/gaming/keys.sha256,target=/run/lumen/gaming/keys.sha256 \
@@ -160,9 +161,6 @@ RUN --mount=type=bind,source=image/packages.py,target=/run/lumen/packages.py \
     && before=$(ls -A /run) \
     && cp /run/lumen/gaming/rpmfusion-nonfree.repo /etc/yum.repos.d/lumen-rpmfusion-nonfree.repo \
     && PYTHONDONTWRITEBYTECODE=1 python3 /run/lumen/packages.py apply /run/lumen/gaming/packages.toml \
-    && if rpm --query --quiet xorg-x11-drv-nvidia; then \
-        PYTHONDONTWRITEBYTECODE=1 python3 /run/lumen/packages.py apply /run/lumen/gaming/nvidia.toml; \
-    fi \
     && rm /etc/yum.repos.d/lumen-rpmfusion-nonfree.repo \
     && for name in $(ls -A /run); do \
         if ! printf '%s\n' "$before" | grep -qxF -- "$name"; then \

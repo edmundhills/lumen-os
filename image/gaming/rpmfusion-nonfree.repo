@@ -4,9 +4,9 @@
 #
 # RPM Fusion's nonfree repositories for Fedora, as the lumen-gaming stage of
 # image/Containerfile uses them for one step: turned on, and limited with
-# includepkgs to Steam and, on the NVIDIA edition, NVIDIA's 32-bit libraries
-# (image/gaming/nvidia.toml), so nothing else can come from them (step 1.10a,
-# docs/decisions/0019-gaming-edition.md). The stage copies this file into
+# includepkgs to Steam and, on the NVIDIA edition, NVIDIA's 32-bit libraries,
+# which NVIDIA's driver requires once Steam brings 32-bit Mesa, so nothing else
+# can come from them (steps 1.10a and 1.12b, docs/decisions/0019-gaming-edition.md). The stage copies this file into
 # /etc/yum.repos.d and deletes it again in the same step, so the image keeps no
 # repository. The definitions are RPM Fusion's own (rpmfusion-nonfree.repo and
 # rpmfusion-nonfree-updates.repo in github.com/rpmfusion/rpmfusion-nonfree-release
