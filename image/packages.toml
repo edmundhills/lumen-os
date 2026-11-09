@@ -112,6 +112,12 @@ keep = [
   "wireplumber",
   "ffmpeg-free",
 ]
+# Dolphin's video thumbnails through Fedora's FFmpeg, which has no H.264 or
+# HEVC and reads the video inside the file manager. Lumen's thumbnailer uses
+# Flathub's FFmpeg in a sandbox instead (step 1.14b, ADR 0025).
+remove = [
+  "ffmpegthumbs",
+]
 
 [network]
 keep = [

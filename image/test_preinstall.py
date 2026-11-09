@@ -17,6 +17,9 @@ UNITS = OVERLAY / "usr/lib/systemd/system"
 # The apps, all from Flathub's stable branch: Bottles for Windows programs, the
 # browser and the video player.
 APPS = ("com.usebottles.bottles", "org.mozilla.firefox", "org.kde.haruna")
+# The runtime whose FFmpeg makes video thumbnails (step 1.14b), at a release of
+# freedesktop-sdk: one a year, in August.
+RUNTIME = "org.freedesktop.Platform"
 
 
 def read(path, strict=True):
@@ -30,7 +33,7 @@ def read(path, strict=True):
 class Preinstall(unittest.TestCase):
     def test_lists_the_apps(self):
         groups = read(PREINSTALL).sections()
-        self.assertCountEqual(groups, [f"Flatpak Preinstall {app}" for app in APPS])
+        self.assertCountEqual(groups, [f"Flatpak Preinstall {ref}" for ref in (*APPS, RUNTIME)])
 
     def test_each_is_a_stable_app(self):
         parser = read(PREINSTALL)
@@ -40,6 +43,12 @@ class Preinstall(unittest.TestCase):
                 self.assertEqual(group["Branch"], "stable")
                 self.assertNotIn("IsRuntime", group)
                 self.assertNotIn("Install", group)
+
+
+    def test_the_thumbnailers_runtime_is_a_yearly_release(self):
+        group = read(PREINSTALL)[f"Flatpak Preinstall {RUNTIME}"]
+        self.assertEqual(group["IsRuntime"], "true")
+        self.assertRegex(group["Branch"], r"^[0-9]{2}\.08$")
 
 
 class Units(unittest.TestCase):

@@ -18,6 +18,13 @@ Branch=stable
 [Flatpak Preinstall org.kde.haruna]
 Branch=stable
 
+# freedesktop's runtime, whose FFmpeg, with the codecs-extra extension that
+# comes with it, makes video thumbnails (lumen-video-thumbnailer, step 1.14b).
+# Move it to each new release, every August.
+[Flatpak Preinstall org.freedesktop.Platform]
+IsRuntime=true
+Branch=26.08
+
 # Bottles runs Windows programs with Wine, each in its own bottle (spec,
 # "Windows apps"); .exe and .msi files open in it (/usr/share/applications/mimeapps.list).
 [Flatpak Preinstall com.usebottles.bottles]

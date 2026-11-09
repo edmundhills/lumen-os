@@ -362,7 +362,7 @@ first_boot_apps() {
     printf "Flatpak %s has no 'flatpak preinstall', which came in 1.17\n" "$(flatpak --version)"
     status=1
   fi
-  for app in com.usebottles.bottles org.mozilla.firefox org.kde.haruna; do
+  for app in com.usebottles.bottles org.mozilla.firefox org.kde.haruna org.freedesktop.Platform; do
     if ! grep -qxF "[Flatpak Preinstall $app]" /usr/share/flatpak/preinstall.d/lumen.preinstall; then
       printf "/usr/share/flatpak/preinstall.d/lumen.preinstall doesn't name %s\n" "$app"
       status=1
@@ -398,6 +398,32 @@ first_boot_apps() {
   return "$status"
 }
 
+# Video thumbnails come from Lumen's thumbnailer, with Flathub's codecs in a
+# sandbox (step 1.14b, ADR 0025): ffmpegthumbs, which KDE's previews would
+# prefer, is gone; those previews run freedesktop thumbnailers; Lumen's names
+# its program; and Flatpak can run a runtime sandboxed.
+video_thumbnails() {
+  local status=0 entry=/usr/share/thumbnailers/lumen-video.thumbnailer kio=()
+  if rpm --query --quiet ffmpegthumbs || compgen -G '/usr/lib64/qt6/plugins/kf6/thumbcreator/ffmpegthumbs*' >/dev/null; then
+    printf 'ffmpegthumbs is still in the image, and KDE would use it before Lumen'"'"'s thumbnailer\n'
+    status=1
+  fi
+  mapfile -t kio < <(find /usr/lib64 -maxdepth 1 -name 'libKF6KIOGui.so.6.*' -type f)
+  if ((${#kio[@]} == 0)) || ! grep -qa 'standardthumbnailer' "${kio[@]}"; then
+    printf "KDE's previews (libKF6KIOGui) don't run freedesktop thumbnailers\n"
+    status=1
+  fi
+  if ! grep -qxF 'Exec=/usr/libexec/lumen-video-thumbnailer %s %i %o' "$entry"; then
+    printf '%s does not run /usr/libexec/lumen-video-thumbnailer\n' "$entry"
+    status=1
+  fi
+  if ! flatpak run --help 2>&1 | grep -q -- '--sandbox'; then
+    printf "flatpak run has no --sandbox\n"
+    status=1
+  fi
+  return "$status"
+}
+
 # .exe and .msi files open in Bottles (step 1.13): for every type
 # shared-mime-info gives them, Plasma's vendor list, as the lumen stage left
 # it, puts Bottles first, and no list Plasma reads before it says otherwise
@@ -423,6 +449,7 @@ check "KWin and Plasma are the same release" same_plasma_release
 check "Wine's ntsync driver loads at every start" ntsync
 check "Bottles, Firefox and Haruna come from Flathub after the first start, through flatpak preinstall" first_boot_apps
 check ".exe and .msi files open in Bottles" windows_apps
+check "Video thumbnails come from Flathub's codecs, in a sandbox" video_thumbnails
 
 printf '\nPassed: %d   Failed: %d\n' "$passes" "$failures"
 ((failures == 0))

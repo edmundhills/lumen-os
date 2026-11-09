@@ -1,0 +1,15 @@
+# SPDX-FileCopyrightText: 2026 Lumen OS contributors
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Video thumbnails in Dolphin and the rest of Plasma (step 1.14b,
+# docs/decisions/0025-codecs.md), as a freedesktop thumbnailer, which KDE's
+# previews run for these types. They are the types of ffmpegthumbs, which the
+# image leaves out: its FFmpeg is Fedora's, without H.264 or HEVC, and it
+# reads the video inside the file manager. lumen-video-thumbnailer uses
+# Flathub's FFmpeg, in a sandbox.
+
+[Thumbnailer Entry]
+TryExec=/usr/libexec/lumen-video-thumbnailer
+Exec=/usr/libexec/lumen-video-thumbnailer %s %i %o
+MimeType=application/mxf;application/ogg;application/sdp;application/smil;application/streamingmedia;application/vnd.apple.mpegurl;application/vnd.ms-asf;application/vnd.rn-realmedia-vbr;application/vnd.rn-realmedia;application/x-cue;application/x-extension-m4a;application/x-extension-mp4;application/x-matroska;application/x-mpegurl;application/x-ogg;application/x-ogm-video;application/x-ogm;application/x-shorten;application/x-smil;application/x-streamingmedia;video/*;
