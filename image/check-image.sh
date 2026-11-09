@@ -351,17 +351,30 @@ ntsync() {
   return "$status"
 }
 
-# Bottles comes on first boot (step 1.13): Flatpak can preinstall, the
-# preinstall list names Bottles, Flathub becomes a system remote on first use,
-# and Lumen's timer is the only unit that runs `flatpak preinstall`.
+# Bottles, Firefox and Haruna come on first boot (steps 1.13 and 1.14a):
+# Flatpak can preinstall, the preinstall list names them, Flathub becomes a
+# system remote on first use, and Lumen's timer is the only unit that runs
+# `flatpak preinstall`. Kinoite's Firefox RPM is gone, with nothing left
+# naming it as a default app.
 first_boot_apps() {
-  local status=0 flathub=() others
+  local status=0 flathub=() others app
   if ! flatpak preinstall --help >/dev/null 2>&1; then
     printf "Flatpak %s has no 'flatpak preinstall', which came in 1.17\n" "$(flatpak --version)"
     status=1
   fi
-  if ! grep -qxF '[Flatpak Preinstall com.usebottles.bottles]' /usr/share/flatpak/preinstall.d/lumen.preinstall; then
-    printf "/usr/share/flatpak/preinstall.d/lumen.preinstall doesn't name Bottles\n"
+  for app in com.usebottles.bottles org.mozilla.firefox org.kde.haruna; do
+    if ! grep -qxF "[Flatpak Preinstall $app]" /usr/share/flatpak/preinstall.d/lumen.preinstall; then
+      printf "/usr/share/flatpak/preinstall.d/lumen.preinstall doesn't name %s\n" "$app"
+      status=1
+    fi
+  done
+  # The RPM browser is gone, and nothing still names it as a default app.
+  if [[ -e /usr/share/applications/firefox.desktop ]]; then
+    printf "Kinoite's Firefox is still in the image\n"
+    status=1
+  fi
+  if grep -rlsE '(^|[=;[:space:]])firefox\.desktop' /etc/xdg /usr/share/kde-settings /usr/share/applications/*mimeapps.list; then
+    printf 'These files still name firefox.desktop, which is gone\n'
     status=1
   fi
   # A .flatpakrepo in a remotes.d folder becomes a remote when Flatpak first
@@ -408,7 +421,7 @@ check "bootc install follows the image with its signatures checked" signed_insta
 check "mcelog, which supports no recent AMD processor, skips itself on one" mcelog_on_amd
 check "KWin and Plasma are the same release" same_plasma_release
 check "Wine's ntsync driver loads at every start" ntsync
-check "Bottles comes from Flathub after the first start, through flatpak preinstall" first_boot_apps
+check "Bottles, Firefox and Haruna come from Flathub after the first start, through flatpak preinstall" first_boot_apps
 check ".exe and .msi files open in Bottles" windows_apps
 
 printf '\nPassed: %d   Failed: %d\n' "$passes" "$failures"

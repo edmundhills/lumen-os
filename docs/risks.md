@@ -259,7 +259,7 @@ Likelihood **High**. Impact **Medium** for users; the legal exposure is for the 
 **Mitigation**
 
 - Flatpak apps (browsers, video players, editors) get codecs from Flathub's runtime extensions whatever the image does, and the Store installs Flatpaks, so most video plays either way. Step 1.14 also checks whether Flatpak apps get hardware decoding through Flathub's graphics drivers.
-- Step 1.14 writes the options and their legal trade-offs as an ADR, and the owner chooses: Fedora's codecs only; RPM Fusion's codecs in the image, as several Fedora-based images do; or a separate codecs variant.
+- Step 1.14 wrote the options and their legal trade-offs as [ADR 0025](decisions/0025-codecs.md), and the owner chose (2026-11-09): Fedora's codecs in the image; the browser and video player from Flathub; video thumbnails through Flathub's codecs in a sandbox; and Steam's hardware encoding on AMD through RPM Fusion's video driver, downloaded on each machine when its user opts in. Lumen's image carries no patent-encumbered codec.
 - If freeworld Mesa is chosen, the exact-version guard covers it, and CI holds a Mesa update until the matching freeworld build exists.
 - The hardware report and the FAQ say what plays out of the box (6.12, 10.4).
 

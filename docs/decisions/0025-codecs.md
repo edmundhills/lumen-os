@@ -4,10 +4,10 @@ SPDX-FileCopyrightText: 2026 Lumen OS contributors
 SPDX-License-Identifier: GPL-3.0-or-later
 -->
 
-# 0025. Codecs and hardware video decoding
+# 0025. Keep Fedora's codecs in the image; apps, thumbnails and an opt-in video driver get the rest
 
-- Status: **Proposed** (2026-11-08), at step 1.14. The owner chooses.
-- Deciders: the owner, on the options below; lead engineer (Claude) wrote them.
+- Status: **Accepted** (2026-11-09), at step 1.14: option A, with two additions the owner asked for.
+- Deciders: the owner, on the options below; lead engineer (Claude) wrote them and the way to ship them.
 
 This is a technical summary written to help with a legal choice. It is not legal advice. If Lumen is distributed widely, or commercially, ask a lawyer who knows software patents in the owner's country.
 
@@ -66,4 +66,24 @@ A now: Fedora's codecs in the image, the browser and a video player from Flathub
 
 ## Decision
 
-Waiting for the owner.
+The owner chose A, and asked for H.264 and HEVC video thumbnails and Steam's hardware encoding on AMD to work too, without Lumen's image carrying those codecs. More facts, read on 2026-11-09:
+
+- KDE's previews (KIO, `KDE/kio` at `929eeac`) run freedesktop thumbnailers, `.thumbnailer` files in `/usr/share/thumbnailers` whose command makes a PNG, and turn every one on by default; a KIO plugin such as `ffmpegthumbs` that takes the same type comes first.
+- `flatpak run` runs a runtime as well as an app, and `--sandbox` drops every permission it would otherwise have. freedesktop's runtime has the `ffmpeg` and `ffprobe` commands, which use `codecs-extra` when it is there (freedesktop-sdk's own `tests/ffmpeg-test.py`).
+- KDE's runtime (`KDE/flatpak-kde-runtime`, branch `qt6.11`) inherits freedesktop's `codecs-extra` and GL extensions. Haruna, KDE's video player on Flathub (`org.kde.haruna`), uses it and has the GPU (`--device=dri`).
+- RPM Fusion's `mesa-va-drivers-freeworld` keeps its video drivers and its own `libgallium` in `/usr/lib64/dri-freeworld`, which an `ld.so.conf.d` file adds to the library path.
+
+So:
+
+1. **The image keeps Fedora's codecs.** Lumen ships no H.264, HEVC or VC-1 code, and no RPM Fusion codec package.
+2. **The browser and the video player come from Flathub** on first boot, with every codec and hardware decoding: Mozilla's Firefox (`org.mozilla.firefox`) and KDE's Haruna (`org.kde.haruna`), in the preinstall list that brings Bottles (ADR 0024). Kinoite's Firefox RPM goes, and the image check makes sure nothing still names it as a default app (step 1.14a).
+3. **Video thumbnails come from Flathub's codecs** (step 1.14b). `ffmpegthumbs` goes, and Lumen's `.thumbnailer` runs a small script that has the newest installed freedesktop runtime's `ffmpeg` make the thumbnail, in `flatpak run --sandbox` with read access to that one file only. The runtime joins the preinstall list. The script is all Lumen ships, so Flathub distributes the codec. Parsing an untrusted video file moves from Dolphin's own process into a sandbox, which the security model welcomes. CI tests it with H.264 and HEVC clips.
+4. **Steam's hardware encoding on AMD is an opt-in on each machine** (step 1.14c). A command, and from Phase 5 a switch in Settings, downloads RPM Fusion's `mesa-va-drivers-freeworld` at exactly the image's Mesa version, checks its signature with RPM Fusion's key, which the image carries, and unpacks it into `/var/lib/lumen/codecs`. An `ld.so.conf.d` entry and `LIBVA_DRIVERS_PATH` in `/etc` point the video drivers there. At every start, before the login screen, a service checks that the download still matches the image's Mesa: after an update that changed Mesa it turns the drivers off, falling back to Fedora's, until it has the matching download. The user's machine downloads the codec, as with Ubuntu's and Linux Mint's codec downloads; Lumen's image never contains it. The NVIDIA editions don't need it (NVENC).
+
+## Consequences
+
+- Every app the user gets from Lumen plays everything, with hardware decoding, and Lumen distributes nothing that Fedora doesn't.
+- The first start downloads Firefox and Haruna as well as Bottles, with their runtimes; until it has, there is no browser. Welcome (Phase 6) will show the progress.
+- Thumbnails of videos cost a sandboxed process each, cached once made.
+- Steam on AMD encodes on the CPU until its user opts in, and again for each update that moves Mesa until the matching download is there.
+- If RPM Fusion has no build of the image's Mesa yet, the opt-in waits for it.
