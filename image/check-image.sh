@@ -409,7 +409,14 @@ video_thumbnails() {
     status=1
   fi
   mapfile -t kio < <(find /usr/lib64 -maxdepth 1 -name 'libKF6KIOGui.so.6.*' -type f)
-  if ((${#kio[@]} == 0)) || ! grep -qa 'standardthumbnailer' "${kio[@]}"; then
+  # Qt 6 keeps a QStringLiteral's text in UTF-16, so the library holds the
+  # category KIO gives freedesktop thumbnailers in that form.
+  if ((${#kio[@]} == 0)) || ! python3 -c '
+import sys
+word = "standardthumbnailer"
+data = open(sys.argv[1], "rb").read()
+sys.exit(0 if word.encode() in data or word.encode("utf-16-le") in data else 1)
+' "${kio[0]}"; then
     printf "KDE's previews (libKF6KIOGui) don't run freedesktop thumbnailers\n"
     status=1
   fi
