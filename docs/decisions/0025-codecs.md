@@ -87,3 +87,7 @@ So:
 - Thumbnails of videos cost a sandboxed process each, cached once made.
 - Steam on AMD encodes on the CPU until its user opts in, and again for each update that moves Mesa until the matching download is there.
 - If RPM Fusion has no build of the image's Mesa yet, the opt-in waits for it.
+
+## Follow-up
+
+- 2026-11-09, step 1.14a: image run 42583538022 (for `f7ba77c`) was green without the Firefox RPM: `lumen` 12 of 12 (51 minutes), `lumen-gaming` 13 of 13 (81), `lumen-nvidia` 14 of 14 (97), `lumen-gaming-nvidia` 15 of 15 (116), every image check passing, the new ones included. `lumen`'s update from the exempted `dev` `45.20261106.1` is now 420.4 MiB in 10 of 252 layers: removing Firefox and its language packs took two layers away, and re-chunking against `dev`'s plan moved packages between three more and `python3-libs`'s, once, on top of step 1.13's changes.
