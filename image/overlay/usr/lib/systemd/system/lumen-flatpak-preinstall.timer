@@ -3,7 +3,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Starts lumen-flatpak-preinstall.service two minutes after each start, so the
-# download doesn't hold up the login screen or the first-run setup.
+# download doesn't hold up the login screen or the first-run setup, and again
+# a quarter of an hour after any run that was skipped for want of a network or
+# that failed, until one has worked (the service says how).
 
 [Unit]
 Description=Install the Flatpak apps that come with Lumen, after each start
@@ -11,6 +13,7 @@ Documentation=https://github.com/edmundhills/lumen-os/blob/main/image/README.md
 
 [Timer]
 OnBootSec=2min
+OnUnitInactiveSec=15min
 
 [Install]
 WantedBy=timers.target

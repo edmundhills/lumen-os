@@ -292,16 +292,23 @@ ntsync_device() {
   fi
 }
 
-# The timer that installs Bottles and the other apps Lumen comes with, once
-# the system is online, is waiting (step 1.13). The VM has no network, so the
-# service itself only ever skips here.
+# The timer that installs the browser, Bottles and the other apps Lumen comes
+# with, once the system is online, is waiting (step 1.13), and the system
+# running here has it start the service again after a run that was skipped or
+# failed: a new PC is often offline when the timer first fires. The VM has no
+# network, so the service itself only ever waits or skips here.
 first_boot_apps() {
-  local state
+  local state status=0
   state=$(systemctl is-active lumen-flatpak-preinstall.timer)
   if [[ $state != active ]]; then
     printf 'lumen-flatpak-preinstall.timer is %s, not active\n' "$state"
-    return 1
+    status=1
   fi
+  if ! systemctl cat lumen-flatpak-preinstall.timer | grep -q '^OnUnitInactiveSec='; then
+    printf 'lumen-flatpak-preinstall.timer does not start its service again (no OnUnitInactiveSec=)\n'
+    status=1
+  fi
+  return "$status"
 }
 
 # No SELinux denial since this boot started, in the journal or the audit log,
@@ -378,7 +385,7 @@ if grep -qE '^VARIANT_ID=(gaming-)?nvidia$' /usr/lib/os-release; then
   check "No NVIDIA card or key: nouveau took over, NVIDIA's module isn't loaded" nouveau_fallback
   check "The kernel refuses NVIDIA's module until its key is enrolled" nvidia_refused
 fi
-check "The apps Lumen comes with, Bottles first, install once online: the timer waits" first_boot_apps
+check "The apps Lumen comes with install once online: the timer waits, and tries again" first_boot_apps
 check "No failed units" no_failed_units
 check "No SELinux denials" no_denials
 boot_info "Login screen"

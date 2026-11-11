@@ -52,16 +52,36 @@ class Preinstall(unittest.TestCase):
 
 
 class Units(unittest.TestCase):
-    def test_the_service_skips_without_a_network(self):
-        service = read(UNITS / "lumen-flatpak-preinstall.service", strict=False)
-        self.assertTrue(service["Service"]["ExecCondition"].startswith("/usr/bin/nm-online "))
-        self.assertEqual(service["Service"]["ExecStart"],
+    def setUp(self):
+        self.service = read(UNITS / "lumen-flatpak-preinstall.service", strict=False)["Service"]
+        self.timer = read(UNITS / "lumen-flatpak-preinstall.timer", strict=False)
+
+    def test_the_service_waits_for_a_network_and_skips_without_one(self):
+        """nm-online returns the moment NetworkManager has a connection; ExecCondition makes its failure a skip."""
+        condition = self.service["ExecCondition"].split()
+        self.assertEqual(condition[:2], ["/usr/bin/nm-online", "--quiet"])
+        timeout = [int(arg.partition("=")[2]) for arg in condition if arg.startswith("--timeout=")]
+        self.assertEqual(len(timeout), 1)
+        # Long enough for a new user to pick a Wi-Fi network; nm-online takes at most an hour.
+        self.assertGreaterEqual(timeout[0], 600)
+        self.assertLessEqual(timeout[0], 3600)
+        self.assertEqual(self.service["ExecStart"],
                          "/usr/bin/flatpak preinstall --system --assumeyes --noninteractive")
 
+    def test_a_run_that_worked_is_not_repeated_until_the_next_start(self):
+        """The timer starts the service again whenever it is inactive, which a finished oneshot service is."""
+        self.assertEqual(self.service["Type"], "oneshot")
+        self.assertEqual(self.service["RemainAfterExit"], "yes")
+
     def test_the_timer_waits_after_each_start(self):
-        timer = read(UNITS / "lumen-flatpak-preinstall.timer", strict=False)
-        self.assertEqual(timer["Timer"]["OnBootSec"], "2min")
-        self.assertEqual(timer["Install"]["WantedBy"], "timers.target")
+        self.assertEqual(self.timer["Timer"]["OnBootSec"], "2min")
+        self.assertEqual(self.timer["Install"]["WantedBy"], "timers.target")
+
+    def test_the_timer_tries_again_after_a_skipped_or_failed_run(self):
+        """Without this, a PC that is offline two minutes after its first start has no browser until a restart."""
+        self.assertEqual(self.timer["Timer"]["OnUnitInactiveSec"], "15min")
+        # The timer starts the service of the same name, with no Unit= to point it elsewhere.
+        self.assertNotIn("Unit", self.timer["Timer"])
 
 
 if __name__ == "__main__":

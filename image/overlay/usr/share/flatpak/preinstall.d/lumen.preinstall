@@ -5,10 +5,11 @@
 # The Flatpak apps that come with Lumen (spec, "Image contents": user apps are
 # Flatpaks preinstalled on first boot, not part of the image). Flatpak's own
 # preinstall reads this file (man flatpak-preinstall), and
-# lumen-flatpak-preinstall.timer runs it after each start. A user who removes
-# one of these apps keeps it removed. Flathub's runtimes give these apps every
-# codec and hardware video decoding, which Lumen's image leaves out (ADR 0025).
-# The rest of the spec's apps come with Welcome and the Store.
+# lumen-flatpak-preinstall.timer runs it after each start, as soon as the PC
+# is online. A user who removes one of these apps keeps it removed. Flathub's
+# runtimes give these apps every codec and hardware video decoding, which
+# Lumen's image leaves out (ADR 0025). The rest of the spec's apps come with
+# Welcome and the Store.
 
 # The browser: Mozilla's own Firefox on Flathub (step 1.14a).
 [Flatpak Preinstall org.mozilla.firefox]
@@ -26,6 +27,7 @@ IsRuntime=true
 Branch=26.08
 
 # Bottles runs Windows programs with Wine, each in its own bottle (spec,
-# "Windows apps"); .exe and .msi files open in it (/usr/share/applications/mimeapps.list).
+# "Windows apps"); .exe and .msi files open in it (image/windows_apps.py puts
+# it first for their types in /usr/share/applications/kde-mimeapps.list).
 [Flatpak Preinstall com.usebottles.bottles]
 Branch=stable

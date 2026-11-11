@@ -4,10 +4,19 @@
 #
 # Installs the Flatpak apps Lumen comes with, from
 # /usr/share/flatpak/preinstall.d, into the system installation, as Flatpak's
-# own preinstall does it (man flatpak-preinstall). lumen-flatpak-preinstall.timer
-# starts it after each start, in the background. Without a network connection
-# it is skipped, not failed, and the next start tries again. Apps already
-# installed, or removed by the user, cost one quick check.
+# own preinstall does it (man flatpak-preinstall). The browser is one of them
+# (ADR 0025), so a new PC must get them as soon as it is online, not at its
+# next restart: a laptop's first start is offline until the user picks a Wi-Fi
+# network.
+#
+# lumen-flatpak-preinstall.timer starts this two minutes after each start, in
+# the background. It first waits up to half an hour for NetworkManager to
+# report a connection, and installs the moment there is one. With none in that
+# time the run is skipped, not failed, and the timer starts it again. A run
+# that fails, such as when Flathub can't be reached, is started again the same
+# way. Once a run has worked the service stays active until the next restart,
+# so the timer leaves it alone. Apps already installed, or removed by the
+# user, cost one quick check.
 
 [Unit]
 Description=Install the Flatpak apps that come with Lumen
@@ -18,7 +27,8 @@ After=network-online.target
 
 [Service]
 Type=oneshot
-ExecCondition=/usr/bin/nm-online --quiet --timeout=60
+RemainAfterExit=yes
+ExecCondition=/usr/bin/nm-online --quiet --timeout=1800
 ExecStart=/usr/bin/flatpak preinstall --system --assumeyes --noninteractive
 Nice=19
 IOSchedulingClass=idle
