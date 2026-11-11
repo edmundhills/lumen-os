@@ -42,12 +42,14 @@ image/ (Containerfile, overlay/, packages.toml), design/tokens/ (tokens.json + e
 
 ## Step mode (how we work across sessions)
 
-The owner works in short sessions to stay within usage limits. PROGRESS.md is the step list and the hand-off between sessions. These rules refine the working rules above.
+The owner works in short sessions to stay within usage limits. PROGRESS.md is the step list and the hand-off between sessions; docs/history/ holds the record of finished steps (ADR 0026). These rules refine the working rules above.
 
 - At the start of a session, read PROGRESS.md and do the step under "Current step" (or the first unchecked one). Do that step plus any following steps marked ➕ (a batch of small steps), then stop. Commit after each step in the batch.
 - Read only the docs/spec.md sections the step names, not the whole spec. This replaces "read it before every phase" while in step mode.
 - Commit after each meaningful piece of work, so a session that ends early loses nothing.
-- Before you stop, done or not, update PROGRESS.md: tick the step and move "Current step" to the next one, or write exactly where you stopped under "Notes for the next session".
+- Before you stop, done or not, update PROGRESS.md: tick the step and move "Current step" to the next one, or write exactly where you stopped under "Current step".
+- Keep PROGRESS.md short: every session reads it first. When a step is done, add its record (what was built, CI runs, measurements, what failed first) to the end of docs/history/phase-N.md, and keep in PROGRESS.md only what a later step needs, under that step's number in "Notes for steps still to come". Search the history by step number when a step needs it; don't read it whole.
+- Push code before notes. A push that changes only documents starts no image build and cancels none, so the run testing your code finishes.
 - If a step turns out bigger than one session, split it into sub-steps (e.g. 3.5a, 3.5b) in PROGRESS.md rather than rushing it.
 - Steps marked 👤 need the owner (accounts, admin installs, real hardware, approvals). Prepare everything you can, explain exactly what they must do, then stop.
 - The owner's machine is Windows 11 Home. Linux tooling runs in WSL2 (Fedora) or in GitHub Actions; heavy image builds run in CI, not locally.

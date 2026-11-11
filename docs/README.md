@@ -14,6 +14,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
 | [competing-with-windows.md](competing-with-windows.md) | What stops people switching from Windows, and what Lumen does about each item |
 | [versions.md](versions.md) | The Fedora release, Kinoite image digest, KWin version and other versions Lumen builds on |
 | [decisions/](decisions/) | Architecture decision records (ADRs) |
+| [history/](history/) | What each finished step built, measured and found, one file per phase. [PROGRESS.md](../PROGRESS.md) is the plan; this is the record behind it |
 | [dev-setup-windows.md](dev-setup-windows.md) | Setting up a Windows 11 Home PC for Lumen development |
 | [nvidia-secure-boot.md](nvidia-secure-boot.md) | Enrolling Lumen's key as a MOK, so NVIDIA's driver loads under Secure Boot: the steps, the blue MokManager screen, checking and removing the key |
 | [images/](images/) | Pictures used by the documents |

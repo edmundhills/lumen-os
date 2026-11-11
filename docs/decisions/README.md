@@ -35,6 +35,7 @@ Architecture decision records (ADRs). Each one records a decision that changes t
 | [0023](0023-edition-per-runner.md) | Build, test and publish each edition on a runner of its own | Accepted |
 | [0024](0024-windows-app-base.md) | Load ntsync at every start, bring Bottles with Flatpak's preinstall, and open Windows files in it | Accepted |
 | [0025](0025-codecs.md) | Keep Fedora's codecs in the image; apps, thumbnails and an opt-in video driver get the rest | Accepted |
+| [0026](0026-short-plan-early-tests.md) | Keep the plan short, with each step's record in `docs/history/`, and build tests and translation tooling before what they check | Accepted |
 
 ADRs 0001 to 0009 use the step numbers of their time. Since ADR 0010, the old Phase 8 is Phase 9 and the old Phase 9 is Phase 10, so their "step 8.2" is now step 9.2, and "step 9.1" is now step 10.1.
 

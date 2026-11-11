@@ -12,7 +12,9 @@ It is built on Fedora Kinoite as a bootc image. The system is a signed, read-onl
 
 ## Status
 
-Early development: there is nothing to install yet. [PROGRESS.md](PROGRESS.md) lists every step and shows where work stands.
+Early development, and not ready to use. Phase 1 of 10, the bootable image, is nearly done: CI builds the image in four editions (default, gaming, NVIDIA and gaming with NVIDIA), boots each in a virtual machine with Secure Boot and SELinux enforcing, signs and publishes development builds, and makes an install ISO that it installs from in a virtual machine. Lumen's own look, shell, apps and updater don't exist yet: what installs today is Fedora Kinoite's Plasma desktop with Lumen's base underneath. There is no release.
+
+[PROGRESS.md](PROGRESS.md) lists every step and shows where work stands; [docs/history/](docs/history/) records what each finished step did.
 
 ## Documents
 
@@ -22,6 +24,7 @@ Early development: there is nothing to install yet. [PROGRESS.md](PROGRESS.md) l
 | [docs/architecture.md](docs/architecture.md) | The components, how they talk to each other, and how they are built |
 | [docs/risks.md](docs/risks.md) | The top technical risks and what we do about each |
 | [docs/competing-with-windows.md](docs/competing-with-windows.md) | What stops people switching from Windows, and what Lumen does about each item |
+| [docs/versions.md](docs/versions.md) | The Fedora release and the versions Lumen builds on, and how the pinned base images move |
 | [docs/decisions/](docs/decisions/) | Architecture decision records |
 
 ## Repository layout

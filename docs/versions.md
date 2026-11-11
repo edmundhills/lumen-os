@@ -38,9 +38,20 @@ From the x86_64 image. The KWin and Plasma versions are the ones lumen-glass, th
 
 ## Fedora 45
 
-The Fedora 45 Kinoite build of the same day (`45.20261027.0`, a pre-release) has the same KWin and Plasma (6.7.5), Qt (6.11.2) and KDE Frameworks (6.31.0), with kernel 7.2.11. Moving to 45 therefore doesn't change what lumen-glass is built against. Fedora 44 is supported until 2027-06-02.
+**Lumen has built on Fedora 45 since 2026-11-01**, when Bodhi listed it as current and the base workflow moved the pin (pull request #4). What the repository records about it, without a new reading of the registry:
 
-Step 1.2 read the versions again on 2026-10-27: Fedora 45 was still in final freeze and `kinoite:44` still pointed at the digest above, so `image/Containerfile` pins it. Once Bodhi lists Fedora 45 as current, the base workflow's next run moves the pin to `kinoite:45` (or run it by hand from the Actions tab), because the spec says to build on the current Fedora; the release train then decides when stable gets it (ADR 0004, Q14). On 2026-10-28 Bodhi still listed Fedora 45 as frozen. The lint container stays on Fedora 44 until someone moves it by hand.
+| What | Value | Recorded by |
+| --- | --- | --- |
+| Pinned build | Kinoite `45.20261102.0`, built 2026-11-02, index digest `sha256:d54aee1a7232e0df3db47ccbd3b15df03c3dbe953df4f0c65b4a1297925f33ad` | `image/Containerfile`, the `# Pinned:` and `FROM` lines |
+| **KWin**, Plasma | **6.8.2**, a feature release on from the 6.7.5 in the tables above | The same `# Pinned:` line |
+| Qt | 6.11.2 | The same line |
+| Linux kernel | 7.2.13-300.fc45 on `45.20261101.0` | The boot test of 2026-11-01 ([history](history/phase-1.md), step 1.10a) |
+| Mesa | 26.2.5 | [ADR 0025](decisions/0025-codecs.md), read on 2026-11-08 |
+
+- The tables above are still the Fedora 44 reading of 2026-10-27. The pre-release Fedora 45 build of that day had the same KWin and Plasma as Fedora 44 (6.7.5), but Plasma 6.8.2 reached both releases on 2026-11-01, so what lumen-glass must be built against did change with the move. Read the tables again from a machine that can reach quay.io ([How to read them again](#how-to-read-them-again)).
+- That update also showed how the pin and Fedora's mirrors can drift apart: with Kinoite still pinned at Plasma 6.7.5, installing Lumen's packages pulled Plasma 6.8.2 packages in beside KWin 6.7.5. `image/check-image.sh` now fails a build whose KWin and Plasma are different releases, and the fix is a bump of the pin.
+- `kcm-fcitx5` is left out of `image/packages.toml` until Fedora 45 has a build of it for Plasma 6.8 (2026-11-01).
+- The lint container stays on Fedora 44 until someone moves it by hand. Fedora 44 is supported until 2027-06-02.
 
 ## Things to know
 
@@ -56,7 +67,7 @@ Step 1.2 read the versions again on 2026-10-27: Fedora 45 was still in final fre
 The base workflow (`.github/workflows/base.yml`, step 1.5b) keeps two pins current: Kinoite in `image/Containerfile` and the lint container's Fedora in `tests/lint/Containerfile`. `image/bump_bases.py` reads and rewrites them, and `image/copy-bases.sh` copies them.
 
 - **Every Monday** at 05:17 UTC, or when run by hand from the Actions tab, it reads the newest build of each pinned tag with skopeo, and for Kinoite the newest Fedora release that Bodhi lists as current. If anything moved, it rewrites the `FROM` and `# Pinned:` lines, pushes the branch `bump-bases`, copies the new bases to ghcr.io, and opens or updates a pull request that lists the old and new builds.
-- **The pull request's checks are its own lint and image runs.** GitHub made them for the first bump ([#1](https://github.com/edmundhills/lumen-os/pull/1), 2026-10-28) even though the workflow's token opened it, but held them for approval, because `github-actions[bot]` had no merged contribution yet. When that happens, press "Approve workflows to run" on the pull request. The owner merged #1 without approving them; GitHub then ended the held runs as failed, with no jobs, and the merge's own runs on main were green. If GitHub makes no runs at all, the job starts lint and image on the branch itself, but those runs don't show on the pull request; look for them under Actions.
+- **The pull request's checks are its own lint and image runs.** GitHub made them for the first bump ([#1](https://github.com/edmundhills/lumen-os/pull/1), 2026-10-28) even though the workflow's token opened it, but held them for approval, because `github-actions[bot]` had no merged contribution yet. When that happens, press "Approve workflows to run" on the pull request. It held them again for #4 (2026-11-01) and #7 (2026-11-09), after #1 had been merged, so expect to press it for every bump. The owner merged #1 without approving them; GitHub then ended the held runs as failed, with no jobs, and the merge's own runs on main were green. If GitHub makes no runs at all, the job starts lint and image on the branch itself, but those runs don't show on the pull request; look for them under Actions.
 - **The owner reviews and merges** the pull request; its commit is the workflow's and has no sign-off ([CONTRIBUTING.md](../CONTRIBUTING.md#sign-off-every-commit-dco)). If the image build fails, for example because a new Fedora release dropped a package that `image/packages.toml` names, fix it on the branch: once a person has added a commit, the workflow leaves the pull request alone until it is merged or closed.
 - **Every pinned base is copied** to `ghcr.io/edmundhills/<name>:<tag>-<first 12 digits of the digest>`, for example `kinoite:44-9f71aa8ed152`, with `skopeo copy --all --preserve-digests`, so the copy has the same digest. The bump copies its new bases straight away, because its pull request may wait longer than quay.io keeps them, and every merge to main that changes a pin, and every Monday run, copies whatever main pins. A Kinoite copy is about 5.8 GiB, for two architectures. The copies must be public.
 - **CI pulls from the copies first.** The image and lint workflows write `/etc/containers/registries.conf.d/50-lumen-bases.conf` (`bump_bases.py mirrors`), which makes Podman pull each pinned base from its copy, by digest only, and from the original registry when the copy is missing. Checked with Ubuntu 24.04's Podman 4.9.3, which the runners use, on 2026-10-28.

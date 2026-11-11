@@ -23,7 +23,7 @@ This is a living document, like the [gap list](competing-with-windows.md). Updat
 | 5 | [Building the install ISO as a live ISO from a bootc image](#5-building-the-install-iso-as-a-live-iso-from-a-bootc-image) | Medium | High | 1.8, 6.10, 6.12, 10.5 |
 | 6 | [Rollback doesn't roll back state](#6-rollback-doesnt-roll-back-state) | Medium | High | 5.1, 5.6, 5.7, 10.2 |
 | 7 | [NVIDIA drivers under Secure Boot](#7-nvidia-drivers-under-secure-boot) | High | Medium | 1.11, 1.12, 5.10 |
-| 8 | [Glass misses its frame-time and contrast budgets](#8-glass-misses-its-frame-time-and-contrast-budgets) | Medium | High | 3.3 to 3.11, 3.16, 3.17 |
+| 8 | [Glass misses its frame-time and contrast budgets](#8-glass-misses-its-frame-time-and-contrast-budgets) | Medium | High | 3.2a to 3.11, 3.16, 3.17 |
 | 9 | [Windows code signing for Lumen Setup](#9-windows-code-signing-for-lumen-setup) | High | Medium | 0.4, 7.9, 10.5 |
 | 10 | [Codec patents and hardware video decoding](#10-codec-patents-and-hardware-video-decoding) | High | Medium | 1.14 |
 | 11 | [Hibernation under kernel lockdown](#11-hibernation-under-kernel-lockdown) | High | Medium | 1.9, 5.17, 6.11 |
@@ -50,12 +50,12 @@ Likelihood **High** (it happens every release). Impact **High**.
 - **Step 3.1:** keep the fork easy to rebase. lumen-glass keeps the upstream effect's file layout, puts Lumen's own work in separate files, and records the KWin commit it forked from in `glass/UPSTREAM`. A rebase then means re-applying one known diff.
 - **Step 3.1:** a weekly canary job builds lumen-glass, the decoration and lumen-shell against the KWin and Plasma in Fedora's `updates-testing` and Rawhide. Breakage then shows up weeks before the base workflow's pull request for the new base digest. The canary is never shipped, so the build rule still holds for what users get.
 - The base workflow's pull request for a new Kinoite digest stays red until the rebase is done, so users stay on the previous base and untested code can't reach them. That also delays the rest of the base's updates, so each Plasma release month has rebase time planned in.
-- If lumen-glass fails to load, KWin runs without it. A session test (step 3.15) checks that the shell is still usable with the effect turned off.
+- If lumen-glass fails to load, KWin runs without it. A session test (on the harness of step 3.2a) checks that the shell is still usable with the effect turned off.
 - Upstream what we can. Generic hooks, such as support for `ext_background_effect_manager_v1`, belong in KWin, so the fork shrinks over time.
 
 **Early warning:** the canary job turns red; KDE's beta of each Plasma release, a few weeks before it ships.
 
-**Steps:** 1.2, 2.8, 3.1, 3.2, 3.15, 4.1, 9.2.
+**Steps:** 1.2, 2.8, 3.1, 3.2, 3.2a, 4.1, 9.2.
 
 ## 2. Secure Boot's move to the Microsoft UEFI CA 2023
 
@@ -210,11 +210,11 @@ Likelihood **Medium**. Impact **High** (glass is the design's centrepiece).
 
 - Measure early: time each pass on real Intel laptop graphics right after the shared blur exists (step 3.3), before the shader work, so each later step knows its share of the budget.
 - The shared quarter-resolution blur, computed once per frame, and damage-aware caching (3.3, 3.4) are the main savings. The Lite and Solid tiers and the first-boot benchmark (3.10, 3.11) cover weaker GPUs.
-- Contrast is computed, not judged by eye. Adaptive tint raises the tint until 4.5:1 is met, and the reference scenes (3.15, 3.16) include video and busy backdrops.
+- Contrast is computed, not judged by eye. Adaptive tint raises the tint until 4.5:1 is met, and the reference scenes (3.2a, 3.15, 3.16) include video and busy backdrops. The harness comes before the shader work (step 3.2a, [ADR 0026](decisions/0026-short-plan-early-tests.md)), so each shader step is checked as it lands.
 - Reduce Transparency and the Solid tier always give an opaque look that meets the contrast rule.
 - 👤 The real-hardware check needs a laptop with Iris Xe-class graphics, borrowed or bought, before step 3.17.
 
-**Steps:** 3.3 to 3.11, 3.15 to 3.17.
+**Steps:** 3.2a to 3.11, 3.15 to 3.17.
 
 ## 9. Windows code signing for Lumen Setup
 
