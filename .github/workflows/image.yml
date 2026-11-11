@@ -2,35 +2,50 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# The image workflow: build each edition of image/Containerfile and check it on
-# every push and pull request. Builds of main also push each edition to
-# ghcr.io, sign it, and move its `dev` to it. docs/architecture.md, section 9.8.
+# The image workflow: build each edition of image/Containerfile and check it,
+# for every push to a branch other than main and every pull request. Builds of
+# main are the publish workflow's (publish.yml), which also pushes each edition
+# to ghcr.io and signs it. docs/architecture.md, section 9.8.
 #
-# The build itself is in build-image.yml, which builds one edition. Two jobs
-# call it, so that only builds of main get a token that can write to ghcr.io,
-# and the signing key; each runs it once per edition, on a runner each, and an
-# edition that fails holds back only itself (ADR 0023).
+# The build itself is in build-image.yml, which builds one edition. This
+# workflow runs it once per edition, on a runner each, and an edition that
+# fails holds back only itself (ADR 0023). Its token can only read.
+#
+# A change to documents alone starts no run: the lint workflow checks those,
+# and they can't change an image. It also leaves alone the run of the push
+# before it, which a new run would cancel: a note pushed after a change no
+# longer restarts the two hours of builds that test the change. To build
+# anyway, run the workflow by hand: Actions > image > Run workflow.
 
 name: image
 
 on:
   push:
+    branches-ignore: [main]
+    paths-ignore:
+      - "**.md"
+      - docs/**
+      - LICENSE
+      - LICENSES/**
   pull_request:
+    paths-ignore:
+      - "**.md"
+      - docs/**
+      - LICENSE
+      - LICENSES/**
   workflow_dispatch:
 
 permissions: {}
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  # A new push cancels the older run of a branch or pull request. A run on main
-  # is never cancelled once it has started, so a push to ghcr.io is never cut
-  # off; GitHub still lets a newer push replace one that is waiting to start.
+  # A new push cancels the older run of a branch or pull request. A run
+  # started by hand on main is left to finish.
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   check:
     name: Check ${{ matrix.edition }}
-    if: github.event_name != 'push' || github.ref != 'refs/heads/main'
     strategy:
       fail-fast: false
       matrix:
@@ -41,35 +56,3 @@ jobs:
     with:
       edition: ${{ matrix.edition }}
       publish: false
-
-  publish:
-    name: Publish ${{ matrix.edition }}
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - edition: lumen
-            publish: true
-          - edition: gaming
-            publish: true
-          # The NVIDIA editions are built and tested on main as on any other
-          # branch, but published only once Lumen's key signs their modules
-          # (steps 1.11a and 1.12c-2, ADR 0021): until then a throwaway key
-          # does, and no user could enrol it.
-          - edition: nvidia
-            publish: false
-          - edition: gaming-nvidia
-            publish: false
-    permissions:
-      contents: read
-      packages: write
-    uses: ./.github/workflows/build-image.yml
-    with:
-      edition: ${{ matrix.edition }}
-      publish: ${{ matrix.publish }}
-    # The signing key, a secret of the image-signing environment, which only
-    # main may use (ADR 0008). build-image.yml's sign job opens the environment.
-    secrets:
-      COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
-      COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}

@@ -5,9 +5,9 @@
 # Build one edition of image/Containerfile, the way `just build-image` does in
 # WSL, re-chunk it into the layers users download, make its SBOM and the qcow2
 # the boot test starts, and, when asked, push it to ghcr.io and sign it.
-# image.yml calls this once per edition for every push and pull request, on a
-# runner each (ADR 0023); only its jobs for main ask for the push.
-# docs/architecture.md, sections 9.5 and 9.8.
+# image.yml calls this once per edition for branches and pull requests, and
+# publish.yml for main, on a runner each (ADR 0023); only publish.yml asks for
+# the push. docs/architecture.md, sections 9.5 and 9.8.
 #
 # The editions and their images (docs/architecture.md, section 9.5):
 #   lumen          ghcr.io/<owner>/lumen                the lumen stage
@@ -60,8 +60,8 @@ on:
         description: The private key's password.
         required: false
 
-# No permissions here: the jobs get exactly those their caller in image.yml
-# grants, and only the caller for main can write packages.
+# No permissions here: the jobs get exactly those their caller grants, and only
+# the caller for main, publish.yml, can write packages.
 
 # Naming the shell makes GitHub run each step with `bash -eo pipefail`. Its
 # default, `bash -e`, ignores a failure on the left of a pipe, so a check
@@ -531,7 +531,7 @@ jobs:
           COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
         run: |
           if [[ -z $COSIGN_PRIVATE_KEY ]]; then
-            printf '::error::%s %s\n' "The image-signing environment has no COSIGN_PRIVATE_KEY secret, or image.yml" \
+            printf '::error::%s %s\n' "The image-signing environment has no COSIGN_PRIVATE_KEY secret, or publish.yml" \
               "doesn't pass it. docs/decisions/0008-image-signing.md says how the key is made and stored."
             exit 1
           fi

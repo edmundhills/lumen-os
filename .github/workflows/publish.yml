@@ -1,0 +1,64 @@
+# SPDX-FileCopyrightText: 2026 Lumen OS contributors
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# The publish workflow: every push to main builds each edition of
+# image/Containerfile, checks it as the image workflow does (image.yml), pushes
+# it to ghcr.io, signs it, and moves its `dev` to it (spec, "Release train":
+# every merge to main builds dev). docs/architecture.md, section 9.8.
+#
+# The build itself is in build-image.yml, which builds one edition. This
+# workflow runs it once per edition, on a runner each, and an edition that
+# fails holds back only itself (ADR 0023). Only this workflow gets a token
+# that can write to ghcr.io, and the signing key.
+#
+# Unlike the image workflow it has no path filter: main gets a build for every
+# merge, whatever the merge changed.
+
+name: publish
+
+on:
+  push:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # A run on main is never cancelled once it has started, so a push to ghcr.io
+  # is never cut off; GitHub still lets a newer push replace one that is
+  # waiting to start.
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish ${{ matrix.edition }}
+    if: github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - edition: lumen
+            publish: true
+          - edition: gaming
+            publish: true
+          # The NVIDIA editions are built and tested on main as on any other
+          # branch, but published only once Lumen's key signs their modules
+          # (steps 1.11a and 1.12c-2, ADR 0021): until then a throwaway key
+          # does, and no user could enrol it.
+          - edition: nvidia
+            publish: false
+          - edition: gaming-nvidia
+            publish: false
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/build-image.yml
+    with:
+      edition: ${{ matrix.edition }}
+      publish: ${{ matrix.publish }}
+    # The signing key, a secret of the image-signing environment, which only
+    # main may use (ADR 0008). build-image.yml's sign job opens the environment.
+    secrets:
+      COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+      COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
