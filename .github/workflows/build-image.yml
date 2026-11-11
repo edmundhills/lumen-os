@@ -21,7 +21,8 @@
 # build of the edition on ghcr.io, so an update downloads only the layers whose
 # packages changed. Each run says how much that is, and fails when a build on
 # the same base image as the newest one would make users download more than
-# DOWNLOAD_BUDGET_MIB (risk 14 in docs/risks.md).
+# DOWNLOAD_BUDGET_MIB (risk 14 in docs/risks.md), unless the change declares
+# itself a one-time download in image/Containerfile.
 #
 # Signing (ADR 0008): the sign job signs the pushed digest with cosign and
 # attaches the SBOM to it as a signed attestation. Its key is a secret of the
@@ -87,19 +88,14 @@ jobs:
       # The most an update between two builds on the same base may download.
       # A rebuild of an unchanged commit downloads 41 MiB: the rpm database
       # and the rest of what every build writes afresh, and the ostree commit
-      # (ADR 0007). A change that needs more raises this in the same pull
-      # request and says why.
+      # (ADR 0007). A change that needs more on every build raises this in
+      # the same pull request and says why. A change that needs more once,
+      # such as a new folder no package owns, raises the image's one-time
+      # download number instead (the label org.lumen.one-time-download in
+      # image/Containerfile): the update from a build with another number
+      # isn't held to the budget, whichever edition it is and wherever dev
+      # has moved in the meantime (image/rechunk.py).
       DOWNLOAD_BUDGET_MIB: 100
-      # An earlier build, by digest, that an update isn't held to the budget
-      # from, for a change that alters many files once. It stops applying as
-      # soon as dev moves on. Now lumen's dev 45.20261108, the base bump's
-      # build: steps 1.13 to 1.14b add overlay folders and a timer's preset
-      # link that belong to no package, which changes the shared layer with
-      # the initramfs once; put Bottles in plasma-desktop's kde-mimeapps.list;
-      # and remove Firefox and ffmpegthumbs, which moves packages between a
-      # few layers once (ADR 0007 and 0024, Follow-up). If main publishes
-      # again before this reaches it, move this to that dev.
-      DOWNLOAD_BUDGET_EXEMPT: "sha256:65380fb2cc82bf9914f266a6ed91dd6cf1e7a59e21485ef763c96081afce7350"
       # osbuild's image-builder, which bootc-image-builder became, makes the
       # qcow2 (ADR 0011): the container of its release 88.0.0, by digest.
       IMAGE_BUILDER: >-
@@ -342,7 +338,8 @@ jobs:
           df -h /
 
       # What an update from the newest build on ghcr.io to this one downloads.
-      # Over the budget, the build fails, unless the base image changed.
+      # Over the budget, the build fails, unless the base image changed or
+      # the build declares a one-time download.
       - name: Measure the download
         run: |
           dir=$RUNNER_TEMP/previous new=$RUNNER_TEMP/new
@@ -352,15 +349,7 @@ jobs:
           sudo skopeo inspect --raw "oci:$RUNNER_TEMP/rechunked:latest" >"$new/manifest.json"
           # shellcheck disable=SC2024
           sudo skopeo inspect --config "oci:$RUNNER_TEMP/rechunked:latest" >"$new/config.json"
-          budget=$DOWNLOAD_BUDGET_MIB previous=
-          # The previous manifest's bytes give its digest.
-          [[ ! -f $dir/manifest.json ]] || previous=sha256:$(sha256sum <"$dir/manifest.json" | cut -d' ' -f1)
-          if [[ -n $DOWNLOAD_BUDGET_EXEMPT && $previous == "$DOWNLOAD_BUDGET_EXEMPT" ]]; then
-            printf 'The update from %s is not held to the budget (DOWNLOAD_BUDGET_EXEMPT).\n\n' \
-              "$DOWNLOAD_BUDGET_EXEMPT" | tee -a "$GITHUB_STEP_SUMMARY"
-            budget=1000000
-          fi
-          args=("$budget" "$new/manifest.json" "$new/config.json")
+          args=("$DOWNLOAD_BUDGET_MIB" "$new/manifest.json" "$new/config.json")
           [[ ! -f $dir/manifest.json ]] || args+=("$dir/manifest.json" "$dir/config.json")
           python3 image/rechunk.py download "${args[@]}" | tee -a "$GITHUB_STEP_SUMMARY"
 

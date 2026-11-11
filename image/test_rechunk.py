@@ -10,6 +10,7 @@
 import hashlib
 import json
 import os
+import re
 import subprocess
 import tempfile
 import unittest
@@ -59,8 +60,11 @@ RECHUNKED = dict(BUILT, **{"ostree.commit": "c" * 64, "ostree.final-diffid": dig
                            "org.opencontainers.image.base.digest": digest("kinoite-amd64")})
 
 
-def rechunked_image(version, base, extra=()):
-    """A re-chunked build: its commit layer, three layers of packages, the unpackaged files and an empty one."""
+def rechunked_image(version, base, extra=(), one_time="1"):
+    """A re-chunked build: its commit layer, three layers of packages, the unpackaged files and an empty one.
+
+    ONE_TIME is its one-time download number, or None for a build made before the label existed.
+    """
     layers = [
         layer(f"commit-{version}", 7),
         layer("kernel", 60, ["kernel-core"]),
@@ -72,6 +76,8 @@ def rechunked_image(version, base, extra=()):
     ]
     labels = dict(RECHUNKED, **{"org.opencontainers.image.version": version,
                                 "org.opencontainers.image.base.name": base})
+    if one_time is not None:
+        labels[rechunk.ONE_TIME] = one_time
     return manifest(*layers), config(labels)
 
 
@@ -169,6 +175,56 @@ class Download(unittest.TestCase):
         report, within = self.report(new, old)
         self.assertTrue(within)
         self.assertIn("The base image changed", report)
+
+    def test_a_declared_one_time_change_is_not_held_to_the_budget(self):
+        big = [layer("big", 80, ["rpmostree-unpackaged-content"])]
+        old = rechunked_image("44.20261029", BASE_44_1, one_time="1")
+        report, within = self.report(rechunked_image("44.20261029.1", BASE_44_1, big, one_time="2"), old)
+        self.assertTrue(within, report)
+        self.assertIn("`org.lumen.one-time-download` went from 1 to 2", report)
+        self.assertIn("isn't held to the budget of 50 MiB; the next one is", report)
+        self.assertIn("| 5 | 80.0 MiB | files no package owns |", report)
+
+    def test_a_build_from_before_the_label_counts_as_zero(self):
+        big = [layer("big", 80, ["rpmostree-unpackaged-content"])]
+        old = rechunked_image("44.20261029", BASE_44_1, one_time=None)
+        report, within = self.report(rechunked_image("44.20261029.1", BASE_44_1, big, one_time="1"), old)
+        self.assertTrue(within, report)
+        self.assertIn("went from 0 to 1", report)
+
+    def test_a_new_build_must_carry_the_number(self):
+        """Else a build that lost the label would pass for a one-time change."""
+        old = rechunked_image("44.20261029", BASE_44_1)
+        for value in (None, "", "two", 2):
+            with self.subTest(value), self.assertRaises(rechunk.InputError) as caught:
+                self.report(rechunked_image("44.20261029.1", BASE_44_1, one_time=value), old)
+            self.assertIn("org.lumen.one-time-download", str(caught.exception))
+        with self.assertRaises(rechunk.InputError):
+            self.report(rechunked_image("44.20261029.1", BASE_44_1, one_time=None), None)
+
+    def test_the_containerfile_sets_the_number_once_and_says_why(self):
+        text = (HERE / "Containerfile").read_text(encoding="utf-8")
+        found = re.findall(r'^LABEL org\.lumen\.one-time-download="([0-9]+)"$', text, flags=re.MULTILINE)
+        self.assertEqual(len(found), 1, "one LABEL line, in the lumen stage, which every edition inherits")
+        self.assertRegex(text, rf"(?m)^#   {found[0]}  \S", "a comment line that says why the number was raised")
+        # The label is set in the lumen stage, before the editions that build on it.
+        self.assertLess(text.index(rechunk.ONE_TIME), text.index("AS lumen-gaming"))
+
+    def test_the_build_after_a_one_time_change_is_held_to_the_budget_again(self):
+        big = [layer("big", 80, ["rpmostree-unpackaged-content"])]
+        old = rechunked_image("44.20261029", BASE_44_1, one_time="2")
+        report, within = self.report(rechunked_image("44.20261029.1", BASE_44_1, big, one_time="2"), old)
+        self.assertFalse(within)
+        self.assertIn("**Over the budget** of 50 MiB", report)
+        self.assertIn("raise the label `org.lumen.one-time-download`", report)
+
+    def test_a_small_update_after_a_one_time_change_says_nothing_of_it(self):
+        old = rechunked_image("44.20261029", BASE_44_1, one_time="2")
+        new = rechunked_image("44.20261029.1", BASE_44_1, [layer("rpm-new", 30, ["rpm"])], one_time="2")
+        report, within = self.report(new, old)
+        self.assertTrue(within)
+        self.assertIn("Within the budget of 50 MiB", report)
+        self.assertNotIn("one-time", report)
 
     def test_the_first_rechunked_build_is_not_held_to_the_budget(self):
         old = (manifest(layer("commit-old", 7), layer("one", 100), layer("two", 50)), config(BUILT))

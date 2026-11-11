@@ -138,6 +138,19 @@ LABEL org.opencontainers.image.title="Lumen OS" \
       org.opencontainers.image.source="https://github.com/edmundhills/lumen-os" \
       org.opencontainers.image.url="https://github.com/edmundhills/lumen-os"
 
+# The one-time download number, which every edition inherits. CI fails a build
+# whose update from the newest published build of its edition downloads more
+# than the budget (build-image.yml, DOWNLOAD_BUDGET_MIB), unless this number
+# differs between the two (image/rechunk.py, ADR 0007). A change that
+# knowingly makes users download a lot once, such as a new folder that no
+# package owns, raises it in the same pull request and adds a line here saying
+# why. The update after that one is held to the budget again.
+#   1  Steps 1.13 to 1.14b: overlay folders and a timer's preset link that no
+#      package owns, which change the layer that holds the initramfs; Bottles
+#      in plasma-desktop's kde-mimeapps.list; Firefox and ffmpegthumbs
+#      removed, which moves packages between a few layers. About 365 MiB.
+LABEL org.lumen.one-time-download="1"
+
 # The gaming edition (step 1.10a, docs/decisions/0019-gaming-edition.md): the
 # lumen image plus Steam, Gamescope, MangoHud, GameMode and the controller udev
 # rules (spec, "Image variants"). LUMEN_GAMING_FROM, at the top of this file,

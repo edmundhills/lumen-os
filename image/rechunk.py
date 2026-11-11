@@ -21,7 +21,8 @@
 #       Write, in Markdown, what updating from the previous build to this one
 #       downloads: the layers the previous build doesn't have, by size and
 #       what they hold. Exit 1 if the download is over BUDGET_MIB and both
-#       builds are re-chunked and on the same base image, or 0 otherwise.
+#       builds are re-chunked, on the same base image and at the same one-time
+#       download number (the label ONE_TIME below), or 0 otherwise.
 #   python3 image/rechunk.py layout MANIFEST CONFIG FOLDER
 #       Write an OCI layout in FOLDER, tagged latest, that holds only the image
 #       manifest MANIFEST and its config CONFIG, both as `skopeo inspect --raw`
@@ -45,6 +46,13 @@ ADDED = ("org.opencontainers.image.base.name", "org.opencontainers.image.base.di
 REQUIRED = {"containers.bootc": "1", "ostree.bootable": "true"}
 VERSION = "org.opencontainers.image.version"
 BASE = "org.opencontainers.image.base.name"
+# A number image/Containerfile gives every edition. A pull request raises it
+# when its change knowingly makes users download a lot once, such as a new
+# folder no package owns, which changes the layer that holds the initramfs.
+# The update from a build with another number isn't held to the budget; the
+# next one is again. It replaced a digest in the workflow that named one build
+# of one edition and went stale whenever main published (ADR 0007, Follow-up).
+ONE_TIME = "org.lumen.one-time-download"
 # Plain names for the components rpm-ostree makes up.
 COMPONENT_NAMES = {"rpmostree-unpackaged-content": "files no package owns"}
 MIB = 1024 * 1024
@@ -141,6 +149,21 @@ def mib(size):
     return f"{size / MIB:,.1f} MiB"
 
 
+def one_time(labels, required=False):
+    """Return a build's one-time download number, as a string of digits.
+
+    A build made before the label existed counts as "0", unless REQUIRED:
+    every new build must carry it, or losing the label would pass for a
+    one-time change.
+    """
+    value = labels.get(ONE_TIME)
+    if value is None and not required:
+        return "0"
+    if not isinstance(value, str) or not value.isdigit():
+        raise InputError(f"the label {ONE_TIME} is {value!r}, not a number: image/Containerfile sets it")
+    return value
+
+
 def download(budget_mib, manifest, config, digest, previous=None):
     """Return (Markdown report, True if within the budget) for an update from PREVIOUS.
 
@@ -150,6 +173,7 @@ def download(budget_mib, manifest, config, digest, previous=None):
     new_layers = layers(manifest)
     total = sum(layer["size"] for layer in new_layers)
     labels = (config.get("config") or {}).get("Labels") or {}
+    number = one_time(labels, required=True)
     lines = ["### Download from the previous build", ""]
     lines.append(f"This build: {labels.get(VERSION, 'no version label')} (`{digest}`),"
                  f" {len(new_layers)} layers, {mib(total)} compressed.")
@@ -177,11 +201,17 @@ def download(budget_mib, manifest, config, digest, previous=None):
         lines.append(f"The base image changed, from `{old_labels[BASE]}` to `{labels[BASE]}`, so most of"
                      f" this download is Fedora's updates. The budget of {budget_mib} MiB covers builds on"
                      " the same base.")
+    elif one_time(old_labels) != number:
+        lines.append(f"This build makes a one-time change that its pull request declared: the label"
+                     f" `{ONE_TIME}` went from {one_time(old_labels)} to {number}"
+                     f" (image/Containerfile says why). This update isn't held to the budget of"
+                     f" {budget_mib} MiB; the next one is.")
     elif size > budget:
         within = False
         lines.append(f"**Over the budget** of {budget_mib} MiB for a build on the same base image. The"
                      " layers below say what changed. Make the change smaller, or give the files that"
-                     " change on every build a layer of their own (ADR 0007).")
+                     " change on every build a layer of their own (ADR 0007). If the change is meant and"
+                     f" happens once, raise the label `{ONE_TIME}` in image/Containerfile and say why there.")
     else:
         lines.append(f"Within the budget of {budget_mib} MiB for a build on the same base image.")
 
